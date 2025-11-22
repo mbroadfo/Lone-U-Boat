@@ -6,7 +6,7 @@ import math
 # --- CONSTANTS ---
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 900
-HEX_SIZE = 28
+HEX_SIZE = 40
 
 # --- COLORS ---
 DEEP_WATER_BLUE = (25, 25, 112)
@@ -55,6 +55,8 @@ terrain_colors = {
 
 # --- GAME STATE (placeholders) ---
 game_state = {
+    "uboat_pos": (7, 7), # Initial position (row, col)
+    "uboat_orientation": 0, # 0-5, starting pointing right
     "detection_level": 1, # 0: Silent, 1: Aware, 2: Traced, 3: Locked
     "hull_damage": 2, # 0: OK, 1: DeepX, 2: MedX, 3: PeriX, 4: Destroyed
     "torpedo_tubes": {
@@ -68,6 +70,96 @@ game_state = {
         "Engine": "damaged", "Flak Gun": "OK", "Deck Gun": "OK"
     }
 }
+
+# --- SPRITE CLASSES ---
+class Uboat(pygame.sprite.Sprite):
+    """Represents the player's U-Boat."""
+    def __init__(self, initial_pos, initial_orientation, hex_size):
+        super().__init__()
+        self.row, self.col = initial_pos
+        self.orientation = initial_orientation # 0-5, 0 is right, increasing clockwise
+        self.hex_size = hex_size
+
+        # Load and scale the image
+        try:
+            self.original_image = pygame.image.load("assets/UB-Surfaced.png").convert_alpha()
+            # Rotate the base image so the top is pointing right (0 degrees)
+            self.original_image = pygame.transform.rotate(self.original_image, -90)
+            # Scale the image so its width is 80% of the hex diameter
+            scale_factor = (self.hex_size * 1.8) / self.original_image.get_width()
+            new_width = int(self.original_image.get_width() * scale_factor)
+            new_height = int(self.original_image.get_height() * scale_factor)
+            self.original_image = pygame.transform.scale(self.original_image, (new_width, new_height))
+        except pygame.error as e:
+            print(f"Unable to load U-Boat image: {e}")
+            # Create a fallback red rectangle if image fails to load
+            self.original_image = pygame.Surface((self.hex_size, self.hex_size // 2))
+            self.original_image.fill(TEXT_RED)
+
+        self.image = self.original_image
+        self.rect = self.image.get_rect()
+        self.update_position_and_orientation()
+
+    def turn(self, direction):
+        """Turn the U-Boat. direction is 1 for CW, -1 for CCW."""
+        self.orientation = (self.orientation + direction + 6) % 6
+        self.update_position_and_orientation()
+
+    def move_forward(self):
+        """Move the U-Boat one hex in its current direction."""
+        # Cube directions: (q, r, s) where q+r+s=0
+        cube_directions = [
+            (+1, -1, 0), # NE
+            (+1, 0, -1), # E
+            (0, +1, -1), # SE
+            (-1, +1, 0), # SW
+            (-1, 0, +1), # W
+            (0, -1, +1), # NW
+        ]
+        # Our orientation: 0:E, 1:SE, 2:SW, 3:W, 4:NW, 5:NE
+        orientation_to_cube_map = [1, 2, 3, 4, 5, 0]
+
+        # Convert offset to cube
+        q = self.col - (self.row - (self.row & 1)) // 2
+        r = self.row
+        s = -q - r
+
+        # Get change from our orientation
+        dq, dr, ds = cube_directions[orientation_to_cube_map[self.orientation]]
+
+        # Calculate new cube coordinates
+        new_q, new_r, new_s = q + dq, r + dr, s + ds
+
+        # Convert back to offset
+        new_row = new_r
+        new_col = new_q + (new_r - (new_r & 1)) // 2
+        
+        # Check if the new position is valid (within bounds and not land)
+        if 0 <= new_row < len(game_map) and 0 <= new_col < len(game_map[0]):
+            terrain = game_map[new_row][new_col]
+            # Only allow movement into water hexes (DEEP_WATER or SHALLOW_WATER)
+            if terrain == DEEP_WATER or terrain == SHALLOW_WATER:
+                self.row = new_row
+                self.col = new_col
+                self.update_position_and_orientation()
+            # else: move blocked by land or out-of-bounds
+        # else: move blocked by map edge
+
+    def update_position_and_orientation(self):
+        """Recalculates the screen position and rotates the image."""
+        # Pygame rotates counter-clockwise. Angle 0 is right.
+        angle = -60 * self.orientation
+        self.image = pygame.transform.rotate(self.original_image, angle)
+        
+        # Calculate screen position based on hex grid coordinates
+        hex_width = self.hex_size * math.sqrt(3)
+        hex_height = self.hex_size * 2
+        x_offset = hex_width / 2 if self.row % 2 != 0 else 0
+        
+        center_x = self.col * hex_width + x_offset + hex_width / 2
+        center_y = self.row * hex_height * 0.75 + hex_height / 2
+        
+        self.rect = self.image.get_rect(center=(center_x, center_y))
 
 # --- DRAWING FUNCTIONS ---
 
@@ -205,6 +297,10 @@ def main():
     map_surface = create_hex_grid_surface(game_map, HEX_SIZE)
     map_rect = map_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
 
+    # Create the U-Boat
+    uboat = Uboat(game_state["uboat_pos"], game_state["uboat_orientation"], HEX_SIZE)
+    uboat_sprite_group = pygame.sprite.GroupSingle(uboat)
+
     # Define UI element rectangles
     detection_rect = pygame.Rect(50, 50, 300, 40)
     hull_rect = pygame.Rect(50, 120, 300, 40)
@@ -218,12 +314,23 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_d: # Turn Clockwise
+                    uboat.turn(1)
+                if event.key == pygame.K_a: # Turn Counter-Clockwise
+                    uboat.turn(-1)
+                if event.key == pygame.K_w: # Move Forward
+                    uboat.move_forward()
 
         # --- Drawing ---
         screen.fill(BACKGROUND_GRAY)
         
         # Draw map
         screen.blit(map_surface, map_rect)
+
+        # Draw U-Boat on the map, adjusting for the map's position
+        uboat_draw_pos = uboat.rect.move(map_rect.topleft)
+        screen.blit(uboat.image, uboat_draw_pos)
         
         # Draw UI elements
         draw_detection_level(screen, detection_rect, game_state, fonts)
