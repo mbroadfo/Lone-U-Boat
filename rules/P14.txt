@@ -1,0 +1,45 @@
+Remember that the Turn action does not appear in the Escort Action Chart alone — it always comes after a Move action. The two combinations of this are as follows:
+
+MOVE → TURN (rolls 3, 6)
+
+Perform the Move action if possible and then, whether it Moved or not, and regardless of the facing hex, perform the Turn action.
+
+MOVE → (if blocked) TURN (rolls 2, 4)
+
+Perform the Move action if possible and then, whether it Moved or not, and if now Facing a Blocked hex, perform the Turn action.
+
+Note here that the Turn action is only performed if the Escort is now Facing another Ship, a Land hex, or ‘off map’.
+
+In fact, the above always come before a Depth Charge Action (see below). Again, the Depth Charge element will be attempted whether the Move and Turn Actions happened or not.
+
+One of the key things to remember when operating the Escorts is that you will never need to decide what is best for the Escort to do. Just follow the instructions precisely, even if you think the particular action is unrealistic or just plain daft. Believe me, the Escorts will find you very quickly once they know where you are. If you are thinking, you are doing it wrong!
+
+DEPTH CHARGE
+
+DEPTH CHARGE:
+If U-Boat is not Surfaced and is at Range 0–1, roll 1d6 on U-Boat Damage Chart (Destroyer: 2d6, take lowest)
+
+For each Depth Charge Action, the Escort will seek to deploy Depth Charges into the sea, which sink and explode in the hope of damaging or destroying the U-Boat. As stated in the box above, this can only happen when the U-Boat is not Surfaced (so it must be at Periscope, Medium or Deep Depth level) and when the U-Boat is at Range 0–1 hex (meaning the U-Boat must be in the same hex (below the Escort) or in an adjacent hex).
+
+If so, the Depth Charge attack is deemed to be successful to at least some extent and you must roll 1d6 on the U-Boat Damage Chart if the Escort is a Corvette, or 2d6, taking the lowest result of the 2 dice, if it is a Destroyer. As with all the other Charts and ‘boxes’, the U-Boat Damage Chart is found on the page adjacent to each Mission Map and looks like this:
+
+U-Boat Damage Chart
+
+(Depth Charge, Ship Gun Fire and B24 Aircraft attacks)
+
+d6	Result
+1	Critical Hit! — Roll d6: 1 U-Boat Destroyed • 2 + 2 Hull Damage • 3–4 Torp tubes 3–4 • 5–6 Damage x 2 (roll twice at 3–4 below)
+2	Hull Damage: +1 Hull Damage
+3–4	Damage: Roll 1d6 → 1 + 1 Hull Damage • 2 Flak gun • 3 Torp tubes • 4–5 Engine • 6 Deck gun (no effect if already damaged)
+5–6	Crew KIA: Roll d6 for Crew member (no effect if already KIA). If Medic is alive, roll d6 to avoid KIA on 5+ (but not on self)
+
+You can see that by taking the lowest of the 2 dice rolled when a Destroyer attacks, it is more likely to roll Critical Hits and Hull Damage. Each type of Damage will be explained in full below, after the FIRE Action.
+
+FIRE
+
+FIRE:
+If U-Boat is Surfaced, in LOS and at Range 1–3, Set DL to 3 and roll as a Critical Hit on U-Boat Damage Chart below
+
+For each Fire Action, the Escort will seek to Fire its main guns in the hope of damaging or destroying the U-Boat. Note that this tends to be a more devastating attack than a Depth Charge attack so be careful to avoid it wherever possible.
+
+As shown in the box above, this can only happen if the U-Boat is Surfaced, in Line of Sight (using the standard rules explained at the start of the Rules) and within Range 1–3 hexes. If so, then the Escort is deemed to have spotted the U-Boat and the Detection Level is therefore immediately set to 3. The shot is deemed to be successful and to cause a Critical Hit, so that you are deemed to have rolled a 1 on the U-Boat Damage Chart. Each type of Damage will now be explained in full:

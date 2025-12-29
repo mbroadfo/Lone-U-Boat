@@ -1,0 +1,59 @@
+Torpedoes). Note that loading at Periscope Depth is expensive as it was significantly more difficult to do than when Surfaced. It is worth noting here that whilst REPAIRING certain aspects of the U-Boat was possible, not all damage could be repaired at Sea (what can and cannot be repaired will be covered later). The AP cost for this Action reflects the fact that repairs when Surfaced were far easier. As set out in the Chart, note that if you lose your Engineer, then only Surface repairs can be undertaken for the remainder of the Mission.
+
+The U-Boat Actions
+
+The actions available are as follows:
+
+MOVE
+
+Surf | Peri | Med | Deep
+1 | 2 | 3 | 3
+
+Roll 3 dice (2 dice if Engine is Damaged); AP this turn = highest die rolled + 1 AP if Captain is alive
+
+MOVE — Can only enter a Ship’s hex if Medium/Deep. Can only enter shallows if Surfaced/Periscope
+
+Each action allows your U-Boat to Move one hex in the direction it is currently Facing. The U-Boat cannot enter a hex which:
+
+➤ Is a Land hex.
+➤ Is a Shallow Sea hex unless the U-Boat is Surfaced or at Periscope Depth.
+➤ Has a Ship in it unless the U-Boat is at a Depth level of Medium or Deep.
+
+These are all pretty obvious and very memorable, although the last 2 bullets do have a reminder in the Chart.
+
+TURN
+
+Surf | Peri | Med | Deep
+1 | 1 | 2 | 3
+
+Roll 3 dice (2 dice if Engine is Damaged); AP this turn = highest die rolled + 1 AP if Captain is alive
+
+TURN — 1 hex edge left or right
+
+Each action allows your U-Boat to Turn one hex edge (60 degrees) to the left or right of where it is currently Facing. Facing is important as it determines where the U-Boat will Move to under that Action above, but also where it will Fire its Torpedoes under that Action below.
+
+CHANGE DEPTH
+
+Surf | Peri | Med | Deep
+2 | 1 | 2 | 1
+
+Roll 3 dice (2 dice if Engine is Damaged); AP this turn = highest die rolled + 1 AP if Captain is alive
+
+CHANGE DEPTH — 1 depth level (once per turn) (cannot go below Peri in shallows / above Med beneath ships)
+
+This action allows your U-Boat to Change Depth to an ‘adjacent’ Depth (up or down). Note that to Dive down to the next Deeper level always costs 2 APs, but to Ascend to the level above costs just 1 AP. Also, note that you can only change your Depth by one level at a time and only once per turn (you cannot therefore Dive or Ascend more than once, and you cannot Dive then Ascend or Ascend then Dive on the same turn).
+
+Finally, there is a reminder that in Shallow Sea your U-Boat can only ever be at Periscope Depth or on the Surface, and when it is under a Ship (in the same hex as a Ship) it can only be at Medium or Deep. Your U-Boat simply cannot enter Shallow water unless it is already Surfaced or at Periscope Depth, and it cannot choose to enter an enemy Ship’s hex if it is not at Medium or Deep. If an enemy Ship enters the same hex as the U-Boat when the U-Boat is not at Medium or Deep, then the U-Boat will undertake a ‘Forced Dive’ which will be explained below when considering the movement of enemy Ships.
+
+REPAIR
+
+Surf | Peri | Med | Deep
+2 | 4 | 4 | 4
+
+Eng | Eng | — | —
+
+Roll 3 dice (2 dice if Engine is Damaged); AP this turn = highest die rolled + 1 AP if Captain is alive
+
+REPAIR — Remove 1 damage marker, or fix up to 2 Torp tubes (Hull cannot be repaired). Only Surface repairs if Engineer is KIA. Flak and Deck Gun Repairs can only be carried out if Surfaced.
+
+Each action allows your U-Boat to be Repaired as set out in the Chart. It is more effective to do this on the Surface (cost = 2 APs) although it is possible to Repair certain aspects of the U-Boat at lower Depths if your Engineer is still alive to supervise the work, at a cost of 4 APs. You have a choice of what to Repair. The… (continued on next page)

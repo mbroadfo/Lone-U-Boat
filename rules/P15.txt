@@ -1,0 +1,53 @@
+d6 U-Boat Damage Chart (Depth Charge, Ship Gun Fire, and B24 Aircraft attacks)
+
+1 — Critical Hit
+
+The U-Boat suffers a major Hit. Roll a d6 to establish exactly what has been damaged:
+
+1 — The U-Boat suffers catastrophic damage and is Destroyed.
+
+2 — Hull Damage is increased by 2. If it reaches 4 the U-Boat floods and is Destroyed. It cannot be repaired.
+
+3–4 — Up to 3 Torpedo Tubes are damaged. Roll 3d6 and the Tubes with the matching numbers 1-5 are damaged. 6s, duplicates and dice that match Tubes which are already damaged are ignored (lucky escape). Mark damaged Tubes as such. They need to be repaired before they can be used again. (If a loaded Tube is damaged, then it becomes unloaded.)
+
+5–6 — Double damage occurs — roll twice on the 3–4 option below.
+
+2 — Hull Damage
+
+Hull Damage is increased by 1. If it reaches 4 the U-Boat floods and is Destroyed. It cannot be repaired.
+
+3–4 — Damage (general damage)
+
+Roll a d6 to establish exactly what has been damaged:
+
+1 — Hull Damage is increased by 1. If it reaches 4 the U-Boat floods and is Destroyed. It cannot be repaired.
+
+2 — The Flak Gun is damaged and cannot be used until repaired, which can only happen when the U-Boat is Surfaced.
+
+3 — Up to 2 Torpedo Tubes are damaged. Roll 2d6 and the Tubes with the matching numbers 1-5 are damaged. 6s, duplicates and dice that match Tubes which are already damaged are ignored (lucky escape). Mark damaged Tubes as such. They need to be repaired before they can be used again. (If a loaded Tube is damaged, then it becomes unloaded.)
+
+4–5 — The Engine is damaged — this results in one less die being rolled when establishing available APs (to reflect the fact the U-Boat is harder to manoeuvre) and also makes enemy Detection easier (the damaged engine is noisy). It can be repaired in the usual way.
+
+6 — The Deck Gun is damaged and cannot be used until repaired, which can only happen when the U-Boat is Surfaced.
+
+5–6 — Crew Killed in Action
+
+Roll a d6 to decide which crew member is killed. They are numbered on the Mission Maps (1–6).
+
+If the number matches a crew member who has already been Killed in Action then you have a lucky escape.
+
+If it matches any crew member except the Medical Officer and the Medical Officer is still alive, then he gets a chance to save the Crew member by rolling 5+ on a d6.
+
+Success leaves things as they are.
+
+Failure results in the crew member’s death.
+
+The Medical Officer cannot save himself. Therefore, if the Medical Officer is targeted or the Medical Officer is already dead, then the targeted crew member will automatically be Killed in Action.
+
+Reminder
+
+When suffering Hull Damage, the U-Boat must ascend to a shallower Depth if necessary.
+
+Hull Damage: U-Boat immediately ascends to permitted depth.
+
+Note that for all damage and crew Killed in Action, there are boxes on the Mission Maps in which to place markers to record these things.

@@ -1,0 +1,35 @@
+Main Rules including the Turn Process
+
+There is no turn limit in this game. The game proceeds through each turn as a series of 6 Phases (some of which are very quick or will not apply every turn). The bulk of the rules to the game can best be explained under each Phase, making them easier to find should they be needed. As ever with Mike Lambo Games, most of the key rules (or at least reminders of them) are set out in charts on the page next to each Mission Map for ease of reference.
+
+Phase 1 — U-Boat Phase
+
+This Phase is where you get to perform various actions with the U-Boat in order to achieve the Mission Objectives. It revolves around the Chart found on the page opposite each Mission Map and which looks like this:
+
+(Chart reproduced conceptually as text)
+
+U-Boat Phase — If Medium, DL −1 | If Deep, DL −2
+
+Roll	Peri	Med	Deep	Action
+—	—	—	—	Roll 3 dice ( 2 dice if Engine is Damaged ); AP this turn = highest die rolled + 1 AP if Captain is alive
+2	3	—	MOVE — Can only enter a Ship’s hex if Medium/Deep. Can only enter shallows if Surfaced/Periscope	
+1	2	3	TURN — 1 hex edge left or right	
+2	4	4	CHANGE DEPTH — 1 depth level (once per turn) (cannot go below Peri in shallows / above Med beneath ships)	
+Eng	Eng	Eng	REPAIR — Remove 1 damage marker, or fix up to 2 Torp tubes (Hull cannot be repaired). Only Surface repairs if Engineer is KIA. Flak and Deck Gun Repairs can only be carried out if Surfaced	
+—	—	—	FIRE DECK GUN — At Ships in LOS (R1-3) Roll 2d6: 7+ to Hit at R1-2 • 8+ to Hit at R3 On Hit, set DL to 3	
+—	—	—	LOAD TORPS — Load 2 tubes; +1 if Weapons Officer is KIA	
+—	—	—	FIRE TORPS — Fire 1-3 Torpedoes (R1-9). Roll d6 per Torp. If Fire 3, DL +1. Target first ship along line of fire. Missed Torps continue to other Ships beyond you	
+
+Range Hit Table
+
+Range	1-2	3-4	5-6	7-9
+To Hit Side	3+	4+	5+	6+
+To Hit Front/Rear	4+	5+	6+	6+
+
+At the top of this Chart, the first line is a reminder to check your U-Boat’s Depth and to adjust the current Detection Level (DL) accordingly. These two concepts were introduced earlier. Here, you are checking the U-Boat’s Depth at the start of the U-Boat Phase before it has performed any Actions. If your U-Boat is currently at Medium Depth, then reduce the Detection Level by 1. If the U-Boat is currently Deep, then reduce the Detection Level by 2. These reductions cannot take the Detection Level below zero.
+
+Then, roll 3 dice (but reduce this to 2 dice if your U-Boat’s engine is damaged — damage will be covered later). In either case, keep the one highest die rolled and discard the others. This die tells you how many Action Points (APs) you have this turn. Finally, if your Captain is still alive and has not been Killed in Action then you can add another 1AP to this total. Normally therefore, your APs will be 2-7. Once you lose your Captain, your APs will range from 1-6. Record your remaining APs as you spend them by using a d6.
+
+You then get to ‘spend’ those Action Points on available Actions, one at a time, and you can perform those actions in any order. You can also perform Actions more than once in a turn, as long as you have the Action Points to spend (the exception is the ‘Change Depth’ Action which, as stated in the Chart, can only be performed once per turn). For clarity, you do not have to use all or any of your Action Points but any remaining APs are discarded and not saved or held over in any way.
+
+There are seven actions which can be performed by the U-Boat. The Chart above sets out the actions and the Action Point Cost for each action (in the four columns on the left of the Chart). Note that the Action Point Cost varies for most Actions depending on the Depth of the U-Boat. In addition, some Actions are unavailable altogether at certain Depths (those marked with ‘--’). For example, MOVING your U-Boat costs more APs as you go deeper to reflect the fact that manoeuvring at depth was slower and more difficult. The same applies to TURNING. The attacking Actions such as FIRING (the Deck Gun), and LOADING and FIRING Torpedoes can only be done when Surfaced (in all cases) or at Periscope Depth (in the case of Loading and Firing…)

@@ -14,3 +14,12 @@ include/
 lib/
 Scripts/
 bin/
+
+# Large reference images (store these separately)
+references/*.png
+references/*.jpg
+references/*.pdf
+references/Thumbs.db
+
+# Assets
+assets/Thumbs.db

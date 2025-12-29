@@ -1,0 +1,35 @@
+Place a B24 Liberator Aircraft
+
+If DL = 2–3 place B24 Facing U-Boat, on edge hex of Map which is furthest from and on same hex-line as U-Boat (max 2)
+
+This only applies if the Detection Level is 2 or 3. If so, then a new B24 aircraft is placed on the Mission Map. However, note that (as stated in the Event itself) a maximum of 2 aircraft can be present on the Mission Map at any one time. If there are already 2 on the Map, then ignore this Event.
+
+To work out where to place the B24, trace the 6 lines of hexes that run out of the U-Boat’s current hex until you reach the edge of the Map. Of the six lines, take the longest (decide randomly if there is a tie). Then place the B24 on the hex at the edge of the Map at the end of the longest line. Always place it Facing the U-Boat. It will first Activate in Phase 5 of the next turn.
+
+In this example, the longest of the six lines of hexes emanating from the U-Boat’s own hex is the line running straight up the Map. The B24 is therefore placed at the edge of the Map on this line of hexes Facing directly at the U-Boat.
+
+Escort Detection
+
+Escort Detection: If DL is not already at 3, perform Phase 3 (only) now
+
+Simply repeat Phase 3 (the Detection Phase) again now. There is no point in (ever) performing this Phase when the Detection Level is already at 3, as that is the highest it can go.
+
+U-Boat Radio Interception by Allies
+
+If U-Boat is Surfaced or at Periscope depth, Radio intercepted by Allies: If DL = 0 then set DL to 1
+
+Note that this Event only applies when the Detection Level is currently 0. If so, and the U-Boat is Surfaced or at Periscope Depth, then the DL Level is raised to 1. The Event has no other effect.
+
+U-Boat Runs Silently
+
+If U-Boat not Surfaced and Engine is not damaged, U-Boat runs silently for a while: −1 DL
+
+If the U-Boat is at any other depth than ‘Surfaced’ and its Engine is not damaged (in which case it would be noisy) then you can reduce the Detection Level by 1.
+
+Damage from High Pressure
+
+Hull Pressure: If Deep, Hull groans under the pressure: +1 Hull Damage (U-Boat must ascend to Medium Depth)
+
+If the U-Boat is Deep then it suffers 1 Hull Damage. Of course, this will immediately result in it having to ascend to Medium Depth.
+
+Once the End of Turn Events Phase has been completed, return to Phase 1 and start the next turn.

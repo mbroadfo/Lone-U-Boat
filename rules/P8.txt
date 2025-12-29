@@ -1,0 +1,41 @@
+cannot, however, Load Damaged Tubes. Note also that if your Weapons Officer is Killed in Action, you can only Load 1 Tube per action.
+
+FIRE TORPEDOES
+
+Surf | Peri | Med | Deep
+2 | 2 | — | —
+
+Roll 3 dice (2 dice if Engine is Damaged); AP this turn = highest die rolled + 1 AP if Captain is alive
+
+FIRE TORPS — Fire 1-3 Torpedoes (R1-9). Roll d6 per Torp
+If Fire 3, DL +1
+Target first ship along line of fire. Missed Torps continue to other Ships beyond
+
+Range Hit Table
+
+Range	1-2	3-4	5-6	7-9
+To Hit Side	3+	4+	5+	6+
+To Hit Front/Rear	4+	5+	6+	6+
+
+Each action allows the U-Boat to Fire 1, 2 or 3 Torpedoes. There is no Range limit for a Torpedo attack, although the further away the target is, the harder it is to Hit. You get to choose whether to Fire 1, 2 or 3 Torpedoes on a single Fire Torpedoes Action. Each action allows Torpedoes to be Fired from either the front 4 Tubes or the 1 rear Tube (not both). If Fired from the Rear, then only 1 can be Fired of course.
+
+Torpedoes Fired from the Front Tubes will only travel along the one line of hexes along which the U-Boat is currently Facing. The Rear Torpedo will similarly only be Fired along the line of hexes running in the exact opposite direction to the way the U-Boat is currently Facing. Firing 3 Torpedoes at once is noisy and attracts attention by raising the Detection Level by 1. If any Torpedoes hit the target (no matter how many) then the Detection Level is raised by 1 (only). This is in addition to the +1 for Firing 3 Torpedoes if relevant.
+
+Example: the U-Boat Fires 3 Torpedoes and all 3 Hit. The DL will be raised by 2 in total.
+Example 2: the U-Boat Fires 2 Torpedoes and both Hit. The DL will be raised by 1 in total.
+Example 3: the U-Boat Fires 2 Torpedoes and neither Hit. The DL is unchanged.
+
+You should check that Line of Sight is present. This will be very easy as you will just be scanning along a line of hexes (front or rear) to check that no Land hexes block Line of Sight. Also, count the Range of the attack in hexes, ignoring the U-Boat’s own hex but including the target’s hex.
+
+You then need to check whether the target Ship is being targeted on its side (black arrows in the diagram opposite) or whether it is being targeted on its front or rear (white arrows) because, together with the Range of the attack, this affects the number required to Hit, as can be seen in the Chart above (this is easy to determine because Torpedo attacks always come in along a line of hexes). Roll a d6 for each Torpedo Fired, and each die which displays the required To Hit value or higher is a successful Hit. For each Hit, you roll a d6 on the Allied Ship Damage Chart we looked at above for the Deck Gun attacks. For each miss, just check that there are no other Ships along that line of hexes which those Torpedoes might Hit. If so, roll to Hit again using the appropriate Range and Facing of the Target. Hitting another Ship does not change the rule about increasing the DL — it will still only be raised by 1 for any number of Hits (no matter how many and on what Ship(s)).
+
+Selecting the number of Torpedoes to Fire is an important decision, and will be impacted by the following:
+
+➤ You only have 5 Torpedo Tubes (4 to the front and 1 to the rear).
+➤ You can only Fire Torpedoes if the relevant Tube is Loaded.
+➤ Loading more Torpedoes can be challenging/risky.
+➤ Firing 3 Torpedoes is noisy and attracts attention by raising the Detection Level by 1.
+➤ If any Hit the target (no matter how many were Fired or how many Hit) the Detection Level is raised by 1.
+➤ Each Hit allows one roll on the Allied Ships Damage Chart we looked at above for the Deck Gun.
+➤ Torpedoes which miss the target Ship continue along the line of hexes and will try to Hit any Ships further along that line of hexes.
+➤ The die roll required to Hit varies with the Range of the attack and the Facing of the target Ship.

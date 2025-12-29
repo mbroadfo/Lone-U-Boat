@@ -1,0 +1,45 @@
+Example of a Detection Phase
+
+The 2 Corvettes both have my U-Boat in Line of Sight and within a Range of 3 hexes (one is Range 3 and the other is Range 2). Whilst the Destroyer has my U-Boat within Range, it has no Line of Sight. Merchant Ships never take part in the Detection Phase.
+
+I roll 2d6 (1 for each Corvette). My U-Boat is at Periscope Depth so only a base 2+ is required. However, my Sonar Operator is alive and so this is increased to 3+. My Engine is not Damaged. The roll results in 2, 3, which is 1 success and 1 failure, so the Detection Level is increased by 1.
+
+Phase 4 — Escort’s Phase
+
+In this Phase, any Corvettes and Destroyers on the Map are activated. They will try to prevent you from achieving your objectives by protecting the Merchant Ships or other Objectives and by attacking your U-Boat whenever the chance arises.
+
+The relevant Chart is as follows:
+
+Escorts Phase
+
+Activate closest first (you choose for ties); Resolve dice in order
+
+For Destroyer: Dice = 3 + DL ( 3 if damaged )
+For Corvette: Dice = 2 + DL ( 2 if damaged )
+
+Roll	Action
+1	If DL = 1–3: FIRE or DEPTH CHARGE
+2	MOVE — If Blocked, TURN — If DL = 1–3: DEPTH CHARGE
+3	MOVE — If DL = 1–3: DEPTH CHARGE
+4	MOVE — If Blocked, TURN — If DL = 1–3: DEPTH CHARGE
+5	MOVE — If DL = 1–3: DEPTH CHARGE
+6	MOVE — TURN — If DL = 1–3: DEPTH CHARGE
+Depth Charge Rule
+
+If U-Boat is not Surfaced and is at Range 0–1, roll 1d6 on U-Boat Damage Chart
+(Destroyer: 2d6, take lowest)
+
+TURN Rule
+
+If DL = 0–1, turn 1 hex edge towards Anchor.
+If DL = 2–3 turn 1 hex edge towards U-Boat/Anchor, only turn if blocked (turn randomly).
+If Facing away, turn randomly.
+If on same hex as U-Boat/Anchor, only turn if Blocked (turn randomly).
+
+FIRE Rule
+
+If U-Boat is Surfaced, in LOS and at Range 1–3, set DL to 3 and roll as a Critical Hit on U-Boat Damage Chart below.
+
+The Escorts activate in order, starting with the Ship which is closest to the U-Boat. For ties, you get to decide which activates first.
+
+On each Escort’s activation in turn, complete the following steps:
