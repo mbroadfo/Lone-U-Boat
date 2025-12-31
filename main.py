@@ -325,6 +325,16 @@ class Game:
         self.drag_start = None
         self.grid_offset_start = None
         
+        # Coordinate detection mode (for status boxes)
+        self.coord_detect_dragging = False
+        self.coord_detect_start = None
+        
+        # Status box markers
+        self.status_boxes = {}
+        self.marker_images = self._load_marker_images()
+        self._setup_status_boxes()
+        self.show_all_markers = False  # Toggle to show all markers for testing
+        
         # Fonts
         self.font = pygame.font.Font(None, 24)
         self.font_large = pygame.font.Font(None, 36)
@@ -363,6 +373,176 @@ class Game:
         
         return images
     
+    def _load_marker_images(self) -> dict:
+        """Load marker images for status boxes."""
+        markers = {}
+        marker_files = {
+            'detection': 'assets/Detection.png',
+            'damaged': 'assets/Damaged.png',
+            'torpedo': 'assets/Torpedo.png'
+        }
+        
+        for marker_type, filename in marker_files.items():
+            path = Path(filename)
+            if path.exists():
+                markers[marker_type] = pygame.image.load(path).convert_alpha()
+            else:
+                # Create placeholder if image doesn't exist
+                surface = pygame.Surface((20, 20), pygame.SRCALPHA)
+                pygame.draw.circle(surface, (255, 255, 0), (10, 10), 8)
+                markers[marker_type] = surface
+        
+        return markers
+    
+    def _setup_status_boxes(self):
+        """Configure status box positions and marker types."""
+        # Detection Level: Silent
+        self.status_boxes['detection_silent'] = {
+            'rect': pygame.Rect(475, 89, 29, 29),
+            'marker_type': 'detection',
+            'condition': lambda: self.detection_level == 0
+        }
+        
+        # Detection Level: Aware
+        self.status_boxes['detection_aware'] = {
+            'rect': pygame.Rect(509, 90, 29, 28),
+            'marker_type': 'detection',
+            'condition': lambda: self.detection_level == 1
+        }
+        
+        # Detection Level: Traced
+        self.status_boxes['detection_traced'] = {
+            'rect': pygame.Rect(544, 90, 29, 26),
+            'marker_type': 'detection',
+            'condition': lambda: self.detection_level == 2
+        }
+        
+        # Detection Level: Locked
+        self.status_boxes['detection_locked'] = {
+            'rect': pygame.Rect(578, 89, 28, 26),
+            'marker_type': 'detection',
+            'condition': lambda: self.detection_level == 3
+        }
+        
+        # Hull Damage: 1st level
+        self.status_boxes['hull_damage_1'] = {
+            'rect': pygame.Rect(475, 132, 29, 25),
+            'marker_type': 'damaged',
+            'condition': lambda: self.u_boat.hull_damage >= 1
+        }
+        
+        # Hull Damage: 2nd level
+        self.status_boxes['hull_damage_2'] = {
+            'rect': pygame.Rect(509, 133, 29, 25),
+            'marker_type': 'damaged',
+            'condition': lambda: self.u_boat.hull_damage >= 2
+        }
+        
+        # Hull Damage: 3rd level
+        self.status_boxes['hull_damage_3'] = {
+            'rect': pygame.Rect(544, 133, 28, 23),
+            'marker_type': 'damaged',
+            'condition': lambda: self.u_boat.hull_damage >= 3
+        }
+        
+        # Torpedo Tube 1 (Forward)
+        self.status_boxes['torpedo_tube_1'] = {
+            'rect': pygame.Rect(781, 112, 28, 28),
+            'marker_type': 'torpedo',
+            'condition': lambda: self.u_boat.torpedo_tubes[0]
+        }
+        
+        # Torpedo Tube 2 (Forward)
+        self.status_boxes['torpedo_tube_2'] = {
+            'rect': pygame.Rect(817, 114, 28, 27),
+            'marker_type': 'torpedo',
+            'condition': lambda: self.u_boat.torpedo_tubes[1]
+        }
+        
+        # Torpedo Tube 3 (Forward)
+        self.status_boxes['torpedo_tube_3'] = {
+            'rect': pygame.Rect(852, 114, 26, 26),
+            'marker_type': 'torpedo',
+            'condition': lambda: self.u_boat.torpedo_tubes[2]
+        }
+        
+        # Torpedo Tube 4 (Forward)
+        self.status_boxes['torpedo_tube_4'] = {
+            'rect': pygame.Rect(885, 113, 26, 27),
+            'marker_type': 'torpedo',
+            'condition': lambda: self.u_boat.torpedo_tubes[3]
+        }
+        
+        # Torpedo Tube 5 (Rear)
+        self.status_boxes['torpedo_tube_5'] = {
+            'rect': pygame.Rect(886, 166, 27, 25),
+            'marker_type': 'torpedo',
+            'condition': lambda: self.u_boat.torpedo_tubes[4]
+        }
+        
+        # Captain Damaged
+        self.status_boxes['captain_damaged'] = {
+            'rect': pygame.Rect(515, 576, 27, 25),
+            'marker_type': 'damaged',
+            'condition': lambda: not self.u_boat.captain_alive
+        }
+        
+        # Sonar Operator Damaged
+        self.status_boxes['sonar_operator_damaged'] = {
+            'rect': pygame.Rect(514, 615, 29, 26),
+            'marker_type': 'damaged',
+            'condition': lambda: not self.u_boat.sonar_operator_alive
+        }
+        
+        # Engineer Damaged
+        self.status_boxes['engineer_damaged'] = {
+            'rect': pygame.Rect(515, 655, 27, 26),
+            'marker_type': 'damaged',
+            'condition': lambda: not self.u_boat.engineer_alive
+        }
+        
+        # Weapons Officer Damaged
+        self.status_boxes['weapons_officer_damaged'] = {
+            'rect': pygame.Rect(592, 614, 30, 27),
+            'marker_type': 'damaged',
+            'condition': lambda: not self.u_boat.weapons_officer_alive
+        }
+        
+        # Lookout Damaged
+        self.status_boxes['lookout_damaged'] = {
+            'rect': pygame.Rect(594, 656, 26, 24),
+            'marker_type': 'damaged',
+            'condition': lambda: not self.u_boat.lookout_alive
+        }
+        
+        # Medic Damaged
+        self.status_boxes['medic_damaged'] = {
+            'rect': pygame.Rect(662, 655, 27, 28),
+            'marker_type': 'damaged',
+            'condition': lambda: not self.u_boat.medic_alive
+        }
+        
+        # Engine Damaged
+        self.status_boxes['engine_damaged'] = {
+            'rect': pygame.Rect(782, 657, 27, 27),
+            'marker_type': 'damaged',
+            'condition': lambda: self.u_boat.engine_damaged
+        }
+        
+        # Flak Gun Damaged
+        self.status_boxes['flak_gun_damaged'] = {
+            'rect': pygame.Rect(886, 622, 29, 26),
+            'marker_type': 'damaged',
+            'condition': lambda: self.u_boat.flak_gun_damaged
+        }
+        
+        # Deck Gun Damaged
+        self.status_boxes['deck_gun_damaged'] = {
+            'rect': pygame.Rect(886, 655, 29, 27),
+            'marker_type': 'damaged',
+            'condition': lambda: self.u_boat.deck_gun_damaged
+        }
+    
     def _load_mission_map(self, mission_num: int) -> pygame.Surface:
         """Load the mission map image."""
         map_path = Path(f"assets/maps/mission_{mission_num}.png")
@@ -398,6 +578,18 @@ class Game:
                     # Toggle alignment mode
                     self.alignment_mode = not self.alignment_mode
                     self.dragging_grid = False
+                elif event.key == pygame.K_s:
+                    # Toggle show all markers mode
+                    self.show_all_markers = not self.show_all_markers
+                    status = "ON" if self.show_all_markers else "OFF"
+                    print(f"Show all markers: {status}")
+                elif event.key == pygame.K_t:
+                    # Toggle torpedo loading (for testing markers)
+                    all_loaded = all(self.u_boat.torpedo_tubes)
+                    new_state = not all_loaded
+                    self.u_boat.torpedo_tubes = [new_state] * 5
+                    status = "LOADED" if new_state else "EMPTY"
+                    print(f"All torpedos: {status}")
                 elif event.key == pygame.K_g:
                     self.show_grid = not self.show_grid
                 elif event.key == pygame.K_m:
@@ -462,13 +654,41 @@ class Game:
                         self.drag_start = pygame.mouse.get_pos()
                         self.grid_offset_start = (self.hex_grid.offset_x, self.hex_grid.offset_y)
                     else:
-                        # Select hex
+                        # Start coordinate detection drag (for status boxes)
+                        self.coord_detect_dragging = True
+                        self.coord_detect_start = mouse_pos
+                        # Also select hex for normal gameplay
                         if self.hex_grid.is_valid_hex(hex_coord, self.mission_hexes):
                             self.selected_hex = hex_coord
             
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:
-                    self.dragging_grid = False
+                    if self.alignment_mode:
+                        self.dragging_grid = False
+                    elif self.coord_detect_dragging and self.coord_detect_start:
+                        # Print drag coordinates for status box detection
+                        mouse_pos = pygame.mouse.get_pos()
+                        x1, y1 = self.coord_detect_start
+                        x2, y2 = mouse_pos
+                        # Ensure top-left to bottom-right
+                        left = min(x1, x2)
+                        top = min(y1, y2)
+                        right = max(x1, x2)
+                        bottom = max(y1, y2)
+                        width = right - left
+                        height = bottom - top
+                        
+                        # Only print if drag was significant (not just a click)
+                        if width > 5 and height > 5:
+                            print(f"\n=== STATUS BOX COORDINATES ===")
+                            print(f"Top-Left: ({left}, {top})")
+                            print(f"Bottom-Right: ({right}, {bottom})")
+                            print(f"Width: {width}, Height: {height}")
+                            print(f"Box: ({left}, {top}, {width}, {height})")
+                            print(f"==============================\n")
+                        
+                        self.coord_detect_dragging = False
+                        self.coord_detect_start = None
             
             elif event.type == pygame.MOUSEMOTION:
                 if self.dragging_grid and self.drag_start:
@@ -508,6 +728,13 @@ class Game:
         # Draw selected hex
         if self.selected_hex:
             self._render_hex_highlight(self.selected_hex, COLOR_SELECTION)
+        
+        # Draw coordinate detection rectangle (visual feedback during drag)
+        if self.coord_detect_dragging and self.coord_detect_start:
+            self._render_drag_rectangle()
+        
+        # Draw status box markers
+        self._render_status_markers()
         
         # Draw UI
         self._render_ui()
@@ -568,6 +795,58 @@ class Game:
         if ship.damaged:
             pygame.draw.rect(self.screen, (255, 0, 0), rect, 3)
     
+    def _render_drag_rectangle(self):
+        """Render drag rectangle for coordinate detection."""
+        if not self.coord_detect_start:
+            return
+        
+        mouse_pos = pygame.mouse.get_pos()
+        x1, y1 = self.coord_detect_start
+        x2, y2 = mouse_pos
+        
+        # Calculate rectangle
+        left = min(x1, x2)
+        top = min(y1, y2)
+        width = abs(x2 - x1)
+        height = abs(y2 - y1)
+        
+        # Draw semi-transparent rectangle
+        surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        rect = pygame.Rect(left, top, width, height)
+        pygame.draw.rect(surface, (255, 255, 0, 100), rect)  # Yellow with transparency
+        pygame.draw.rect(surface, (255, 255, 0, 255), rect, 2)  # Yellow border
+        self.screen.blit(surface, (0, 0))
+    
+    def _render_status_markers(self):
+        """Render status box markers based on game state."""
+        for box_name, box_data in self.status_boxes.items():
+            rect = box_data['rect']
+            marker_type = box_data['marker_type']
+            condition = box_data.get('condition', True)
+            
+            # In show all markers mode, always render
+            if self.show_all_markers:
+                should_render = True
+            else:
+                # Evaluate condition if it's a lambda/callable
+                if callable(condition):
+                    should_render = condition()
+                else:
+                    should_render = condition
+            
+            # Only render if condition is met
+            if not should_render:
+                continue
+            
+            # Get marker image
+            marker_img = self.marker_images.get(marker_type)
+            if marker_img is None:
+                continue
+            
+            # Scale marker to fit box
+            scaled_marker = pygame.transform.smoothscale(marker_img, (rect.width, rect.height))
+            self.screen.blit(scaled_marker, rect)
+    
     def _render_ui(self):
         """Render UI panels and information."""
         # Top bar
@@ -586,10 +865,18 @@ class Game:
             )
         else:
             controls = self.font.render(
-                "Controls: Q/E-Rotate | W-Move | Z/X-Depth | G-Grid | M-Map | A-Align | ESC-Quit",
+                "Controls: Q/E-Rotate | W-Move | Z/X-Depth | T-Torpedos | S-Show All | G-Grid | M-Map | A-Align | ESC-Quit",
                 True, COLOR_TEXT
             )
         self.screen.blit(controls, (10, SCREEN_HEIGHT - 30))
+        
+        # Show marker mode indicator
+        if self.show_all_markers:
+            marker_mode_text = self.font.render(
+                "ALL MARKERS VISIBLE (Press S to toggle)",
+                True, (255, 255, 0)
+            )
+            self.screen.blit(marker_mode_text, (10, SCREEN_HEIGHT - 60))
         
         # Show offset values in alignment mode
         if self.alignment_mode:
