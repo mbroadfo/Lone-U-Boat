@@ -328,6 +328,40 @@ class Game:
         # Fonts
         self.font = pygame.font.Font(None, 24)
         self.font_large = pygame.font.Font(None, 36)
+        
+        # Load U-Boat images
+        self.u_boat_images = self._load_u_boat_images()
+    
+    def _load_u_boat_images(self) -> dict:
+        """Load U-Boat images for each depth level."""
+        images = {}
+        depth_files = {
+            Depth.SURFACED: "UB-Surfaced.png",
+            Depth.PERISCOPE: "UB-Periscope.png",
+            Depth.MEDIUM: "UB-Medium.png",
+            Depth.DEEP: "UB-Deep.png",
+        }
+        
+        # Target size to fit in hex (hex size is 32, so images should be ~50px)
+        target_size = 50
+        
+        for depth, filename in depth_files.items():
+            path = Path(f"assets/{filename}")
+            if path.exists():
+                image = pygame.image.load(path).convert_alpha()
+                # Scale down significantly to fit in hex
+                original_size = max(image.get_width(), image.get_height())
+                scale = target_size / original_size
+                new_width = int(image.get_width() * scale)
+                new_height = int(image.get_height() * scale)
+                images[depth] = pygame.transform.smoothscale(image, (new_width, new_height))
+            else:
+                # Create placeholder if image doesn't exist
+                surface = pygame.Surface((40, 40), pygame.SRCALPHA)
+                pygame.draw.circle(surface, COLOR_U_BOAT, (20, 20), 15)
+                images[depth] = surface
+        
+        return images
     
     def _load_mission_map(self, mission_num: int) -> pygame.Surface:
         """Load the mission map image."""
@@ -379,6 +413,16 @@ class Game:
                     new_pos = self.u_boat.facing.forward(self.u_boat.position)
                     if self.hex_grid.is_valid_hex(new_pos, self.mission_hexes):
                         self.u_boat.position = new_pos
+                elif event.key == pygame.K_z:
+                    # Increase depth (go deeper)
+                    if self.u_boat.depth != Depth.DEEP:
+                        self.u_boat.depth = Depth(self.u_boat.depth.value + 1)
+                        print(f"Depth changed to: {self.u_boat.depth.name}")
+                elif event.key == pygame.K_x:
+                    # Decrease depth (go shallower)
+                    if self.u_boat.depth != Depth.SURFACED:
+                        self.u_boat.depth = Depth(self.u_boat.depth.value - 1)
+                        print(f"Depth changed to: {self.u_boat.depth.name}")
                 elif event.key == pygame.K_p:
                     # Print current mission hexes layout
                     self._print_mission_hexes()
@@ -495,29 +539,21 @@ class Game:
         self.screen.blit(surface, (0, 0))
     
     def _render_u_boat(self):
-        """Render the U-boat."""
+        """Render the U-boat using depth-specific PNG images."""
         center = self.hex_grid.hex_to_pixel(self.u_boat.position)
         
-        # Draw circle for U-boat
-        pygame.draw.circle(self.screen, COLOR_U_BOAT, 
-                          (int(center[0]), int(center[1])), 20)
+        # Get the appropriate image for current depth
+        image = self.u_boat_images.get(self.u_boat.depth)
+        if image is None:
+            return
         
-        # Draw facing indicator (triangle)
-        angle_deg = 60 * self.u_boat.facing.value - 90  # Adjust for facing
-        angle_rad = math.radians(angle_deg)
-        tip_x = center[0] + 30 * math.cos(angle_rad)
-        tip_y = center[1] + 30 * math.sin(angle_rad)
+        # Rotate image based on facing (aligned with hex edges)
+        angle_deg = -60 * self.u_boat.facing.value
+        rotated_image = pygame.transform.rotate(image, angle_deg)
         
-        left_angle = angle_rad + math.radians(140)
-        left_x = center[0] + 15 * math.cos(left_angle)
-        left_y = center[1] + 15 * math.sin(left_angle)
-        
-        right_angle = angle_rad - math.radians(140)
-        right_x = center[0] + 15 * math.cos(right_angle)
-        right_y = center[1] + 15 * math.sin(right_angle)
-        
-        pygame.draw.polygon(self.screen, (255, 255, 255),
-                          [(tip_x, tip_y), (left_x, left_y), (right_x, right_y)])
+        # Center the rotated image
+        rect = rotated_image.get_rect(center=(int(center[0]), int(center[1])))
+        self.screen.blit(rotated_image, rect)
     
     def _render_ship(self, ship: Ship):
         """Render an allied ship."""
@@ -550,7 +586,7 @@ class Game:
             )
         else:
             controls = self.font.render(
-                "Controls: Q/E-Rotate | W-Move | G-Grid | M-Map | A-Align | Shift+Click-Add | Ctrl+Click-Remove | P-Print | ESC-Quit",
+                "Controls: Q/E-Rotate | W-Move | Z/X-Depth | G-Grid | M-Map | A-Align | ESC-Quit",
                 True, COLOR_TEXT
             )
         self.screen.blit(controls, (10, SCREEN_HEIGHT - 30))
@@ -567,16 +603,25 @@ class Game:
         panel_x = SCREEN_WIDTH - 250
         panel_y = 50
         
+        # Depth color based on level
+        depth_colors = {
+            Depth.SURFACED: (255, 100, 100),    # Red (most visible)
+            Depth.PERISCOPE: (255, 200, 100),   # Orange
+            Depth.MEDIUM: (100, 200, 255),      # Light blue
+            Depth.DEEP: (50, 100, 200),         # Dark blue (safest)
+        }
+        depth_color = depth_colors.get(self.u_boat.depth, COLOR_TEXT)
+        
         status_texts = [
-            f"Position: ({self.u_boat.position.q}, {self.u_boat.position.r})",
-            f"Facing: {self.u_boat.facing.name}",
-            f"Depth: {self.u_boat.depth.name}",
-            f"Detection: {self.detection_level}",
-            f"Hull Damage: {self.u_boat.hull_damage}/3",
+            (f"Position: ({self.u_boat.position.q}, {self.u_boat.position.r})", COLOR_TEXT),
+            (f"Facing: {self.u_boat.facing.name}", COLOR_TEXT),
+            (f"Depth: {self.u_boat.depth.name} (Z/X)", depth_color),
+            (f"Detection: {self.detection_level}", COLOR_TEXT),
+            (f"Hull Damage: {self.u_boat.hull_damage}/3", COLOR_TEXT),
         ]
         
-        for i, text in enumerate(status_texts):
-            rendered = self.font.render(text, True, COLOR_TEXT)
+        for i, (text, color) in enumerate(status_texts):
+            rendered = self.font.render(text, True, color)
             self.screen.blit(rendered, (panel_x, panel_y + i * 25))
     
     def _print_mission_hexes(self):
