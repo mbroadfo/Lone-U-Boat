@@ -3,7 +3,39 @@ Board Configuration
 Contains all game board settings that are constant across all missions.
 """
 
-import pygame
+from typing import TypedDict
+
+
+# ====================
+# TYPE DEFINITIONS
+# ====================
+
+class StatusBoxConfig(TypedDict):
+    """Type definition for status box configuration."""
+    rect: tuple[int, int, int, int]
+    marker: str
+    condition: str
+
+
+class HexGridConfig(TypedDict):
+    """Type definition for hex grid configuration."""
+    size: int
+    cols: int
+    rows: int
+    offset_x: int
+    offset_y: int
+
+
+class UIConfig(TypedDict):
+    """Type definition for UI configuration."""
+    top_bar_height: int
+    map_offset_y: int
+    status_panel_x: int
+    status_panel_y: int
+    font_size: int
+    font_size_large: int
+    u_boat_image_size: int
+
 
 # ====================
 # SCREEN CONFIGURATION
@@ -17,7 +49,7 @@ SCREEN_HEIGHT = 900
 # COLOR PALETTE
 # ====================
 
-COLORS = {
+COLORS: dict[str, tuple[int, int, int] | tuple[int, int, int, int]] = {
     'hex_grid': (100, 100, 100, 128),       # Semi-transparent gray
     'hex_highlight': (255, 255, 0, 200),    # Yellow highlight
     'ship': (0, 0, 255),                    # Blue - for rendering enemy ships
@@ -33,7 +65,7 @@ COLORS = {
 # HEX GRID CONFIGURATION
 # ====================
 
-HEX_GRID = {
+HEX_GRID: HexGridConfig = {
     'size': 32,         # Radius of hexagon
     'cols': 11,         # Maximum columns (0-10)
     'rows': 12,         # Rows 0-11
@@ -49,7 +81,7 @@ HEX_GRID = {
 # Valid hex coordinates - 74 total hexes (axial coordinates)
 # Pattern: 5,6,7,8,9,9,9,8,7,6 hexes per row
 # Format: (q, r) where q=column, r=row
-VALID_HEXES = [
+VALID_HEXES: list[tuple[int, int]] = [
     # Row 0 - 5 hexes
     (5, 0), (6, 0), (7, 0), (8, 0), (9, 0),
     # Row 1 - 6 hexes
@@ -79,7 +111,7 @@ VALID_HEXES = [
 
 # Status box positions and their marker types
 # Each entry: 'name': {'rect': (x, y, width, height), 'marker': 'type', 'condition': 'condition_key'}
-STATUS_BOXES = {
+STATUS_BOXES: dict[str, StatusBoxConfig] = {
     # Detection Levels
     'detection_silent': {
         'rect': (475, 89, 29, 29),
@@ -201,7 +233,7 @@ STATUS_BOXES = {
 # ASSET PATHS
 # ====================
 
-ASSETS = {
+ASSETS: dict[str, str] = {
     'detection_marker': 'assets/Detection.png',
     'damaged_marker': 'assets/Damaged.png',
     'torpedo_marker': 'assets/Torpedo.png',
@@ -222,7 +254,7 @@ ASSETS = {
 # UI CONFIGURATION
 # ====================
 
-UI = {
+UI: UIConfig = {
     'top_bar_height': 40,
     'map_offset_y': 50,
     'status_panel_x': SCREEN_WIDTH - 250,

@@ -6,8 +6,8 @@ A hex-based submarine warfare game using actual mission maps.
 import pygame
 import math
 from pathlib import Path
-from dataclasses import dataclass
-from typing import Tuple, Optional, List
+from dataclasses import dataclass, field
+from typing import Tuple, Optional, List, Set, Callable, Any
 from enum import Enum
 import importlib
 
@@ -32,10 +32,12 @@ class HexCoord:
     q: int  # column
     r: int  # row
     
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.q, self.r))
     
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, HexCoord):
+            return NotImplemented
         return self.q == other.q and self.r == other.r
     
     def neighbors(self) -> List['HexCoord']:
@@ -113,13 +115,9 @@ class UBoat:
     medic_alive: bool = True
     
     # Weapons
-    torpedo_tubes: List[bool] = None  # True = loaded
+    torpedo_tubes: List[bool] = field(default_factory=lambda: [True] * 5)  # True = loaded, 4 front + 1 rear
     deck_gun_damaged: bool = False
     flak_gun_damaged: bool = False
-    
-    def __post_init__(self):
-        if self.torpedo_tubes is None:
-            self.torpedo_tubes = [True] * 5  # 4 front + 1 rear
 
 
 @dataclass
@@ -200,7 +198,7 @@ class HexGrid:
     def get_hex_corners(self, coord: HexCoord) -> List[Tuple[float, float]]:
         """Get the pixel coordinates of a hex's 6 corners."""
         center_x, center_y = self.hex_to_pixel(coord)
-        corners = []
+        corners: List[Tuple[float, float]] = []
         
         for i in range(6):
             angle_deg = 60 * i  # Flat-top (pointy sides)
@@ -211,7 +209,7 @@ class HexGrid:
         
         return corners
     
-    def is_valid_hex(self, coord: HexCoord, mission_hexes=None) -> bool:
+    def is_valid_hex(self, coord: HexCoord, mission_hexes: Optional[Set[HexCoord]] = None) -> bool:
         """Check if axial hex coordinate is valid for the mission.
         
         For missions, primarily rely on the mission_hexes set membership.
@@ -261,8 +259,8 @@ class Game:
         
         # Calculate map position to center it
         map_rect = self.map_image.get_rect()
-        map_x = (cfg.SCREEN_WIDTH - map_rect.width) // 2
-        map_y = cfg.UI['map_offset_y']
+        _map_x = (cfg.SCREEN_WIDTH - map_rect.width) // 2
+        _map_y = cfg.UI['map_offset_y']
         
         # Create hex grid overlay
         self.hex_grid = HexGrid(
@@ -309,7 +307,7 @@ class Game:
         self.coord_detect_start = None
         
         # Status box markers
-        self.status_boxes = {}
+        self.status_boxes: dict[str, dict[str, Any]] = {}
         self.marker_images = self._load_marker_images()
         self._setup_status_boxes()
         self.show_all_markers = False  # Toggle to show all markers for testing
@@ -324,7 +322,7 @@ class Game:
         # Load ship images
         self.ship_images = self._load_ship_images()
     
-    def _load_mission_config(self, mission_number: int):
+    def _load_mission_config(self, mission_number: int) -> Any:
         """Dynamically load mission configuration module."""
         try:
             mission_module = importlib.import_module(f'missions.mission_{mission_number}_config')
@@ -332,10 +330,10 @@ class Game:
         except ImportError:
             raise ValueError(f"Mission {mission_number} configuration not found")
     
-    def _load_u_boat_images(self) -> dict:
+    def _load_u_boat_images(self) -> dict[Depth, pygame.Surface]:
         """Load U-Boat images for each depth level."""
-        images = {}
-        depth_files = {
+        images: dict[Depth, pygame.Surface] = {}
+        depth_files: dict[Depth, str] = {
             Depth.SURFACED: cfg.ASSETS['u_boat_surfaced'],
             Depth.PERISCOPE: cfg.ASSETS['u_boat_periscope'],
             Depth.MEDIUM: cfg.ASSETS['u_boat_medium'],
@@ -363,10 +361,10 @@ class Game:
         
         return images
     
-    def _load_ship_images(self) -> dict:
+    def _load_ship_images(self) -> dict[str, pygame.Surface]:
         """Load ship images for each ship type."""
-        images = {}
-        ship_types = ['merchant', 'corvette', 'destroyer']
+        images: dict[str, pygame.Surface] = {}
+        ship_types: list[str] = ['merchant', 'corvette', 'destroyer']
         
         # Target size to fit in hex
         target_size = cfg.UI['u_boat_image_size']
@@ -393,10 +391,10 @@ class Game:
         
         return images
     
-    def _load_marker_images(self) -> dict:
+    def _load_marker_images(self) -> dict[str, pygame.Surface]:
         """Load marker images for status boxes."""
-        markers = {}
-        marker_files = {
+        markers: dict[str, pygame.Surface] = {}
+        marker_files: dict[str, str] = {
             'detection': cfg.ASSETS['detection_marker'],
             'damaged': cfg.ASSETS['damaged_marker'],
             'torpedo': cfg.ASSETS['torpedo_marker']
@@ -430,7 +428,7 @@ class Game:
                 'condition': condition
             }
     
-    def _create_condition_lambda(self, condition_key: str):
+    def _create_condition_lambda(self, condition_key: str) -> Callable[[], bool]:
         """Create a lambda function for status box conditions based on config string."""
         # Detection levels
         if condition_key.startswith('detection_level_'):
@@ -469,9 +467,8 @@ class Game:
         elif condition_key == 'deck_gun_damaged':
             return lambda: self.u_boat.deck_gun_damaged
         
-        # Default: always false
-        else:
-            return lambda: False
+        # Default fallback
+        return lambda: False
     
     def _load_mission_map(self) -> pygame.Surface:
         """Load the mission map image from config."""
@@ -585,8 +582,8 @@ class Game:
                     elif self.alignment_mode:
                         # Start dragging grid
                         self.dragging_grid = True
-                        self.drag_start = pygame.mouse.get_pos()
-                        self.grid_offset_start = (self.hex_grid.offset_x, self.hex_grid.offset_y)
+                        self.drag_start: Optional[Tuple[int, int]] = pygame.mouse.get_pos()
+                        self.grid_offset_start: Optional[Tuple[int, int]] = (self.hex_grid.offset_x, self.hex_grid.offset_y)
                     else:
                         # Start coordinate detection drag (for status boxes)
                         self.coord_detect_dragging = True
@@ -625,7 +622,7 @@ class Game:
                         self.coord_detect_start = None
             
             elif event.type == pygame.MOUSEMOTION:
-                if self.dragging_grid and self.drag_start:
+                if self.dragging_grid and self.drag_start is not None and self.grid_offset_start is not None:
                     # Update grid offset based on drag
                     mouse_pos = pygame.mouse.get_pos()
                     dx = mouse_pos[0] - self.drag_start[0]
@@ -787,11 +784,16 @@ class Game:
         pygame.draw.polygon(self.screen, color, arrow_points)
         pygame.draw.polygon(self.screen, (0, 0, 0), arrow_points, 2)
     
-    def _render_hex_highlight(self, coord: HexCoord, color: Tuple[int, int, int, int]):
+    def _render_hex_highlight(self, coord: HexCoord, color: Tuple[int, int, int] | Tuple[int, int, int, int]):
         """Highlight a specific hex."""
         surface = pygame.Surface((cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT), pygame.SRCALPHA)
         corners = self.hex_grid.get_hex_corners(coord)
-        pygame.draw.polygon(surface, color, corners)
+        # Ensure color has alpha channel
+        if len(color) == 3:
+            color_with_alpha = (*color, 255)
+        else:
+            color_with_alpha = color
+        pygame.draw.polygon(surface, color_with_alpha, corners)
         self.screen.blit(surface, (0, 0))
     
     def _render_u_boat(self):
@@ -860,7 +862,7 @@ class Game:
     
     def _render_status_markers(self):
         """Render status box markers based on game state."""
-        for box_name, box_data in self.status_boxes.items():
+        for _box_name, box_data in self.status_boxes.items():
             rect = box_data['rect']
             marker_type = box_data['marker_type']
             condition = box_data.get('condition', True)
@@ -932,21 +934,9 @@ class Game:
         panel_x = cfg.UI['status_panel_x']
         panel_y = cfg.UI['status_panel_y']
         
-        # Depth color based on level
-        depth_colors = {
-            Depth.SURFACED: (255, 100, 100),    # Red (most visible)
-            Depth.PERISCOPE: (255, 200, 100),   # Orange
-            Depth.MEDIUM: (100, 200, 255),      # Light blue
-            Depth.DEEP: (50, 100, 200),         # Dark blue (safest)
-        }
-        depth_color = depth_colors.get(self.u_boat.depth, cfg.COLORS['text'])
-        
         status_texts = [
             (f"Position: ({self.u_boat.position.q}, {self.u_boat.position.r})", cfg.COLORS['text']),
             (f"Facing: {self.u_boat.facing.name}", cfg.COLORS['text']),
-            (f"Depth: {self.u_boat.depth.name} (Z/X)", depth_color),
-            (f"Detection: {self.detection_level}", cfg.COLORS['text']),
-            (f"Hull Damage: {self.u_boat.hull_damage}/3", cfg.COLORS['text']),
         ]
         
         for i, (text, color) in enumerate(status_texts):
@@ -959,7 +949,7 @@ class Game:
         print("MISSION_1_HEXES = {")
         
         # Group by row
-        hexes_by_row = {}
+        hexes_by_row: dict[int, list[HexCoord]] = {}
         for hex_coord in sorted(self.mission_hexes, key=lambda h: (h.r, h.q)):
             if hex_coord.r not in hexes_by_row:
                 hexes_by_row[hex_coord.r] = []

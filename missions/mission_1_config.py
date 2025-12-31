@@ -3,15 +3,14 @@ Mission 1 Configuration
 Mission-specific settings including hex layout, starting positions, objectives.
 """
 
-from dataclasses import dataclass
-from typing import Set, List, Tuple
+from typing import Any
 
 
 # ====================
 # MISSION METADATA
 # ====================
 
-MISSION_INFO = {
+MISSION_INFO: dict[str, Any] = {
     'number': 1,
     'name': 'Supply Ship Attack',
     'description': 'Intercept and sink the supply convoy',
@@ -52,14 +51,14 @@ LAND_HEXES = [
 # ====================
 
 # U-Boat starting position
-U_BOAT_START = {
+U_BOAT_START: dict[str, Any] = {
     'position': (9, 0),  # Top right hex
     'facing': 'SOUTH',   # Initial facing direction (player can change at game start)
     'depth': 'SURFACED', # Initial starting depth (player can change at game start)
 }
 
 # Allied ships starting positions
-SHIPS_START = [
+SHIPS_START: list[dict[str, Any]] = [
     {
         'type': 'merchant',
         'position': (1, 4),
@@ -85,7 +84,7 @@ ANCHOR_POSITIONS = [
 ]
 
 # Exit positions (hexes where units can exit mission)
-EXIT_POSITIONS = {
+EXIT_POSITIONS: dict[str, dict[str, Any]] = {
     'u_boat': {
         'position': (1, 7),
         'facing': 'SOUTHWEST',  # Facing toward (0,8) - exit after sinking merchant(s)
@@ -123,7 +122,7 @@ PATROL_ROUTES = [
 # ====================
 
 # Mission-specific rules or modifiers
-SPECIAL_RULES = {
+SPECIAL_RULES: dict[str, Any] = {
     'detection_modifier': 0,     # Modifier to detection rolls
     'weather': 'clear',          # Weather conditions (clear, fog, storm)
     'time_of_day': 'day',        # day/night affects visibility
