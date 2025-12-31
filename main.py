@@ -58,38 +58,30 @@ class HexCoord:
         return self.q == other.q and self.r == other.r
     
     def neighbors(self) -> List['HexCoord']:
-        """Return all 6 neighboring hex coordinates (offset coordinates, flat-top)."""
-        # Neighbors depend on whether column is even or odd
-        parity = self.q & 1  # 0 for even, 1 for odd
-        
-        if parity == 0:  # Even column
-            directions = [
-                HexCoord(1, -1), HexCoord(1, 0),    # NE, SE
-                HexCoord(0, 1),                      # S
-                HexCoord(-1, 0), HexCoord(-1, -1),  # SW, NW
-                HexCoord(0, -1)                      # N
-            ]
-        else:  # Odd column
-            directions = [
-                HexCoord(1, 0), HexCoord(1, 1),     # NE, SE
-                HexCoord(0, 1),                      # S
-                HexCoord(-1, 1), HexCoord(-1, 0),   # SW, NW
-                HexCoord(0, -1)                      # N
-            ]
+        """Return all 6 neighboring hex coordinates (axial coordinates, flat-top)."""
+        # Constant axial direction vectors for flat-top hexes
+        directions = [
+            HexCoord(0, -1),   # N
+            HexCoord(1, -1),   # NE
+            HexCoord(1, 0),    # SE
+            HexCoord(0, 1),    # S
+            HexCoord(-1, 1),   # SW
+            HexCoord(-1, 0),   # NW
+        ]
         return [HexCoord(self.q + d.q, self.r + d.r) for d in directions]
 
 
-# Mission 1 valid hex coordinates - 67 total hexes
-# Pattern: 1,3,5,7,9,9,9,8,7,5,3,1
+# Mission 1 valid hex coordinates - 74 total hexes (axial coordinates)
+# Pattern: 5,6,7,8,9,9,9,8,7,6 hexes per row (corrected for true axial system)
 MISSION_1_HEXES = {
-    # Row 0 - 1 hex
-    HexCoord(5, 0),
-    # Row 1 - 3 hexes
-    HexCoord(4, 1), HexCoord(5, 1), HexCoord(6, 1),
-    # Row 2 - 5 hexes
-    HexCoord(3, 2), HexCoord(4, 2), HexCoord(5, 2), HexCoord(6, 2), HexCoord(7, 2),
-    # Row 3 - 7 hexes
-    HexCoord(2, 3), HexCoord(3, 3), HexCoord(4, 3), HexCoord(5, 3), HexCoord(6, 3), HexCoord(7, 3), HexCoord(8, 3),
+    # Row 0 - 5 hexes
+    HexCoord(5, 0), HexCoord(6, 0), HexCoord(7, 0), HexCoord(8, 0), HexCoord(9, 0),
+    # Row 1 - 6 hexes
+    HexCoord(4, 1), HexCoord(5, 1), HexCoord(6, 1), HexCoord(7, 1), HexCoord(8, 1), HexCoord(9, 1),
+    # Row 2 - 7 hexes
+    HexCoord(3, 2), HexCoord(4, 2), HexCoord(5, 2), HexCoord(6, 2), HexCoord(7, 2), HexCoord(8, 2), HexCoord(9, 2),
+    # Row 3 - 8 hexes
+    HexCoord(2, 3), HexCoord(3, 3), HexCoord(4, 3), HexCoord(5, 3), HexCoord(6, 3), HexCoord(7, 3), HexCoord(8, 3), HexCoord(9, 3),
     # Row 4 - 9 hexes (widest)
     HexCoord(1, 4), HexCoord(2, 4), HexCoord(3, 4), HexCoord(4, 4), HexCoord(5, 4), HexCoord(6, 4), HexCoord(7, 4), HexCoord(8, 4), HexCoord(9, 4),
     # Row 5 - 9 hexes
@@ -97,15 +89,11 @@ MISSION_1_HEXES = {
     # Row 6 - 9 hexes
     HexCoord(1, 6), HexCoord(2, 6), HexCoord(3, 6), HexCoord(4, 6), HexCoord(5, 6), HexCoord(6, 6), HexCoord(7, 6), HexCoord(8, 6), HexCoord(9, 6),
     # Row 7 - 8 hexes
-    HexCoord(2, 7), HexCoord(3, 7), HexCoord(4, 7), HexCoord(5, 7), HexCoord(6, 7), HexCoord(7, 7), HexCoord(8, 7), HexCoord(9, 7),
+    HexCoord(1, 7), HexCoord(2, 7), HexCoord(3, 7), HexCoord(4, 7), HexCoord(5, 7), HexCoord(6, 7), HexCoord(7, 7), HexCoord(8, 7),
     # Row 8 - 7 hexes
-    HexCoord(3, 8), HexCoord(4, 8), HexCoord(5, 8), HexCoord(6, 8), HexCoord(7, 8), HexCoord(8, 8), HexCoord(9, 8),
-    # Row 9 - 5 hexes
-    HexCoord(4, 9), HexCoord(5, 9), HexCoord(6, 9), HexCoord(7, 9), HexCoord(8, 9),
-    # Row 10 - 3 hexes
-    HexCoord(5, 10), HexCoord(6, 10), HexCoord(7, 10),
-    # Row 11 - 1 hex (bottom)
-    HexCoord(6, 11),
+    HexCoord(1, 8), HexCoord(2, 8), HexCoord(3, 8), HexCoord(4, 8), HexCoord(5, 8), HexCoord(6, 8), HexCoord(7, 8),
+    # Row 9 - 6 hexes
+    HexCoord(1, 9), HexCoord(2, 9), HexCoord(3, 9), HexCoord(4, 9), HexCoord(5, 9), HexCoord(6, 9),
 }
 
 
@@ -127,28 +115,16 @@ class Facing(Enum):
         return Facing((self.value - 1) % 6)
     
     def forward(self, coord: HexCoord) -> HexCoord:
-        """Get the hex coordinate in front of this facing (offset coordinates)."""
-        parity = coord.q & 1  # 0 for even, 1 for odd
-        
-        if parity == 0:  # Even column
-            directions = [
-                HexCoord(0, -1),   # N
-                HexCoord(1, -1),   # NE
-                HexCoord(1, 0),    # SE
-                HexCoord(0, 1),    # S
-                HexCoord(-1, 0),   # SW
-                HexCoord(-1, -1),  # NW
-            ]
-        else:  # Odd column
-            directions = [
-                HexCoord(0, -1),   # N
-                HexCoord(1, 0),    # NE
-                HexCoord(1, 1),    # SE
-                HexCoord(0, 1),    # S
-                HexCoord(-1, 1),   # SW
-                HexCoord(-1, 0),   # NW
-            ]
-        
+        """Get the hex coordinate in front of this facing (axial coordinates)."""
+        # Constant axial direction vectors for flat-top hexes
+        directions = [
+            HexCoord(0, -1),   # N
+            HexCoord(1, -1),   # NE
+            HexCoord(1, 0),    # SE
+            HexCoord(0, 1),    # S
+            HexCoord(-1, 1),   # SW
+            HexCoord(-1, 0),   # NW
+        ]
         d = directions[self.value]
         return HexCoord(coord.q + d.q, coord.r + d.r)
 
@@ -220,27 +196,35 @@ class HexGrid:
         self.horiz_spacing = self.width * 3/4
         
     def hex_to_pixel(self, coord: HexCoord) -> Tuple[float, float]:
-        """Convert hex coordinates to pixel coordinates (flat-top with horizontal rows)."""
-        # Offset coordinates: odd columns (q) shift down by half hex height
-        x = self.size * 3/2 * coord.q
-        y = self.size * math.sqrt(3) * (coord.r + 0.5 * (coord.q & 1))
+        """Convert axial hex coordinates to pixel coordinates (flat-top hexes).
+        
+        Axial coordinates:
+        - q axis: roughly horizontal (columns)
+        - r axis: down-right diagonal
+        """
+        x = self.size * (3/2 * coord.q)
+        y = self.size * (math.sqrt(3) * (coord.r + coord.q / 2))
         return (x + self.offset_x, y + self.offset_y)
     
     def pixel_to_hex(self, x: float, y: float) -> HexCoord:
-        """Convert pixel coordinates to hex coordinates (flat-top offset)."""
+        """Convert pixel coordinates to axial hex coordinates (flat-top hexes)."""
         # Adjust for offset
         x -= self.offset_x
         y -= self.offset_y
         
-        # Convert to fractional offset coordinates
-        q = (2.0 / 3.0 * x) / self.size
-        r = (y - self.size * math.sqrt(3) / 2 * (int(q) & 1)) / (self.size * math.sqrt(3))
+        # Inverse axial coordinate formulas
+        q = (2/3 * x) / self.size
+        r = (-1/3 * x + math.sqrt(3)/3 * y) / self.size
         
-        # Round to nearest hex
-        return HexCoord(round(q), round(r))
+        # Round to nearest hex using cube coordinate rounding
+        return self._round_hex(q, r)
     
     def _round_hex(self, q: float, r: float) -> HexCoord:
-        """Round fractional hex coordinates to nearest integer hex."""
+        """Round fractional axial coordinates to nearest integer hex using cube rounding.
+        
+        Converts axial (q,r) to cube (q,r,s) where s = -q-r, rounds all three,
+        then fixes the component with largest rounding error to maintain q+r+s=0.
+        """
         s = -q - r
         
         rq = round(q)
@@ -256,7 +240,7 @@ class HexGrid:
         elif r_diff > s_diff:
             rr = -rq - rs
         
-        return HexCoord(rq, rr)
+        return HexCoord(int(rq), int(rr))
     
     def get_hex_corners(self, coord: HexCoord) -> List[Tuple[float, float]]:
         """Get the pixel coordinates of a hex's 6 corners."""
@@ -273,12 +257,16 @@ class HexGrid:
         return corners
     
     def is_valid_hex(self, coord: HexCoord, mission_hexes=None) -> bool:
-        """Check if hex coordinate is within grid bounds and valid for the mission."""
-        # Check basic bounds
+        """Check if axial hex coordinate is valid for the mission.
+        
+        For missions, primarily rely on the mission_hexes set membership.
+        The bounds check is kept as a quick rejection test.
+        """
+        # Quick rejection: basic bounds check
         if not (0 <= coord.q < self.cols and 0 <= coord.r < self.rows):
             return False
         
-        # Check mission-specific valid hexes if provided
+        # Primary validation: check mission-specific valid hexes if provided
         if mission_hexes is not None:
             return coord in mission_hexes
         
@@ -313,13 +301,13 @@ class Game:
             size=HEX_SIZE,
             cols=HEX_COLS,
             rows=HEX_ROWS,
-            offset_x=505,  # Aligned with Mission 1 map
-            offset_y=12
+            offset_x=457,  # Aligned with Mission 1 map
+            offset_y=-15
         )
         
         # Game entities
         self.u_boat = UBoat(
-            position=HexCoord(6, 11),  # Starting position - bottom center
+            position=HexCoord(9, 0),  # Mission 1 starting position - top right
             facing=Facing.NORTH
         )
         
@@ -391,6 +379,9 @@ class Game:
                     new_pos = self.u_boat.facing.forward(self.u_boat.position)
                     if self.hex_grid.is_valid_hex(new_pos, self.mission_hexes):
                         self.u_boat.position = new_pos
+                elif event.key == pygame.K_p:
+                    # Print current mission hexes layout
+                    self._print_mission_hexes()
                 
                 # Arrow keys for fine grid adjustment in alignment mode
                 elif self.alignment_mode:
@@ -408,15 +399,26 @@ class Game:
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
-                    if self.alignment_mode:
+                    keys = pygame.key.get_mods()
+                    mouse_pos = pygame.mouse.get_pos()
+                    hex_coord = self.hex_grid.pixel_to_hex(*mouse_pos)
+                    
+                    if keys & pygame.KMOD_SHIFT:
+                        # Shift+click: Add hex to mission
+                        self.mission_hexes.add(hex_coord)
+                        print(f"Added hex: {hex_coord}")
+                    elif keys & pygame.KMOD_CTRL:
+                        # Ctrl+click: Remove hex from mission
+                        if hex_coord in self.mission_hexes:
+                            self.mission_hexes.discard(hex_coord)
+                            print(f"Removed hex: {hex_coord}")
+                    elif self.alignment_mode:
                         # Start dragging grid
                         self.dragging_grid = True
                         self.drag_start = pygame.mouse.get_pos()
                         self.grid_offset_start = (self.hex_grid.offset_x, self.hex_grid.offset_y)
                     else:
                         # Select hex
-                        mouse_pos = pygame.mouse.get_pos()
-                        hex_coord = self.hex_grid.pixel_to_hex(*mouse_pos)
                         if self.hex_grid.is_valid_hex(hex_coord, self.mission_hexes):
                             self.selected_hex = hex_coord
             
@@ -543,12 +545,12 @@ class Game:
         # Controls info
         if self.alignment_mode:
             controls = self.font.render(
-                "ALIGNMENT MODE: Click-Drag to move | Arrows to nudge (Shift=10px) | A-Exit",
+                "ALIGNMENT MODE: Click-Drag | Arrows | Shift+Click-Add | Ctrl+Click-Remove | P-Print | A-Exit",
                 True, (255, 255, 0)  # Yellow for alignment mode
             )
         else:
             controls = self.font.render(
-                "Controls: Q/E-Rotate | W-Move | G-Toggle Grid | M-Toggle Map | A-Align Mode | ESC-Quit",
+                "Controls: Q/E-Rotate | W-Move | G-Grid | M-Map | A-Align | Shift+Click-Add | Ctrl+Click-Remove | P-Print | ESC-Quit",
                 True, COLOR_TEXT
             )
         self.screen.blit(controls, (10, SCREEN_HEIGHT - 30))
@@ -576,6 +578,29 @@ class Game:
         for i, text in enumerate(status_texts):
             rendered = self.font.render(text, True, COLOR_TEXT)
             self.screen.blit(rendered, (panel_x, panel_y + i * 25))
+    
+    def _print_mission_hexes(self):
+        """Print current mission hexes in code format for easy copying."""
+        print("\n" + "="*60)
+        print("MISSION_1_HEXES = {")
+        
+        # Group by row
+        hexes_by_row = {}
+        for hex_coord in sorted(self.mission_hexes, key=lambda h: (h.r, h.q)):
+            if hex_coord.r not in hexes_by_row:
+                hexes_by_row[hex_coord.r] = []
+            hexes_by_row[hex_coord.r].append(hex_coord)
+        
+        # Print row by row with counts
+        for r in sorted(hexes_by_row.keys()):
+            hexes = hexes_by_row[r]
+            hex_strings = [f"HexCoord({h.q}, {h.r})" for h in hexes]
+            print(f"    # Row {r} - {len(hexes)} hexes")
+            print(f"    {', '.join(hex_strings)},")
+        
+        print("}")
+        print(f"Total hexes: {len(self.mission_hexes)}")
+        print("="*60 + "\n")
     
     def run(self):
         """Main game loop."""
