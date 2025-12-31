@@ -209,6 +209,12 @@ ASSETS = {
     'u_boat_periscope': 'assets/UB-Periscope.png',
     'u_boat_medium': 'assets/UB-Medium.png',
     'u_boat_deep': 'assets/UB-Deep.png',
+    'merchant': 'assets/Merchant.png',
+    'merchant_damaged': 'assets/Merchant-Damaged.png',
+    'corvette': 'assets/Corvette.png',
+    'corvette_damaged': 'assets/Corvette-Damaged.png',
+    'destroyer': 'assets/Destroyer.png',
+    'destroyer_damaged': 'assets/Destroyer-Damaged.png',
 }
 
 

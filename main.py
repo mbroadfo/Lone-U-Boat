@@ -255,6 +255,10 @@ class Game:
         valid_hexes = self.mission_config.VALID_HEXES if self.mission_config.VALID_HEXES else cfg.VALID_HEXES
         self.mission_hexes = {HexCoord(q, r) for q, r in valid_hexes}
         
+        # Load terrain data from mission config
+        self.shallow_hexes = {HexCoord(q, r) for q, r in self.mission_config.SHALLOW_HEXES}
+        self.land_hexes = {HexCoord(q, r) for q, r in self.mission_config.LAND_HEXES}
+        
         # Calculate map position to center it
         map_rect = self.map_image.get_rect()
         map_x = (cfg.SCREEN_WIDTH - map_rect.width) // 2
@@ -276,12 +280,22 @@ class Game:
             facing=Facing[u_boat_start['facing']]
         )
         
-        self.ships: List[Ship] = []  # Mission-specific ships will be added later
+        # Load ships from mission config
+        self.ships: List[Ship] = []
+        for ship_data in self.mission_config.SHIPS_START:
+            ship = Ship(
+                position=HexCoord(*ship_data['position']),
+                facing=Facing[ship_data['facing']],
+                ship_type=ship_data['type'],
+                damaged=ship_data['damaged']
+            )
+            self.ships.append(ship)
         
         # UI state
         self.selected_hex: Optional[HexCoord] = None
         self.show_grid = True
         self.show_map = True
+        self.show_terrain = False  # Toggle for terrain visualization
         self.detection_level = 0
         
         # Grid alignment mode
@@ -306,6 +320,9 @@ class Game:
         
         # Load U-Boat images
         self.u_boat_images = self._load_u_boat_images()
+        
+        # Load ship images
+        self.ship_images = self._load_ship_images()
     
     def _load_mission_config(self, mission_number: int):
         """Dynamically load mission configuration module."""
@@ -343,6 +360,36 @@ class Game:
                 surface = pygame.Surface((40, 40), pygame.SRCALPHA)
                 pygame.draw.circle(surface, cfg.COLORS['u_boat'], (20, 20), 15)
                 images[depth] = surface
+        
+        return images
+    
+    def _load_ship_images(self) -> dict:
+        """Load ship images for each ship type."""
+        images = {}
+        ship_types = ['merchant', 'corvette', 'destroyer']
+        
+        # Target size to fit in hex
+        target_size = cfg.UI['u_boat_image_size']
+        
+        for ship_type in ship_types:
+            # Load normal and damaged versions
+            for suffix in ['', '_damaged']:
+                key = f"{ship_type}{suffix}"
+                asset_key = key if suffix else ship_type
+                filepath = cfg.ASSETS.get(asset_key)
+                
+                if filepath:
+                    path = Path(filepath)
+                    if path.exists():
+                        image = pygame.image.load(path).convert_alpha()
+                        # Scale to fit in hex
+                        image = pygame.transform.smoothscale(image, (target_size, target_size))
+                        images[key] = image
+                    else:
+                        # Create placeholder
+                        surface = pygame.Surface((40, 40), pygame.SRCALPHA)
+                        pygame.draw.rect(surface, cfg.COLORS['ship'], (0, 0, 40, 40))
+                        images[key] = surface
         
         return images
     
@@ -477,6 +524,10 @@ class Game:
                     self.show_grid = not self.show_grid
                 elif event.key == pygame.K_m:
                     self.show_map = not self.show_map
+                elif event.key == pygame.K_v:
+                    # Toggle terrain visualization
+                    self.show_terrain = not self.show_terrain
+                    print(f"Terrain visualization: {'ON' if self.show_terrain else 'OFF'}")
                 elif event.key == pygame.K_q:
                     # Rotate U-boat left
                     self.u_boat.facing = self.u_boat.facing.rotate_counterclockwise()
@@ -601,6 +652,11 @@ class Game:
         if self.show_grid:
             self._render_hex_grid()
         
+        # Draw terrain visualization (test mode)
+        if self.show_terrain:
+            self._render_terrain_overlay()
+            self._render_mission_markers()
+        
         # Draw ships
         for ship in self.ships:
             self._render_ship(ship)
@@ -641,6 +697,96 @@ class Game:
         
         self.screen.blit(surface, (0, 0))
     
+    def _render_terrain_overlay(self):
+        """Render terrain type overlays for testing."""
+        surface = pygame.Surface((cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT), pygame.SRCALPHA)
+        
+        # Render shallow hexes (light blue)
+        for coord in self.shallow_hexes:
+            if coord in self.mission_hexes:
+                corners = self.hex_grid.get_hex_corners(coord)
+                pygame.draw.polygon(surface, (100, 200, 255, 100), corners)  # Light blue
+                pygame.draw.polygon(surface, (100, 200, 255, 200), corners, 2)  # Border
+        
+        # Render land hexes (brown/tan)
+        for coord in self.land_hexes:
+            if coord in self.mission_hexes:
+                corners = self.hex_grid.get_hex_corners(coord)
+                pygame.draw.polygon(surface, (139, 90, 43, 150), corners)  # Brown
+                pygame.draw.polygon(surface, (139, 90, 43, 255), corners, 3)  # Border
+        
+        self.screen.blit(surface, (0, 0))
+    
+    def _render_mission_markers(self):
+        """Render anchor and exit point markers for testing."""
+        # Render anchor position (green circle)
+        for anchor_coord in self.mission_config.ANCHOR_POSITIONS:
+            hex_coord = HexCoord(*anchor_coord)
+            center = self.hex_grid.hex_to_pixel(hex_coord)
+            pygame.draw.circle(self.screen, (0, 255, 0), (int(center[0]), int(center[1])), 10)
+            pygame.draw.circle(self.screen, (255, 255, 255), (int(center[0]), int(center[1])), 10, 2)
+            # Label
+            label = self.font.render("ANCHOR", True, (255, 255, 255))
+            label_rect = label.get_rect(center=(int(center[0]), int(center[1]) - 20))
+            self.screen.blit(label, label_rect)
+        
+        # Render U-Boat exit (yellow arrow)
+        if 'u_boat' in self.mission_config.EXIT_POSITIONS:
+            exit_data = self.mission_config.EXIT_POSITIONS['u_boat']
+            hex_coord = HexCoord(*exit_data['position'])
+            center = self.hex_grid.hex_to_pixel(hex_coord)
+            # Draw directional arrow
+            facing = Facing[exit_data['facing']]
+            self._draw_exit_arrow(center, facing, (255, 255, 0))
+            # Label
+            label = self.font.render("U-EXIT", True, (255, 255, 255))
+            label_rect = label.get_rect(center=(int(center[0]), int(center[1]) + 25))
+            self.screen.blit(label, label_rect)
+        
+        # Render Merchant exit (red arrow)
+        if 'merchant' in self.mission_config.EXIT_POSITIONS:
+            exit_data = self.mission_config.EXIT_POSITIONS['merchant']
+            hex_coord = HexCoord(*exit_data['position'])
+            center = self.hex_grid.hex_to_pixel(hex_coord)
+            # Draw directional arrow
+            facing = Facing[exit_data['facing']]
+            self._draw_exit_arrow(center, facing, (255, 0, 0))
+            # Label
+            label = self.font.render("M-EXIT", True, (255, 255, 255))
+            label_rect = label.get_rect(center=(int(center[0]), int(center[1]) + 25))
+            self.screen.blit(label, label_rect)
+    
+    def _draw_exit_arrow(self, center: Tuple[float, float], facing: Facing, color: Tuple[int, int, int]):
+        """Draw an arrow pointing in the exit direction."""
+        # Arrow parameters
+        arrow_length = 25
+        arrow_width = 8
+        
+        # Calculate arrow direction based on facing (in degrees)
+        # Rotate 90 degrees counter-clockwise to align with hex grid
+        angle_deg = 60 * facing.value - 90
+        angle_rad = math.radians(angle_deg)
+        
+        # Calculate arrow tip position
+        tip_x = center[0] + arrow_length * math.cos(angle_rad)
+        tip_y = center[1] + arrow_length * math.sin(angle_rad)
+        
+        # Calculate arrow base positions (perpendicular to direction)
+        perp_angle = angle_rad + math.pi / 2
+        base1_x = center[0] + arrow_width * math.cos(perp_angle)
+        base1_y = center[1] + arrow_width * math.sin(perp_angle)
+        base2_x = center[0] - arrow_width * math.cos(perp_angle)
+        base2_y = center[1] - arrow_width * math.sin(perp_angle)
+        
+        # Draw arrow as triangle
+        arrow_points = [
+            (int(tip_x), int(tip_y)),
+            (int(base1_x), int(base1_y)),
+            (int(base2_x), int(base2_y))
+        ]
+        pygame.draw.polygon(self.screen, color, arrow_points)
+        pygame.draw.polygon(self.screen, (0, 0, 0), arrow_points, 2)
+    
     def _render_hex_highlight(self, coord: HexCoord, color: Tuple[int, int, int, int]):
         """Highlight a specific hex."""
         surface = pygame.Surface((cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -666,17 +812,29 @@ class Game:
         self.screen.blit(rotated_image, rect)
     
     def _render_ship(self, ship: Ship):
-        """Render an allied ship."""
+        """Render an allied ship using PNG images."""
         center = self.hex_grid.hex_to_pixel(ship.position)
         
-        # Draw square for ship
-        size = 15
-        rect = pygame.Rect(center[0] - size, center[1] - size, size * 2, size * 2)
-        pygame.draw.rect(self.screen, cfg.COLORS['ship'], rect)
+        # Get the appropriate image
+        image_key = f"{ship.ship_type}_damaged" if ship.damaged else ship.ship_type
+        image = self.ship_images.get(image_key)
         
-        # Draw border if damaged
-        if ship.damaged:
-            pygame.draw.rect(self.screen, (255, 0, 0), rect, 3)
+        if image is None:
+            # Fallback to colored square
+            size = 15
+            rect = pygame.Rect(center[0] - size, center[1] - size, size * 2, size * 2)
+            pygame.draw.rect(self.screen, cfg.COLORS['ship'], rect)
+            if ship.damaged:
+                pygame.draw.rect(self.screen, (255, 0, 0), rect, 3)
+            return
+        
+        # Rotate image based on facing (aligned with hex edges)
+        angle_deg = -60 * ship.facing.value
+        rotated_image = pygame.transform.rotate(image, angle_deg)
+        
+        # Center the rotated image
+        rect = rotated_image.get_rect(center=(int(center[0]), int(center[1])))
+        self.screen.blit(rotated_image, rect)
     
     def _render_drag_rectangle(self):
         """Render drag rectangle for coordinate detection."""
@@ -749,7 +907,7 @@ class Game:
             )
         else:
             controls = self.font.render(
-                "Controls: Q/E-Rotate | W-Move | Z/X-Depth | T-Torpedos | S-Show All | G-Grid | M-Map | A-Align | ESC-Quit",
+                "Controls: Q/E-Rotate | W-Move | Z/X-Depth | T-Torpedos | S-Show All | V-Terrain | G-Grid | M-Map | A-Align | ESC-Quit",
                 True, cfg.COLORS['text']
             )
         self.screen.blit(controls, (10, cfg.SCREEN_HEIGHT - 30))

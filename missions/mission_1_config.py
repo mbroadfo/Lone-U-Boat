@@ -35,12 +35,15 @@ VALID_HEXES = None  # Use board_config.VALID_HEXES
 # Shallow water hexes (ships cannot enter these)
 # All hexes not listed here or in LAND_HEXES are considered DEEP water
 SHALLOW_HEXES = [
-    # TODO: Add shallow water hex coordinates when terrain system is implemented
+    (1, 8), (2, 8), (3, 8), (4, 8), (4, 9),
+    (9, 1), (8, 2), (8, 3), (8, 4), (8, 5), (9, 5),
 ]
 
 # Land hexes (impassable)
 LAND_HEXES = [
-    # TODO: Add land hex coordinates when terrain system is implemented
+    (4, 3), (5, 4),
+    (1, 9), (2, 9), (3, 9),
+    (9, 2), (9, 3), (9, 4),
 ]
 
 
@@ -51,14 +54,24 @@ LAND_HEXES = [
 # U-Boat starting position
 U_BOAT_START = {
     'position': (9, 0),  # Top right hex
-    'facing': 'NORTH',   # Facing direction (NORTH, NORTHEAST, SOUTHEAST, SOUTH, SOUTHWEST, NORTHWEST)
-    'depth': 'SURFACED', # Starting depth (SURFACED, PERISCOPE, MEDIUM, DEEP)
+    'facing': 'SOUTH',   # Initial facing direction (player can change at game start)
+    'depth': 'SURFACED', # Initial starting depth (player can change at game start)
 }
 
 # Allied ships starting positions
 SHIPS_START = [
-    # TODO: Add ship configurations when ship system is implemented
-    # Format: {'type': 'merchant', 'position': (q, r), 'facing': 'SOUTH', 'damaged': False}
+    {
+        'type': 'merchant',
+        'position': (1, 4),
+        'facing': 'SOUTH',  # Facing from (1,4) toward (1,5)
+        'damaged': False
+    },
+    {
+        'type': 'corvette',
+        'position': (2, 3),
+        'facing': 'SOUTH',  # Facing from (2,3) toward (2,4)
+        'damaged': False
+    },
 ]
 
 
@@ -68,14 +81,20 @@ SHIPS_START = [
 
 # Anchor positions (if mission involves anchoring)
 ANCHOR_POSITIONS = [
-    # TODO: Add anchor hex coordinates when anchor system is implemented
+    (6, 6),  # Central anchor position
 ]
 
-# Exit positions (hexes where U-Boat can exit mission)
-EXIT_POSITIONS = [
-    # TODO: Add exit hex coordinates when exit system is implemented
-    # Likely along the edges of the map
-]
+# Exit positions (hexes where units can exit mission)
+EXIT_POSITIONS = {
+    'u_boat': {
+        'position': (1, 7),
+        'facing': 'SOUTHWEST',  # Facing toward (0,8) - exit after sinking merchant(s)
+    },
+    'merchant': {
+        'position': (6, 9),
+        'facing': 'SOUTH',  # Facing toward (6,10) - merchant escape route
+    },
+}
 
 # Victory conditions
 VICTORY_CONDITIONS = {
