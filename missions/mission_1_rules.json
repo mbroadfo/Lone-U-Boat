@@ -1,0 +1,89 @@
+{
+  "_comment": "Mission 1 - Delta-only rules (inherits from baseline layers)",
+  "_version": "2.0",
+  "inherits": [
+    "core_system_rules",
+    "u_boat_ruleset_default",
+    "escort_ai_baseline"
+  ],
+  "mission_meta": {
+    "number": 1,
+    "title": "Supply Ship Attack: North of Scotland",
+    "subtitle": null,
+    "objective": "Destroy the Merchant Ship before it exits the map, then exit the map in the direction of the red arrow.",
+    "map_image": "assets/maps/mission_1.png",
+    "difficulty": "beginner",
+    "estimated_turns": 12
+  },
+  "sections": [
+    {
+      "id": "merchant_movement",
+      "phase": 2,
+      "type": "movement_rules",
+      "label": "Merchant Ships Phase",
+      "rules": [
+        {
+          "condition": "UNDAMAGED",
+          "action": "MOVE",
+          "distance": 1,
+          "notes": "Always face dotted line"
+        },
+        {
+          "condition": "DAMAGED",
+          "action": "ROLL_TO_MOVE",
+          "dice": "1d6",
+          "success": "4+",
+          "on_success": {
+            "action": "MOVE",
+            "distance": 1
+          },
+          "on_fail": {
+            "action": "NO_MOVE"
+          },
+          "notes": "Always face dotted line"
+        }
+      ]
+    },
+    {
+      "id": "b24_phase",
+      "phase": 5,
+      "type": "air_phase_rules",
+      "label": "Allied B24 Phase",
+      "enabled": false,
+      "note": "Not present in Mission 1"
+    },
+    {
+      "id": "end_of_turn_events",
+      "phase": 6,
+      "type": "event_table",
+      "label": "End-of-Turn Events",
+      "enabled": false,
+      "note": "Mission 1 has no end-of-turn event table"
+    },
+    {
+      "id": "victory_conditions",
+      "phase": null,
+      "type": "victory_conditions",
+      "label": "Victory Conditions",
+      "primary": {
+        "description": "Destroy the Merchant Ship",
+        "condition": "merchant_sunk",
+        "points": 100
+      },
+      "secondary": {
+        "description": "Exit the map in the direction of the red arrow",
+        "condition": "u_boat_exits",
+        "points": 50
+      },
+      "failure": {
+        "description": "Merchant Ship exits the map",
+        "condition": "merchant_escapes"
+      },
+      "bonus": {
+        "description": "Sink all enemy vessels",
+        "condition": "all_ships_sunk",
+        "points": 50
+      }
+    }
+  ]
+}

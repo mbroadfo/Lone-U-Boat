@@ -1,0 +1,289 @@
+{
+  "_comment": "U-Boat Ruleset Default - Standard U-Boat capabilities and action costs",
+  "_version": "1.0",
+  "_override_policy": "RARELY - Only override for special mission scenarios (damaged U-Boat, prototype, etc.)",
+  
+  "u_boat_ap_rules": {
+    "id": "u_boat_ap_rules",
+    "phase": 1,
+    "type": "ap_rules",
+    "label": "Action Points",
+    "dice": {
+      "normal": "3d6",
+      "damaged": "2d6",
+      "description": "Roll 3 dice (2 dice if Engine is Damaged)"
+    },
+    "calculation": "Take highest die rolled",
+    "modifiers": [
+      {
+        "condition": "captain_alive",
+        "effect": "+1 AP",
+        "description": "Add 1 AP if Captain is alive"
+      },
+      {
+        "condition": "engine_damaged",
+        "effect": "roll 2d6 instead of 3d6",
+        "description": "Engine damage reduces dice pool"
+      }
+    ],
+    "forced_dive_penalty": {
+      "effect": "-2 AP",
+      "timing": "Applied at start of turn after forced dive",
+      "duration": "One turn only"
+    }
+  },
+  
+  "u_boat_depth_modifiers": {
+    "id": "u_boat_depth_modifiers",
+    "phase": 1,
+    "type": "depth_modifiers",
+    "label": "Detection Level Modifiers by Depth",
+    "timing": "Applied at start of U-Boat phase, before actions",
+    "modifiers": [
+      {
+        "depth": "SURFACED",
+        "dl_modifier": 0,
+        "description": "No DL reduction"
+      },
+      {
+        "depth": "PERISCOPE",
+        "dl_modifier": 0,
+        "description": "No DL reduction"
+      },
+      {
+        "depth": "MEDIUM",
+        "dl_modifier": -1,
+        "description": "Reduce DL by 1"
+      },
+      {
+        "depth": "DEEP",
+        "dl_modifier": -2,
+        "description": "Reduce DL by 2"
+      }
+    ],
+    "notes": [
+      "Cannot reduce DL below 0",
+      "Applied before spending any action points"
+    ]
+  },
+  
+  "u_boat_action_costs": {
+    "id": "u_boat_action_costs",
+    "phase": 1,
+    "type": "action_costs",
+    "label": "U-Boat Actions",
+    "actions": [
+      {
+        "action": "MOVE",
+        "costs": {
+          "SURFACED": 1,
+          "PERISCOPE": 2,
+          "MEDIUM": 3,
+          "DEEP": 3
+        },
+        "restrictions": [
+          "Cannot enter Land hexes",
+          "Cannot enter Shallow water unless Surfaced or Periscope",
+          "Cannot enter Ship hex unless Medium or Deep"
+        ]
+      },
+      {
+        "action": "TURN",
+        "costs": {
+          "SURFACED": 1,
+          "PERISCOPE": 2,
+          "MEDIUM": 2,
+          "DEEP": 3
+        },
+        "effect": "Turn 1 hex edge (60°) left or right"
+      },
+      {
+        "action": "CHANGE DEPTH",
+        "costs": {
+          "SURFACED": 2,
+          "PERISCOPE": 1,
+          "MEDIUM": 2,
+          "DEEP": 1
+        },
+        "restrictions": [
+          "Can only change depth once per turn",
+          "Can only change by one level at a time",
+          "Cannot go below Periscope in shallow water",
+          "Cannot go above Medium beneath ships",
+          "Cost 2 to dive down, cost 1 to ascend up"
+        ]
+      },
+      {
+        "action": "REPAIR (Eng)",
+        "costs": {
+          "SURFACED": 2,
+          "PERISCOPE": 4,
+          "MEDIUM": 4,
+          "DEEP": 4
+        },
+        "effect": "Remove 1 damage marker OR fix up to 2 torpedo tubes",
+        "restrictions": [
+          "Hull damage cannot be repaired",
+          "Flak and Deck Gun repairs only when Surfaced",
+          "Only Surface repairs if Engineer is KIA"
+        ]
+      },
+      {
+        "action": "FIRE DECK GUN",
+        "costs": {
+          "SURFACED": 2,
+          "PERISCOPE": null,
+          "MEDIUM": null,
+          "DEEP": null
+        },
+        "requirements": [
+          "U-Boat must be Surfaced",
+          "Deck gun not damaged",
+          "Target in LOS",
+          "Range 1-3 hexes"
+        ],
+        "to_hit": {
+          "range_1_2": "7+ on 2d6",
+          "range_3": "8+ on 2d6"
+        },
+        "on_hit": [
+          "Set DL to 3 immediately",
+          "Roll 1d6 on Allied Ship Damage Chart"
+        ]
+      },
+      {
+        "action": "LOAD TORPS",
+        "costs": {
+          "SURFACED": 1,
+          "PERISCOPE": 4,
+          "MEDIUM": null,
+          "DEEP": null
+        },
+        "effect": "Load 2 torpedo tubes (1 if Weapons Officer KIA)",
+        "restrictions": [
+          "Cannot load damaged tubes",
+          "Choose which tubes to load"
+        ]
+      },
+      {
+        "action": "FIRE TORPS",
+        "costs": {
+          "SURFACED": 2,
+          "PERISCOPE": 2,
+          "MEDIUM": null,
+          "DEEP": null
+        },
+        "options": "Fire 1, 2, or 3 torpedoes",
+        "direction": "Front 4 tubes OR rear 1 tube (not both)",
+        "range": "1-9 hexes (no limit, but harder at range)",
+        "detection_effects": [
+          {
+            "condition": "Fire 3 torpedoes",
+            "effect": "+1 DL (noise)"
+          },
+          {
+            "condition": "Any hit",
+            "effect": "+1 DL (maximum +2 total if fired 3)"
+          }
+        ],
+        "to_hit_table": {
+          "range_1_2": {
+            "side": "3+ on 1d6 per torpedo",
+            "front_rear": "4+ on 1d6 per torpedo"
+          },
+          "range_3_4": {
+            "side": "4+ on 1d6 per torpedo",
+            "front_rear": "5+ on 1d6 per torpedo"
+          },
+          "range_5_6": {
+            "side": "5+ on 1d6 per torpedo",
+            "front_rear": "6+ on 1d6 per torpedo"
+          },
+          "range_7_9": {
+            "side": "6+ on 1d6 per torpedo",
+            "front_rear": "6+ on 1d6 per torpedo"
+          }
+        },
+        "missed_torpedoes": "Continue along line of hexes to other ships beyond",
+        "on_hit": "Roll 1d6 on Allied Ship Damage Chart per hit"
+      }
+    ]
+  },
+  
+  "torpedo_tubes": {
+    "id": "torpedo_tubes",
+    "type": "equipment",
+    "label": "Torpedo Tubes",
+    "total": 5,
+    "front": 4,
+    "rear": 1,
+    "initial_state": "All loaded at mission start",
+    "damage_effect": "Damaged tubes become unloaded and cannot be used until repaired"
+  },
+  
+  "deck_gun": {
+    "id": "deck_gun",
+    "type": "equipment",
+    "label": "Deck Gun",
+    "restrictions": "Can only fire when Surfaced",
+    "repair": "Can only be repaired when Surfaced"
+  },
+  
+  "flak_gun": {
+    "id": "flak_gun",
+    "type": "equipment",
+    "label": "Anti-Aircraft Flak Gun",
+    "restrictions": "Can only fire when Surfaced",
+    "repair": "Can only be repaired when Surfaced",
+    "vs_b24": {
+      "roll": "2d6",
+      "base_success": "8+",
+      "with_lookout": "7+ (if Lookout alive)",
+      "effect": "B24 destroyed or scared off"
+    }
+  },
+  
+  "engine": {
+    "id": "engine",
+    "type": "equipment",
+    "label": "Engine",
+    "damage_effects": [
+      "Roll 2d6 instead of 3d6 for AP",
+      "Detection rolls against U-Boat decreased by 1 (easier to detect - noisy)"
+    ],
+    "repair": "Can be repaired at any depth if Engineer alive, Surfaced only if Engineer KIA"
+  },
+  
+  "crew_positions": {
+    "1": {
+      "name": "Captain",
+      "effect_if_alive": "+1 AP per turn",
+      "effect_if_kia": "No AP bonus"
+    },
+    "2": {
+      "name": "Engineer",
+      "effect_if_alive": "Can repair at any depth (still costs AP)",
+      "effect_if_kia": "Can only repair when Surfaced"
+    },
+    "3": {
+      "name": "Weapons Officer",
+      "effect_if_alive": "Load 2 torpedo tubes per action",
+      "effect_if_kia": "Load only 1 torpedo tube per action"
+    },
+    "4": {
+      "name": "Sonar Operator",
+      "effect_if_alive": "Enemy detection rolls increased by 1 (harder to detect)",
+      "effect_if_kia": "No detection benefit"
+    },
+    "5": {
+      "name": "Medic",
+      "effect_if_alive": "Can save other crew on 5+ when they would be KIA",
+      "effect_if_kia": "All crew hits are automatic KIA"
+    },
+    "6": {
+      "name": "Lookout",
+      "effect_if_alive": "Flak gun hits B24 on 7+ instead of 8+",
+      "effect_if_kia": "Flak gun remains at 8+"
+    }
+  }
+}

@@ -1,0 +1,362 @@
+{
+  "_comment": "Escort AI Baseline - Standard escort behavior for Destroyers and Corvettes",
+  "_version": "1.0",
+  "_override_policy": "RARELY - Only override for elite/damaged escort variants",
+  
+  "detection_system": {
+    "id": "detection_rules",
+    "phase": 3,
+    "type": "detection_rules",
+    "label": "Detection Phase",
+    "procedure": "Roll 1d6 for each Escort that has the U-Boat in LOS and within 3 hexes",
+    "range": 3,
+    "requires_los": true,
+    "each_success_effect": "+1 DL",
+    "skip_if": "DL already at 3",
+    "base_detection_thresholds": [
+      {
+        "depth": "SURFACED",
+        "roll_required": 1,
+        "description": "Almost always detected"
+      },
+      {
+        "depth": "PERISCOPE",
+        "roll_required": 2,
+        "description": "Easily detected"
+      },
+      {
+        "depth": "MEDIUM",
+        "roll_required": 4,
+        "description": "Harder to detect"
+      },
+      {
+        "depth": "DEEP",
+        "roll_required": 5,
+        "description": "Very hard to detect"
+      }
+    ],
+    "modifiers": [
+      {
+        "condition": "engine_damaged",
+        "effect": -1,
+        "description": "Engine damage: Decrease roll required by 1 (easier to detect - noisy)"
+      },
+      {
+        "condition": "sonar_operator_alive",
+        "effect": 1,
+        "description": "Sonar operator alive: Increase roll required by 1 (harder to detect)"
+      }
+    ]
+  },
+  
+  "escort_activation": {
+    "id": "escort_activation_order",
+    "phase": 4,
+    "type": "activation_rule",
+    "label": "Escorts Activation Order",
+    "rule": "Activate closest escort first (measured to U-Boat)",
+    "tie_breaking": "Player chooses which activates first",
+    "dice_calculation": {
+      "destroyer": {
+        "base": 3,
+        "formula": "3 + DL (or just 3 if damaged)",
+        "damaged_override": 3
+      },
+      "corvette": {
+        "base": 2,
+        "formula": "2 + DL (or just 2 if damaged)",
+        "damaged_override": 2
+      }
+    },
+    "resolution": "Roll dice, arrange lowest to highest, resolve each die in order"
+  },
+  
+  "destroyer_action_table": {
+    "id": "destroyer_actions",
+    "phase": 4,
+    "type": "escort_action_table",
+    "label": "Destroyer Actions",
+    "ship_type": "destroyer",
+    "dice": "Variable (3 + DL, or 3 if damaged)",
+    "results": [
+      {
+        "roll": 1,
+        "primary_action": "FIRE",
+        "alternate_action": "DEPTH_CHARGE",
+        "condition": "if DL 1–3",
+        "description": "FIRE or DEPTH CHARGE if DL 1–3"
+      },
+      {
+        "roll": 2,
+        "primary_action": "MOVE",
+        "then": "TURN",
+        "then_condition": "if blocked",
+        "then_action": "DEPTH_CHARGE",
+        "then_condition_2": "if DL 1–3",
+        "description": "MOVE — If blocked, TURN — If DL 1–3: DEPTH CHARGE"
+      },
+      {
+        "roll": 3,
+        "primary_action": "MOVE",
+        "then": "TURN",
+        "then_action": "DEPTH_CHARGE",
+        "then_condition": "if DL 1–3",
+        "description": "MOVE — TURN — If DL 1–3: DEPTH CHARGE"
+      },
+      {
+        "roll": 4,
+        "primary_action": "MOVE",
+        "then": "TURN",
+        "then_condition": "if blocked",
+        "then_action": "DEPTH_CHARGE",
+        "then_condition_2": "if DL 1–3",
+        "description": "MOVE — If blocked, TURN — If DL 1–3: DEPTH CHARGE"
+      },
+      {
+        "roll": 5,
+        "primary_action": "MOVE",
+        "then": "DEPTH_CHARGE",
+        "then_condition": "if DL 1–3",
+        "description": "MOVE — If DL 1–3: DEPTH CHARGE"
+      },
+      {
+        "roll": 6,
+        "primary_action": "MOVE",
+        "then": "TURN",
+        "then_action": "DEPTH_CHARGE",
+        "then_condition": "if DL 1–3",
+        "description": "MOVE — TURN — If DL 1–3: DEPTH CHARGE"
+      }
+    ]
+  },
+  
+  "corvette_action_table": {
+    "id": "corvette_actions",
+    "phase": 4,
+    "type": "escort_action_table",
+    "label": "Corvette Actions",
+    "ship_type": "corvette",
+    "dice": "Variable (2 + DL, or 2 if damaged)",
+    "results": [
+      {
+        "roll": 1,
+        "primary_action": "FIRE",
+        "alternate_action": "DEPTH_CHARGE",
+        "condition": "if DL 1–3",
+        "description": "FIRE or DEPTH CHARGE if DL 1–3"
+      },
+      {
+        "roll": 2,
+        "primary_action": "MOVE",
+        "then": "TURN",
+        "then_condition": "if blocked",
+        "then_action": "DEPTH_CHARGE",
+        "then_condition_2": "if DL 1–3",
+        "description": "MOVE — If blocked, TURN — If DL 1–3: DEPTH CHARGE"
+      },
+      {
+        "roll": 3,
+        "primary_action": "MOVE",
+        "then": "TURN",
+        "then_action": "FIRE",
+        "then_condition": "if DL 1–3",
+        "description": "MOVE — TURN — If DL 1–3: FIRE"
+      },
+      {
+        "roll": 4,
+        "primary_action": "MOVE",
+        "then": "TURN",
+        "description": "MOVE — TURN"
+      },
+      {
+        "roll": 5,
+        "primary_action": "MOVE",
+        "then": "DEPTH_CHARGE",
+        "then_condition": "if DL 1–3",
+        "description": "MOVE — If DL 1–3: DEPTH CHARGE"
+      },
+      {
+        "roll": 6,
+        "primary_action": "MOVE",
+        "then": "DEPTH_CHARGE",
+        "then_condition": "if DL 1–3",
+        "description": "MOVE — If DL 1–3: DEPTH CHARGE"
+      }
+    ]
+  },
+  
+  "escort_action_definitions": {
+    "id": "escort_action_definitions",
+    "phase": 4,
+    "type": "action_definitions",
+    "label": "Escort Actions Detail",
+    "actions": [
+      {
+        "action": "MOVE",
+        "distance": 1,
+        "direction": "One hex forward in facing direction",
+        "blocked_by": ["Land hexes", "Hexes with other ships"],
+        "can_enter": ["U-Boat hex (causes forced dive check)"],
+        "notes": "If cannot move (blocked or off-map), does not move"
+      },
+      {
+        "action": "TURN",
+        "amount": "1 hex edge (60°) left or right",
+        "direction_logic": {
+          "dl_0_1": {
+            "target": "Anchor hex",
+            "method": "Turn towards smallest angle"
+          },
+          "dl_2_3": {
+            "target": "U-Boat hex",
+            "method": "Turn towards smallest angle"
+          },
+          "facing_target": {
+            "condition": "Escort facing directly at target",
+            "action": "Only turn if blocked, turn randomly"
+          },
+          "facing_away": {
+            "condition": "Escort facing directly away from target",
+            "action": "Turn randomly (regardless of blocked)"
+          },
+          "same_hex": {
+            "condition": "Escort in same hex as U-Boat",
+            "action": "Only turn if blocked, turn randomly"
+          }
+        },
+        "notes": "Does not matter if hex turned to face is itself blocked"
+      },
+      {
+        "action": "DEPTH_CHARGE",
+        "requirements": [
+          "U-Boat not Surfaced (must be Periscope, Medium, or Deep)",
+          "Range 0–1 hexes (same hex or adjacent)"
+        ],
+        "corvette_attack": {
+          "roll": "1d6",
+          "table": "U-Boat Damage Chart"
+        },
+        "destroyer_attack": {
+          "roll": "2d6",
+          "take": "lowest",
+          "table": "U-Boat Damage Chart",
+          "advantage": "More likely to roll Critical Hit or Hull Damage"
+        }
+      },
+      {
+        "action": "FIRE",
+        "requirements": [
+          "U-Boat Surfaced",
+          "LOS exists",
+          "Range 1–3 hexes"
+        ],
+        "effects": [
+          {
+            "type": "detection",
+            "effect": "Set DL to 3 immediately"
+          },
+          {
+            "type": "damage",
+            "roll": "Automatic Critical Hit",
+            "table": "U-Boat Damage Chart (roll on Critical Hit sub-table)",
+            "notes": "More devastating than depth charge"
+          }
+        ]
+      }
+    ]
+  },
+  
+  "merchant_ship_movement": {
+    "id": "merchant_movement_default",
+    "phase": 2,
+    "type": "movement_rules",
+    "label": "Merchant Ships Phase",
+    "rules": [
+      {
+        "condition": "UNDAMAGED",
+        "action": "MOVE",
+        "distance": 1,
+        "path": "Follow dotted line on map",
+        "facing": "Always face direction of next hex on dotted line"
+      },
+      {
+        "condition": "DAMAGED",
+        "action": "ROLL_TO_MOVE",
+        "dice": "1d6",
+        "success": "4+",
+        "on_success": {
+          "action": "MOVE",
+          "distance": 1,
+          "path": "Follow dotted line on map"
+        },
+        "on_fail": {
+          "action": "NO_MOVE"
+        },
+        "facing": "Always face direction of next hex on dotted line (even if didn't move)"
+      }
+    ],
+    "blocked": {
+      "condition": "Next hex already has a ship",
+      "action": "Do not move"
+    },
+    "forced_dive_trigger": {
+      "condition": "Merchant enters U-Boat hex",
+      "effect": "U-Boat forced dive (if Surfaced or Periscope)"
+    },
+    "exit_map": {
+      "condition": "Merchant moves off map (yellow arrow)",
+      "effect": "Remove from map. Mission failure if required objective."
+    }
+  },
+  
+  "b24_aircraft": {
+    "id": "b24_default",
+    "phase": 5,
+    "type": "air_phase_rules",
+    "label": "Allied B24 Phase",
+    "activation": "Any order (player chooses)",
+    "max_on_map": 2,
+    "move": {
+      "distance": 2,
+      "direction": "In facing direction",
+      "can_enter": ["Any hex type including Land", "Ship hexes", "U-Boat hex"],
+      "exit_map": "Remove if movement takes off map"
+    },
+    "turn": {
+      "condition": "Only if DL 2–3",
+      "target": "U-Boat (ignore Anchor)",
+      "method": "Turn towards smallest angle to U-Boat",
+      "facing_u_boat": "Never turn (why would it?)",
+      "facing_away": "Turn randomly",
+      "same_hex_as_u_boat": "Only turn if facing off-map, turn randomly",
+      "dl_0_1": "Does not turn at all"
+    },
+    "attack": {
+      "requirements": [
+        "U-Boat Surfaced or Periscope",
+        "Range 0–1"
+      ],
+      "flak_defense": {
+        "condition": "U-Boat Surfaced AND Flak gun undamaged",
+        "roll": "2d6",
+        "success_base": "8+",
+        "success_with_lookout": "7+ (if Lookout alive)",
+        "effect": "B24 destroyed or scared off"
+      },
+      "attack_if_survives": {
+        "roll": "1d6",
+        "damage_table": {
+          "1": "Critical Hit (roll on U-Boat Critical Hit sub-table)",
+          "2-3": "General Damage (roll on U-Boat General Damage sub-table)",
+          "4-6": "No damage"
+        }
+      }
+    },
+    "placement": {
+      "trigger": "End of Turn Event",
+      "condition": "DL 2–3",
+      "method": "Trace 6 hex lines from U-Boat to map edge, place on longest line facing U-Boat",
+      "tie_breaking": "Random if multiple longest lines"
+    }
+  }
+}

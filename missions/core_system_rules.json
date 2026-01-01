@@ -1,0 +1,327 @@
+{
+  "_comment": "Core System Rules - Universal game mechanics that NEVER change across missions",
+  "_version": "1.0",
+  "_override_policy": "NEVER - These rules are immutable game mechanics",
+  
+  "u_boat_damage_chart": {
+    "id": "u_boat_damage_chart",
+    "phase": null,
+    "type": "damage_chart",
+    "label": "U-Boat Damage Chart",
+    "description": "Apply when U-Boat takes damage from depth charges, surface fire, or aircraft attacks",
+    "outcomes": [
+      {
+        "roll_min": 1,
+        "roll_max": 1,
+        "result": "CRITICAL_HIT",
+        "description": "Critical Hit",
+        "sub_table": "critical_hit_table"
+      },
+      {
+        "roll_min": 2,
+        "roll_max": 3,
+        "result": "HULL_DAMAGE",
+        "description": "Hull Damage",
+        "effect": "Add 1 Hull damage marker (cannot be repaired)",
+        "limit": 4,
+        "limit_effect": "U-Boat destroyed"
+      },
+      {
+        "roll_min": 4,
+        "roll_max": 6,
+        "result": "GENERAL_DAMAGE",
+        "description": "General Damage",
+        "sub_table": "general_damage_table"
+      }
+    ],
+    "sub_tables": {
+      "critical_hit_table": {
+        "label": "Critical Hit Sub-Table",
+        "dice": "1d6",
+        "outcomes": [
+          {
+            "roll_min": 1,
+            "roll_max": 1,
+            "result": "CATASTROPHIC",
+            "description": "Catastrophic Damage",
+            "effect": "U-Boat destroyed"
+          },
+          {
+            "roll_min": 2,
+            "roll_max": 2,
+            "result": "HULL_DAMAGE_X2",
+            "description": "Hull Damage x2",
+            "effect": "Add 2 Hull damage markers"
+          },
+          {
+            "roll_min": 3,
+            "roll_max": 4,
+            "result": "TORPEDO_TUBES_3_4",
+            "description": "Torpedo Tubes 3-4 Damaged",
+            "effect": "Roll 3d6: tubes matching 1-5 are damaged (ignore 6s and duplicates)"
+          },
+          {
+            "roll_min": 5,
+            "roll_max": 6,
+            "result": "DOUBLE_DAMAGE",
+            "description": "Double Damage",
+            "effect": "Roll twice on General Damage table"
+          }
+        ]
+      },
+      "general_damage_table": {
+        "label": "General Damage Sub-Table",
+        "dice": "1d6",
+        "outcomes": [
+          {
+            "roll_min": 1,
+            "roll_max": 1,
+            "result": "HULL_DAMAGE",
+            "description": "Hull Damage",
+            "effect": "Add 1 Hull damage marker (cannot be repaired)"
+          },
+          {
+            "roll_min": 2,
+            "roll_max": 2,
+            "result": "FLAK_GUN_DAMAGE",
+            "description": "Flak Gun Damaged",
+            "effect": "Mark flak gun as damaged. Cannot use until repaired (Surfaced only)"
+          },
+          {
+            "roll_min": 3,
+            "roll_max": 3,
+            "result": "TORPEDO_TUBES",
+            "description": "Torpedo Tubes Damaged",
+            "effect": "Roll 2d6: tubes matching 1-5 are damaged (ignore 6s and duplicates). Loaded tubes become unloaded."
+          },
+          {
+            "roll_min": 4,
+            "roll_max": 5,
+            "result": "ENGINE_DAMAGE",
+            "description": "Engine Damaged",
+            "effect": "Mark engine as damaged. Roll 2d6 for AP instead of 3d6. Easier to detect (detection -1)"
+          },
+          {
+            "roll_min": 6,
+            "roll_max": 6,
+            "result": "DECK_GUN_DAMAGE",
+            "description": "Deck Gun Damaged",
+            "effect": "Mark deck gun as damaged. Cannot use until repaired (Surfaced only)"
+          }
+        ]
+      }
+    },
+    "crew_kia_system": {
+      "trigger": "Roll 5-6 on U-Boat Damage Chart",
+      "procedure": "Roll 1d6 to determine crew member (1-6 as numbered on mission map)",
+      "medic_save": {
+        "condition": "If Medic alive and not the target",
+        "roll": "5+ on 1d6",
+        "success": "Crew member survives",
+        "failure": "Crew member KIA"
+      },
+      "notes": [
+        "No effect if crew member already KIA",
+        "Medic cannot save himself",
+        "If Medic dead, all hits are automatic KIA"
+      ]
+    },
+    "hull_damage_system": {
+      "limit": 4,
+      "limit_effect": "U-Boat floods and is destroyed",
+      "depth_restrictions": [
+        {
+          "damage_level": 1,
+          "restriction": "Cannot go DEEP",
+          "max_depth": "MEDIUM"
+        },
+        {
+          "damage_level": 2,
+          "restriction": "Cannot go MEDIUM or DEEP",
+          "max_depth": "PERISCOPE"
+        },
+        {
+          "damage_level": 3,
+          "restriction": "Cannot submerge at all",
+          "max_depth": "SURFACED"
+        },
+        {
+          "damage_level": 4,
+          "restriction": "U-Boat destroyed",
+          "max_depth": null
+        }
+      ],
+      "forced_ascent": {
+        "trigger": "Hull damage taken while deeper than permitted",
+        "effect": "Immediately ascend to deepest permitted depth",
+        "cost": "No AP cost, no DL change",
+        "destruction_condition": "If ship blocks required ascent, U-Boat destroyed"
+      },
+      "repair": "Hull damage cannot be repaired"
+    }
+  },
+  
+  "allied_ship_damage_chart": {
+    "id": "allied_ship_damage",
+    "phase": 1,
+    "type": "damage_chart",
+    "label": "Allied Ship Damage Chart",
+    "description": "For each Torpedo / Deck Gun Hit on a Ship, roll d6",
+    "ship_classes": [
+      {
+        "ship_type": "merchant",
+        "outcomes": [
+          {
+            "roll_min": 1,
+            "roll_max": 1,
+            "result": "NO_DAMAGE",
+            "description": "No significant damage"
+          },
+          {
+            "roll_min": 2,
+            "roll_max": 3,
+            "result": "DAMAGED",
+            "description": "Damaged → Sunk (if hit again)"
+          },
+          {
+            "roll_min": 4,
+            "roll_max": 6,
+            "result": "CATASTROPHIC",
+            "description": "Catastrophic Hit — Sunk immediately"
+          }
+        ]
+      },
+      {
+        "ship_type": "corvette",
+        "outcomes": [
+          {
+            "roll_min": 1,
+            "roll_max": 2,
+            "result": "NO_DAMAGE",
+            "description": "No significant damage"
+          },
+          {
+            "roll_min": 3,
+            "roll_max": 4,
+            "result": "DAMAGED",
+            "description": "Damaged → Sunk (if hit again)"
+          },
+          {
+            "roll_min": 5,
+            "roll_max": 6,
+            "result": "CATASTROPHIC",
+            "description": "Catastrophic Hit — Sunk immediately"
+          }
+        ]
+      },
+      {
+        "ship_type": "destroyer",
+        "outcomes": [
+          {
+            "roll_min": 1,
+            "roll_max": 3,
+            "result": "NO_DAMAGE",
+            "description": "No significant damage"
+          },
+          {
+            "roll_min": 4,
+            "roll_max": 5,
+            "result": "DAMAGED",
+            "description": "Damaged → Sunk (if hit again)"
+          },
+          {
+            "roll_min": 6,
+            "roll_max": 6,
+            "result": "CATASTROPHIC",
+            "description": "Catastrophic Hit — Sunk immediately"
+          }
+        ]
+      }
+    ],
+    "notes": [
+      "A ship already Damaged that takes another hit is Sunk",
+      "Catastrophic hits sink the ship immediately regardless of prior state"
+    ]
+  },
+  
+  "forced_dive_mechanics": {
+    "id": "forced_dive",
+    "type": "core_mechanic",
+    "label": "Forced Dive",
+    "trigger": "Ship enters same hex as U-Boat when U-Boat is Surfaced or at Periscope depth",
+    "effects": [
+      {
+        "effect": "Immediately set U-Boat depth to MEDIUM",
+        "immediate": true
+      },
+      {
+        "effect": "Increase Detection Level by 1",
+        "immediate": true
+      },
+      {
+        "effect": "U-Boat suffers -2 AP penalty next turn",
+        "timing": "start of next U-Boat phase"
+      }
+    ],
+    "shallow_water_exception": {
+      "condition": "Forced dive occurs in shallow water hex",
+      "effect": "U-Boat destroyed (cannot dive to Medium in shallow water)",
+      "severity": "critical"
+    }
+  },
+  
+  "collision_mechanics": {
+    "id": "collision",
+    "type": "core_mechanic",
+    "label": "Collision Rules",
+    "hex_occupancy": {
+      "ships": "Only one ship per hex (ships cannot stack)",
+      "u_boat_and_ship": "U-Boat can share hex with ship ONLY at Medium or Deep depth",
+      "aircraft": "Any number of aircraft can share hex with ships and/or U-Boat"
+    },
+    "movement_restrictions": {
+      "ships_blocked_by": ["Land hexes", "Hexes with other ships"],
+      "u_boat_blocked_by": [
+        "Land hexes",
+        "Shallow water (unless Surfaced or Periscope)",
+        "Ship hexes (unless Medium or Deep)"
+      ]
+    }
+  },
+  
+  "line_of_sight_rules": {
+    "id": "line_of_sight",
+    "type": "core_mechanic",
+    "label": "Line of Sight",
+    "blocked_by": ["Land hexes only"],
+    "not_blocked_by": ["Ships", "Aircraft", "U-Boat", "Shallow water"],
+    "range_0_1": {
+      "description": "Adjacent or same hex",
+      "los": "Always have LOS"
+    },
+    "range_2": {
+      "description": "2 hexes away",
+      "direct_line": "LOS through 1 intervening hex",
+      "diagonal": "LOS along edge between 2 hexes (favor observer if one is land)"
+    },
+    "range_3": {
+      "description": "3 hexes away",
+      "rule": "LOS through exactly 2 intervening hexes. Both must be non-land."
+    },
+    "reciprocal": "If A can see B, then B can see A"
+  },
+  
+  "repair_system": {
+    "id": "repair_restrictions",
+    "type": "core_mechanic",
+    "label": "Repair System",
+    "cannot_repair": ["Hull damage"],
+    "surfaced_only": ["Flak gun", "Deck gun"],
+    "any_depth_if_engineer_alive": ["Engine", "Torpedo tubes (2 per action)"],
+    "surfaced_only_if_engineer_kia": ["Engine", "Torpedo tubes (2 per action)"],
+    "notes": [
+      "Damaged torpedo tubes become unloaded and must be reloaded after repair",
+      "Each repair action fixes 1 damage marker OR up to 2 torpedo tubes"
+    ]
+  }
+}

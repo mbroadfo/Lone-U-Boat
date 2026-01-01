@@ -1,13 +1,10 @@
 {
   "default": true,
-  "MD013": { "line_length": 200 },
+  "MD013": false,
   "MD024": false,
   "MD025": false,
   "MD032": false,
   "MD036": false,
   "MD041": false,
-  "MD060": false,
-  "DEVELOPMENT_PLAN.md": {
-    "MD022": false
-  }
+  "MD060": false
 }

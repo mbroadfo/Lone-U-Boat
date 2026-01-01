@@ -24,9 +24,11 @@ We need to add **43 specific components** organized into **5 development phases*
 ## Progress Tracker
 
 ### Phase 1: Foundation (Weeks 1-2) - Game Structure & UI Framework
+
 **Status:** In Progress | **Target Completion:** Week 2
 
 #### 1A: Game Screens
+
 - [x] Create `core/screens/` module structure
 - [x] Main menu screen with mission selection
 - [x] Mission briefing screen (objectives, rules display)
@@ -36,6 +38,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [x] **Tests:** Menu navigation, mission data loading
 
 #### 1B: Turn Structure
+
 - [ ] Add turn counter to game state
 - [x] Implement `GamePhase` enum (6 phases)
 - [ ] Create phase display overlay UI
@@ -45,17 +48,33 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Phase transition logic
 
 #### 1C: Game State Persistence
+
 - [ ] Save game state to file
 - [ ] Load game state from file
 - [ ] Auto-save functionality
 - [ ] **Tests:** Save/load integrity
 
+#### 1D: Mission Metadata System ⭐ NEW
+
+- [x] Design mission rules schema (JSON)
+- [x] Define section types and structure
+- [x] Create Mission 1 rules metadata
+- [x] Implement mission rules loader utility
+- [ ] Integrate with existing mission config
+- [ ] Add phase-based rules filtering
+- [ ] Add validation for mission metadata
+- [ ] **Tests:** Schema validation, rules queries
+- **Goal:** Separate mission rules content from UI layout by introducing structured, machine-consumable mission metadata
+- **Why Now:** Prevents future refactors and enables all phase-aware features (detection, combat, victory conditions)
+
 ---
 
 ### Phase 2: Player Action System (Weeks 3-4) - U-Boat Phase
+
 **Status:** Not Started | **Target Completion:** Week 4
 
 #### 2A: Action Point System
+
 - [ ] Implement AP rolling (3d6, take highest)
 - [ ] Apply captain bonus (+1 AP if alive)
 - [ ] Apply engine damage penalty (2d6 if damaged)
@@ -65,6 +84,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** AP calculation edge cases
 
 #### 2B: Action Planning System
+
 - [ ] Create `ActionQueue` class
 - [ ] Action preview visualization
 - [ ] Undo button (remove last action)
@@ -75,6 +95,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Action queue operations, undo/redo
 
 #### 2C: Core Actions Implementation
+
 - [ ] Refactor WASD controls into action system
 - [ ] MOVE action with validation (shallow water, ships, land)
 - [ ] TURN action (left/right, 60 degrees)
@@ -84,6 +105,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Action validation, movement rules
 
 #### 2D: Repair Action
+
 - [ ] Repair action UI (select what to repair)
 - [ ] Hull damage cannot be repaired
 - [ ] Flak/Deck gun (surface only)
@@ -95,9 +117,11 @@ We need to add **43 specific components** organized into **5 development phases*
 ---
 
 ### Phase 3: Combat Systems (Weeks 5-7) - Weapons & Damage
+
 **Status:** Not Started | **Target Completion:** Week 7
 
 #### 3A: Deck Gun System
+
 - [ ] Line of sight calculator
 - [ ] Range calculator (1-3 hexes)
 - [ ] Targeting UI (click to select target ship)
@@ -107,6 +131,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** LOS edge cases, hit probability
 
 #### 3B: Torpedo System
+
 - [ ] Torpedo tube status tracking (5 tubes)
 - [ ] LOAD TORPEDOES action
 - [ ] Weapons officer KIA penalty (1 tube vs 2)
@@ -120,6 +145,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Hit calculations, multi-ship targeting
 
 #### 3C: Allied Ship Damage
+
 - [ ] Allied Ship Damage Chart implementation
 - [ ] Merchant ship damage (roll 1d6)
 - [ ] Corvette damage (roll 1d6, modified)
@@ -132,6 +158,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Damage calculations, ship removal
 
 #### 3D: U-Boat Damage System
+
 - [ ] U-Boat Damage Chart implementation
 - [ ] Critical Hit (roll 1d6 sub-table)
 - [ ] Hull Damage (cannot be repaired, limit 4)
@@ -147,6 +174,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** All damage types, medic saves, destruction
 
 #### 3E: Detection Level System
+
 - [ ] Detection level tracker (0-3)
 - [ ] Display detection level in UI
 - [ ] Medium depth check (-1 DL at turn start)
@@ -158,9 +186,11 @@ We need to add **43 specific components** organized into **5 development phases*
 ---
 
 ### Phase 4: NPC AI & Automation (Weeks 8-10) - Enemy Turns
+
 **Status:** Not Started | **Target Completion:** Week 10
 
 #### 4A: Phase 2 - Merchant Ships
+
 - [ ] Merchant ship movement AI
 - [ ] Follow dotted line path
 - [ ] Undamaged ships always move
@@ -173,6 +203,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Path following, damage penalties
 
 #### 4B: Phase 3 - Detection Phase
+
 - [ ] Find all escorts in LOS within 3 hexes
 - [ ] Roll 1d6 for each escort
 - [ ] Base detection by depth (Surfaced 1+, Periscope 2+, Medium 4+, Deep 5+)
@@ -183,6 +214,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Detection rolls, modifiers, LOS/range
 
 #### 4C: Phase 4 - Escorts (Core System)
+
 - [ ] Escort activation order (closest first)
 - [ ] Tie-breaking (player choice)
 - [ ] Dice calculation (Destroyer 3+DL, Corvette 2+DL)
@@ -192,6 +224,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Activation order, dice calculation
 
 #### 4D: Phase 4 - Escort Movement
+
 - [ ] MOVE action (one hex forward in facing direction)
 - [ ] Cannot enter land hexes
 - [ ] Cannot enter occupied hexes (other ships)
@@ -201,6 +234,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Movement validation, forced dive
 
 #### 4E: Phase 4 - Escort Turning
+
 - [ ] Anchor hex targeting (DL 0-1)
 - [ ] U-boat targeting (DL 2-3)
 - [ ] Calculate smallest angle turn direction
@@ -211,6 +245,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Direction calculations, special cases
 
 #### 4F: Phase 4 - Escort Attacks
+
 - [ ] DEPTH CHARGE action
 - [ ] Range check (0-1 hexes)
 - [ ] Depth check (not surfaced)
@@ -225,6 +260,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Attack conditions, damage application
 
 #### 4G: Phase 5 - B24 Aircraft
+
 - [ ] B24 placement (end of turn events)
 - [ ] MOVE 2 hexes in facing direction
 - [ ] Can enter any hex type (including land)
@@ -243,9 +279,11 @@ We need to add **43 specific components** organized into **5 development phases*
 ---
 
 ### Phase 5: Game Rules & Polish (Weeks 11-12) - Complete Game
+
 **Status:** Not Started | **Target Completion:** Week 12
 
 #### 5A: Phase 6 - End Turn Events
+
 - [ ] Roll 2d6, add together
 - [ ] Event table per mission
 - [ ] Place B24 (DL 2-3, trace longest hex line)
@@ -258,6 +296,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Each event type, conditions
 
 #### 5B: Advanced Mechanics
+
 - [ ] Forced dive implementation
 - [ ] -2 AP penalty next turn
 - [ ] Forced dive in shallow water = destruction
@@ -269,6 +308,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** Edge cases, destruction scenarios
 
 #### 5C: Victory & Defeat
+
 - [ ] Mission objectives tracker
 - [ ] Victory condition checking (each phase)
 - [ ] Defeat conditions (U-boat destroyed)
@@ -281,6 +321,7 @@ We need to add **43 specific components** organized into **5 development phases*
 - [ ] **Tests:** All victory/defeat scenarios
 
 #### 5D: UI Polish & Features
+
 - [ ] Turn announcement display
 - [ ] Action feedback animations
 - [ ] Sound effects (optional)
@@ -295,7 +336,8 @@ We need to add **43 specific components** organized into **5 development phases*
 ## Code Architecture
 
 ### New Module Structure
-```
+
+``` text
 core/
 ├── actions.py              # Action system, ActionQueue
 ├── combat.py               # Combat calculations, damage
@@ -333,6 +375,7 @@ tests/
 ## Testing Strategy
 
 ### Unit Tests (Build alongside each feature)
+
 - [ ] Set up pytest framework
 - [ ] Models and coordinate tests
 - [ ] Hex grid geometry tests
@@ -343,6 +386,7 @@ tests/
 - [ ] Event trigger tests
 
 ### Integration Tests
+
 - [ ] Complete turn sequences
 - [ ] Multi-turn scenarios
 - [ ] Combat interactions
@@ -350,6 +394,7 @@ tests/
 - [ ] Edge cases (forced dive, hull damage, etc.)
 
 ### Manual Testing
+
 - [ ] Full mission 1 playthrough
 - [ ] UI/UX validation
 - [ ] Performance testing
@@ -361,6 +406,7 @@ tests/
 ## Development Principles
 
 ### ✅ Do's
+
 - Test as you go (TDD preferred)
 - Keep modules small and focused
 - Use feature flags for new systems
@@ -370,6 +416,7 @@ tests/
 - Playtest early and often
 
 ### ❌ Don'ts
+
 - Don't break existing visualization code
 - Don't build everything then test
 - Don't skip validation logic
@@ -381,8 +428,8 @@ tests/
 
 ## Current Status
 
-**Phase:** Phase 1A Complete - Game Screens Implemented  
-**Next Task:** Phase 1B - Turn Structure (phase display overlay, phase transitions)  
+**Phase:** Phase 1D In Progress - Mission Metadata System  
+**Next Task:** Integrate mission rules loader with game engine  
 **Blockers:** None
 
 **Recent Completions:**
@@ -393,12 +440,16 @@ tests/
 - ✅ GamePhase enum added to models
 - ✅ ScreenManager for handling screen flow
 - ✅ Updated main.py to use menu system
+- ✅ Mission rules JSON schema designed (Phase 1D)
+- ✅ Mission 1 rules metadata created (Phase 1D)
+- ✅ Mission rules loader utility implemented (Phase 1D)
 
 ---
 
 ## Quick Reference: Game Rules Summary
 
 ### Turn Sequence (6 Phases)
+
 1. **U-Boat Phase** - Player rolls AP, performs actions
 2. **Merchant Ships Phase** - NPCs move along paths
 3. **Detection Phase** - Escorts attempt detection
@@ -407,6 +458,7 @@ tests/
 6. **End of Turn Events Phase** - Random events
 
 ### U-Boat Actions (7 types)
+
 - MOVE (1-3 AP based on depth)
 - TURN (1-3 AP based on depth)
 - CHANGE DEPTH (1-2 AP, once per turn)
@@ -416,12 +468,14 @@ tests/
 - FIRE TORPEDOES (2 AP)
 
 ### Detection Levels
+
 - **0 - Silent:** Enemy unaware
 - **1 - Aware:** Enemy knows you're present
 - **2 - Traced:** Enemy knows approximate location
 - **3 - Locked:** Enemy knows exact location
 
 ### Victory/Defeat
+
 - **Victory:** Complete mission objectives
 - **Defeat:** U-boat destroyed OR objective failure
 
@@ -430,18 +484,53 @@ tests/
 ## Notes & Decisions
 
 ### Design Decisions
+
 - Action preview system prevents "undo after commit" exploits
 - Manual phase advancement initially (can add auto-advance later)
 - Visual feedback for all NPC actions (transparency/fairness)
 - Save game after each committed turn
+- **Mission rules are structured data, not UI formatting** (Phase 1D)
+- Mission metadata drives display logic, not vice versa
+- Future UI can expand/collapse sections based on active phase
 
 ### Technical Decisions
+
 - Use pygame for all rendering (consistent with current code)
 - State machine pattern for game phases
 - Event system for game state changes
 - JSON for save files
+- **JSON schema for mission rules metadata** (Phase 1D)
+- Missions stored as declarative data artifacts
+- Rules loader provides query interface for game engine
+
+### Mission Metadata System (Phase 1D)
+
+**Core Principle:** "The mission sheet is not UI — it is a structured rules artifact."
+
+**What it provides:**
+- Phase-aware rule sections
+- Structured action costs by depth
+- Damage chart lookups
+- Detection threshold tables
+- Escort behavior definitions
+- Victory/defeat conditions
+- Reminder rules and constraints
+
+**Why it matters:**
+- Prevents hardcoding rules in UI code
+- Enables AI to query rules programmatically
+- Makes missions data-driven and reusable
+- Supports future phase-aware UI expansion
+- Eliminates ambiguity in rule interpretation
+- Version-controlled rule changes
+
+**Files:**
+- `missions/mission_schema.md` - Complete schema documentation
+- `missions/mission_1_rules.json` - Mission 1 metadata example
+- `missions/mission_rules_loader.py` - Python query interface
 
 ### Future Enhancements (Post-MVP)
+
 - Campaign mode (play all 10 missions)
 - Difficulty settings
 - Achievements/scoring system
@@ -449,6 +538,7 @@ tests/
 - Mission editor mode
 - Online leaderboards
 - Additional missions
+- Phase-aware rules panel UI (expand current phase only)
 
 ---
 
