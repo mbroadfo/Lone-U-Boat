@@ -8,7 +8,7 @@ import importlib
 from typing import Optional, List, Any, Dict
 
 from config import board_config as cfg
-from .models import HexCoord, Facing, Depth, UBoat, Ship
+from .models import HexCoord, Facing, Depth, UBoat, Ship, GamePhase
 from .hex_grid import HexGrid
 from .assets import AssetManager
 from .conditions import ConditionFactory
@@ -18,9 +18,18 @@ from .renderer import GameRenderer
 class Game:
     """Main game state and gameplay logic (editor features removed)."""
     
-    def __init__(self, mission_number: int = 1):
+    def __init__(
+        self,
+        mission_number: int = 1,
+        initial_depth: Optional[Depth] = None,
+        initial_facing: Optional[Facing] = None,
+        screen: Optional[pygame.Surface] = None
+    ):
         pygame.init()
-        self.screen = pygame.display.set_mode((cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT))
+        if screen is None:
+            self.screen = pygame.display.set_mode((cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT))
+        else:
+            self.screen = screen
         
         # Load mission configuration
         self.mission_number = mission_number
@@ -29,6 +38,14 @@ class Game:
         pygame.display.set_caption(f"Lone U-Boat - {self.mission_config.MISSION_INFO['name']}")
         self.clock = pygame.time.Clock()
         self.running = True
+        
+        # Game phase tracking
+        self.current_phase = GamePhase.UBOAT_PHASE
+        self.turn_number = 1
+        
+        # Next screen for transitions (back to menu, etc.)
+        self.next_screen: Optional[str] = None
+        self.next_screen_data: Dict[str, Any] = {}
         
         # Load mission map
         self.map_image = AssetManager.load_mission_map(self.mission_config.MISSION_INFO['map_image'])
@@ -52,9 +69,16 @@ class Game:
         
         # Game entities - load from mission config
         u_boat_start = self.mission_config.U_BOAT_START
+        
+        # Use provided initial settings or defaults from mission config
+        initial_position = HexCoord(*u_boat_start['position'])
+        initial_facing_value = initial_facing if initial_facing else Facing[u_boat_start['facing']]
+        initial_depth_value = initial_depth if initial_depth else Depth.SURFACED
+        
         self.u_boat = UBoat(
-            position=HexCoord(*u_boat_start['position']),
-            facing=Facing[u_boat_start['facing']]
+            position=initial_position,
+            facing=initial_facing_value,
+            depth=initial_depth_value
         )
         
         # Load ships from mission config

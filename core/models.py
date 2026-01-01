@@ -8,6 +8,20 @@ from typing import List
 from enum import Enum
 
 
+class GamePhase(Enum):
+    """Game turn phases."""
+    MENU = 0
+    BRIEFING = 1
+    SETUP = 2
+    UBOAT_PHASE = 3
+    MERCHANT_PHASE = 4
+    DETECTION_PHASE = 5
+    ESCORT_PHASE = 6
+    B24_PHASE = 7
+    END_TURN_PHASE = 8
+    GAME_OVER = 9
+
+
 class Terrain(Enum):
     """Hex terrain types."""
     LAND = 0

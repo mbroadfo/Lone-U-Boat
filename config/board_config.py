@@ -41,8 +41,19 @@ class UIConfig(TypedDict):
 # SCREEN CONFIGURATION
 # ====================
 
-SCREEN_WIDTH = 1400
+# Base window size (windowed mode)
+SCREEN_WIDTH = 1600
 SCREEN_HEIGHT = 900
+
+# Panel layout for unified game screen
+LEFT_PANEL_WIDTH = 300      # Mission briefing and rules
+RIGHT_PANEL_WIDTH = 350      # Event log/commentary
+BOTTOM_PANEL_HEIGHT = 150    # Player controls
+TOP_BAR_HEIGHT = 40         # Title and game info
+
+# Calculated game board area
+GAME_BOARD_WIDTH = SCREEN_WIDTH - LEFT_PANEL_WIDTH - RIGHT_PANEL_WIDTH
+GAME_BOARD_HEIGHT = SCREEN_HEIGHT - TOP_BAR_HEIGHT - BOTTOM_PANEL_HEIGHT
 
 
 # ====================
