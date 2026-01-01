@@ -81,50 +81,129 @@
     "results": [
       {
         "roll": 1,
-        "primary_action": "FIRE",
-        "alternate_action": "DEPTH_CHARGE",
-        "condition": "if DL 1–3",
+        "sequence": [
+          {
+            "action": "FIRE",
+            "condition": {
+              "check": "u_boat_surfaced_and_dl_1_to_3",
+              "logic": "u_boat.depth == SURFACED AND dl >= 1 AND dl <= 3"
+            }
+          },
+          {
+            "action": "DEPTH_CHARGE",
+            "condition": {
+              "check": "u_boat_submerged_and_dl_1_to_3",
+              "logic": "u_boat.depth != SURFACED AND dl >= 1 AND dl <= 3"
+            }
+          }
+        ],
         "description": "FIRE or DEPTH CHARGE if DL 1–3"
       },
       {
         "roll": 2,
-        "primary_action": "MOVE",
-        "then": "TURN",
-        "then_condition": "if blocked",
-        "then_action": "DEPTH_CHARGE",
-        "then_condition_2": "if DL 1–3",
+        "sequence": [
+          {
+            "action": "MOVE",
+            "always": true
+          },
+          {
+            "action": "TURN",
+            "condition": {
+              "check": "facing_blocked",
+              "logic": "hex_facing_is_blocked(land, ship, or off_map)"
+            }
+          },
+          {
+            "action": "DEPTH_CHARGE",
+            "condition": {
+              "check": "u_boat_in_range_and_dl_1_to_3",
+              "logic": "range_to_u_boat <= 1 AND u_boat.depth != SURFACED AND dl >= 1 AND dl <= 3"
+            }
+          }
+        ],
         "description": "MOVE — If blocked, TURN — If DL 1–3: DEPTH CHARGE"
       },
       {
         "roll": 3,
-        "primary_action": "MOVE",
-        "then": "TURN",
-        "then_action": "DEPTH_CHARGE",
-        "then_condition": "if DL 1–3",
+        "sequence": [
+          {
+            "action": "MOVE",
+            "always": true
+          },
+          {
+            "action": "TURN",
+            "always": true
+          },
+          {
+            "action": "DEPTH_CHARGE",
+            "condition": {
+              "check": "u_boat_in_range_and_dl_1_to_3",
+              "logic": "range_to_u_boat <= 1 AND u_boat.depth != SURFACED AND dl >= 1 AND dl <= 3"
+            }
+          }
+        ],
         "description": "MOVE — TURN — If DL 1–3: DEPTH CHARGE"
       },
       {
         "roll": 4,
-        "primary_action": "MOVE",
-        "then": "TURN",
-        "then_condition": "if blocked",
-        "then_action": "DEPTH_CHARGE",
-        "then_condition_2": "if DL 1–3",
+        "sequence": [
+          {
+            "action": "MOVE",
+            "always": true
+          },
+          {
+            "action": "TURN",
+            "condition": {
+              "check": "facing_blocked",
+              "logic": "hex_facing_is_blocked(land, ship, or off_map)"
+            }
+          },
+          {
+            "action": "DEPTH_CHARGE",
+            "condition": {
+              "check": "u_boat_in_range_and_dl_1_to_3",
+              "logic": "range_to_u_boat <= 1 AND u_boat.depth != SURFACED AND dl >= 1 AND dl <= 3"
+            }
+          }
+        ],
         "description": "MOVE — If blocked, TURN — If DL 1–3: DEPTH CHARGE"
       },
       {
         "roll": 5,
-        "primary_action": "MOVE",
-        "then": "DEPTH_CHARGE",
-        "then_condition": "if DL 1–3",
+        "sequence": [
+          {
+            "action": "MOVE",
+            "always": true
+          },
+          {
+            "action": "DEPTH_CHARGE",
+            "condition": {
+              "check": "u_boat_in_range_and_dl_1_to_3",
+              "logic": "range_to_u_boat <= 1 AND u_boat.depth != SURFACED AND dl >= 1 AND dl <= 3"
+            }
+          }
+        ],
         "description": "MOVE — If DL 1–3: DEPTH CHARGE"
       },
       {
         "roll": 6,
-        "primary_action": "MOVE",
-        "then": "TURN",
-        "then_action": "DEPTH_CHARGE",
-        "then_condition": "if DL 1–3",
+        "sequence": [
+          {
+            "action": "MOVE",
+            "always": true
+          },
+          {
+            "action": "TURN",
+            "always": true
+          },
+          {
+            "action": "DEPTH_CHARGE",
+            "condition": {
+              "check": "u_boat_in_range_and_dl_1_to_3",
+              "logic": "range_to_u_boat <= 1 AND u_boat.depth != SURFACED AND dl >= 1 AND dl <= 3"
+            }
+          }
+        ],
         "description": "MOVE — TURN — If DL 1–3: DEPTH CHARGE"
       }
     ]
@@ -147,29 +226,55 @@
       {
         "action": "TURN",
         "amount": "1 hex edge (60°) left or right",
-        "direction_logic": {
+        "target_selection": {
           "dl_0_1": {
-            "target": "Anchor hex",
-            "method": "Turn towards smallest angle"
+            "target": "anchor_hex",
+            "method": "turn_toward_smallest_angle"
           },
           "dl_2_3": {
-            "target": "U-Boat hex",
-            "method": "Turn towards smallest angle"
-          },
-          "facing_target": {
-            "condition": "Escort facing directly at target",
-            "action": "Only turn if blocked, turn randomly"
-          },
-          "facing_away": {
-            "condition": "Escort facing directly away from target",
-            "action": "Turn randomly (regardless of blocked)"
-          },
-          "same_hex": {
-            "condition": "Escort in same hex as U-Boat",
-            "action": "Only turn if blocked, turn randomly"
+            "target": "u_boat_hex",
+            "method": "turn_toward_smallest_angle"
           }
         },
-        "notes": "Does not matter if hex turned to face is itself blocked"
+        "orientation_rules": {
+          "facing_target": {
+            "detection": {
+              "logic": "escort_hex_line == target_hex_line AND facing_direction == toward_target"
+            },
+            "behavior": {
+              "turn_if": "facing_hex_blocked",
+              "direction": "random"
+            }
+          },
+          "facing_away": {
+            "detection": {
+              "logic": "escort_hex_line == target_hex_line AND facing_direction == away_from_target"
+            },
+            "behavior": {
+              "turn_if": "always",
+              "direction": "random"
+            }
+          },
+          "facing_sideways": {
+            "detection": {
+              "logic": "NOT on_same_hex_line_as_target"
+            },
+            "behavior": {
+              "turn_if": "always",
+              "direction": "toward_target_smallest_angle"
+            }
+          },
+          "same_hex_as_u_boat": {
+            "detection": {
+              "logic": "escort_hex == u_boat_hex"
+            },
+            "behavior": {
+              "turn_if": "facing_hex_blocked",
+              "direction": "random"
+            }
+          }
+        },
+        "notes": "Target hex turned to face may itself be blocked - does not prevent turn"
       },
       {
         "action": "DEPTH_CHARGE",
