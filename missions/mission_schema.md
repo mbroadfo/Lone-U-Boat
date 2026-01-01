@@ -30,21 +30,25 @@ This schema defines how mission rules are represented as structured data, separa
 Missions use a layered inheritance system to avoid duplicating ~1000 lines of game rules:
 
 ### Layer 1: Core System Rules (`core_system_rules.json`)
+
 - **Override Policy:** NEVER - These are immutable game mechanics
 - **Contents:** Damage charts, forced dive rules, collision mechanics, repair restrictions
 - **Rationale:** Universal rules that never change across missions
 
 ### Layer 2: U-Boat Ruleset (`u_boat_ruleset_default.json`)
+
 - **Override Policy:** RARELY - Only for special missions with modified U-Boat
 - **Contents:** AP calculation, action costs by depth, torpedo/gun specs, crew effects
 - **Rationale:** Standard Type VIIC capabilities
 
 ### Layer 3: Escort AI Baseline (`escort_ai_baseline.json`)
+
 - **Override Policy:** RARELY - Only for missions with different AI behavior
 - **Contents:** Detection system, destroyer/corvette action tables, merchant movement defaults
 - **Rationale:** Standard escort behavior patterns
 
 ### Layer 4: Mission-Specific Rules (`mission_X_rules.json`)
+
 - **Override Policy:** ALWAYS - This is where mission uniqueness lives
 - **Contents:** Victory conditions, mission-specific events, overrides to baseline rules
 - **Rationale:** What makes this mission different
@@ -968,7 +972,8 @@ The loader automatically validates:
 4. ✓ All 3 baseline files exist and are readable
 
 If validation fails, you'll get a clear error message:
-```
+
+``` text
 ValueError: Mission attempts to override non-overrideable section: u_boat_damage_chart.
 Core system rules from core_system_rules.json cannot be overridden.
 ```
