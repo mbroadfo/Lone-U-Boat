@@ -409,19 +409,23 @@ Basic mission identification and objectives.
   "base_detection_thresholds": [
     {
       "depth": "SURFACED",
-      "roll_required": "1+"
+      "roll_required": 1,
+      "description": "Almost always detected"
     },
     {
       "depth": "PERISCOPE",
-      "roll_required": "2+"
+      "roll_required": 2,
+      "description": "Easily detected"
     },
     {
       "depth": "MEDIUM",
-      "roll_required": "4+"
+      "roll_required": 4,
+      "description": "Harder to detect"
     },
     {
       "depth": "DEEP",
-      "roll_required": "5+"
+      "roll_required": 5,
+      "description": "Very hard to detect"
     }
   ],
   "modifiers": [

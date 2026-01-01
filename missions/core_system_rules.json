@@ -249,6 +249,10 @@
     "type": "core_mechanic",
     "label": "Forced Dive",
     "trigger": "Ship enters same hex as U-Boat when U-Boat is Surfaced or at Periscope depth",
+    "movement_rules": {
+      "u_boat_entering_ship_hex": "U-Boat can only enter ship hex at Medium or Deep depth",
+      "ship_entering_u_boat_hex": "If ship enters U-Boat hex when U-Boat is Surfaced/Periscope, triggers forced dive"
+    },
     "effects": [
       {
         "effect": "Immediately set U-Boat depth to MEDIUM",
@@ -267,18 +271,22 @@
       "condition": "Forced dive occurs in shallow water hex",
       "effect": "U-Boat destroyed (cannot dive to Medium in shallow water)",
       "severity": "critical"
+    },
+    "hull_damage_exception": {
+      "condition": "Forced dive occurs when U-Boat has 2+ hull damage",
+      "effect": "U-Boat destroyed (cannot dive to Medium with hull damage restrictions)",
+      "severity": "critical",
+      "note": "Hull damage level 2 restricts max depth to Periscope"
     }
   },
   
-  "collision_mechanics": {
-    "id": "collision",
+  "hex_occupancy_rules": {
+    "id": "hex_occupancy",
     "type": "core_mechanic",
-    "label": "Collision Rules",
-    "hex_occupancy": {
-      "ships": "Only one ship per hex (ships cannot stack)",
-      "u_boat_and_ship": "U-Boat can share hex with ship ONLY at Medium or Deep depth",
-      "aircraft": "Any number of aircraft can share hex with ships and/or U-Boat"
-    },
+    "label": "Hex Occupancy Rules",
+    "ships": "Only one ship per hex (ships cannot stack)",
+    "u_boat_and_ship": "U-Boat can share hex with ship ONLY at Medium or Deep depth",
+    "aircraft": "Any number of aircraft can share hex with ships and/or U-Boat",
     "movement_restrictions": {
       "ships_blocked_by": ["Land hexes", "Hexes with other ships"],
       "u_boat_blocked_by": [
