@@ -555,11 +555,38 @@ if __name__ == "__main__":
         
         # Check action costs (from u_boat_ruleset_default)
         print("=== Action Costs (from u_boat_ruleset_default) ===")
-        print("MOVE action costs:")
-        for depth in ["SURFACED", "PERISCOPE", "MEDIUM", "DEEP"]:
-            cost = rules.get_action_cost("MOVE", depth)
-            print(f"  {depth}: {cost} AP")
-        print()
+        for action_name in ["MOVE", "TURN", "CHANGE DEPTH", "REPAIR", "FIRE DECK GUN", "LOAD TORPS", "FIRE TORPS"]:
+            print(f"{action_name}:")
+            
+            # Special handling for REPAIR to show engineer requirements
+            if action_name == "REPAIR":
+                action_section = None
+                for section in rules.sections:
+                    if section.get("id") == "u_boat_action_costs":
+                        for action in section.get("actions", []):
+                            if action.get("action") == action_name:
+                                action_section = action
+                                break
+                        break
+                
+                for depth in ["SURFACED", "PERISCOPE", "MEDIUM", "DEEP"]:
+                    cost = rules.get_action_cost(action_name, depth)
+                    if cost is not None:
+                        req = action_section.get("requirements", {}).get(depth, "") if action_section else ""
+                        if req and "Engineer must be alive" in req:
+                            print(f"  {depth}: {cost} AP (Eng)")
+                        else:
+                            print(f"  {depth}: {cost} AP")
+                    else:
+                        print(f"  {depth}: --")
+            else:
+                for depth in ["SURFACED", "PERISCOPE", "MEDIUM", "DEEP"]:
+                    cost = rules.get_action_cost(action_name, depth)
+                    if cost is not None:
+                        print(f"  {depth}: {cost} AP")
+                    else:
+                        print(f"  {depth}: --")
+            print()
         
         # Check ship damage (from core_system_rules)
         print("=== Ship Damage (from core_system_rules) ===")

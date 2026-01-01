@@ -91,7 +91,7 @@
         "action": "TURN",
         "costs": {
           "SURFACED": 1,
-          "PERISCOPE": 2,
+          "PERISCOPE": 1,
           "MEDIUM": 2,
           "DEEP": 3
         },
@@ -114,7 +114,7 @@
         ]
       },
       {
-        "action": "REPAIR (Eng)",
+        "action": "REPAIR",
         "costs": {
           "SURFACED": 2,
           "PERISCOPE": 4,
@@ -122,10 +122,17 @@
           "DEEP": 4
         },
         "effect": "Remove 1 damage marker OR fix up to 2 torpedo tubes",
+        "requirements": {
+          "SURFACED": "No special requirement",
+          "PERISCOPE": "Engineer must be alive",
+          "MEDIUM": "Engineer must be alive",
+          "DEEP": "Engineer must be alive"
+        },
         "restrictions": [
           "Hull damage cannot be repaired",
           "Flak and Deck Gun repairs only when Surfaced",
-          "Only Surface repairs if Engineer is KIA"
+          "Engine and Torpedo Tube repairs: 2 AP at Surface (always), 4 AP submerged (only if Engineer alive)",
+          "If Engineer is KIA: Only Surface repairs are possible"
         ]
       },
       {
