@@ -75,9 +75,9 @@
     "id": "destroyer_actions",
     "phase": 4,
     "type": "escort_action_table",
-    "label": "Destroyer Actions",
-    "ship_type": "destroyer",
-    "dice": "Variable (3 + DL, or 3 if damaged)",
+    "label": "Escort Actions (applies to both Destroyers and Corvettes)",
+    "ship_type": "all_escorts",
+    "dice": "Destroyer: 3 + DL (3 if damaged), Corvette: 2 + DL (2 if damaged)",
     "results": [
       {
         "roll": 1,
@@ -126,61 +126,6 @@
         "then_action": "DEPTH_CHARGE",
         "then_condition": "if DL 1–3",
         "description": "MOVE — TURN — If DL 1–3: DEPTH CHARGE"
-      }
-    ]
-  },
-  
-  "corvette_action_table": {
-    "id": "corvette_actions",
-    "phase": 4,
-    "type": "escort_action_table",
-    "label": "Corvette Actions",
-    "ship_type": "corvette",
-    "dice": "Variable (2 + DL, or 2 if damaged)",
-    "results": [
-      {
-        "roll": 1,
-        "primary_action": "FIRE",
-        "alternate_action": "DEPTH_CHARGE",
-        "condition": "if DL 1–3",
-        "description": "FIRE or DEPTH CHARGE if DL 1–3"
-      },
-      {
-        "roll": 2,
-        "primary_action": "MOVE",
-        "then": "TURN",
-        "then_condition": "if blocked",
-        "then_action": "DEPTH_CHARGE",
-        "then_condition_2": "if DL 1–3",
-        "description": "MOVE — If blocked, TURN — If DL 1–3: DEPTH CHARGE"
-      },
-      {
-        "roll": 3,
-        "primary_action": "MOVE",
-        "then": "TURN",
-        "then_action": "FIRE",
-        "then_condition": "if DL 1–3",
-        "description": "MOVE — TURN — If DL 1–3: FIRE"
-      },
-      {
-        "roll": 4,
-        "primary_action": "MOVE",
-        "then": "TURN",
-        "description": "MOVE — TURN"
-      },
-      {
-        "roll": 5,
-        "primary_action": "MOVE",
-        "then": "DEPTH_CHARGE",
-        "then_condition": "if DL 1–3",
-        "description": "MOVE — If DL 1–3: DEPTH CHARGE"
-      },
-      {
-        "roll": 6,
-        "primary_action": "MOVE",
-        "then": "DEPTH_CHARGE",
-        "then_condition": "if DL 1–3",
-        "description": "MOVE — If DL 1–3: DEPTH CHARGE"
       }
     ]
   },

@@ -589,26 +589,91 @@ if __name__ == "__main__":
             print()
         
         # Check ship damage (from core_system_rules)
-        print("=== Ship Damage (from core_system_rules) ===")
-        print("Merchant ship damage (roll 4):")
-        outcome = rules.get_ship_damage_outcome("merchant", 4)
-        if outcome:
-            print(f"  Result: {outcome['result']}")
-            print(f"  Description: {outcome['description']}")
+        print("=== Allied Ship Damage Chart (from core_system_rules) ===")
+        for ship_type in ["merchant", "corvette", "destroyer"]:
+            ship_name = ship_type.capitalize()
+            print(f"{ship_name}:")
+            for roll in range(1, 7):
+                outcome = rules.get_ship_damage_outcome(ship_type, roll)
+                if outcome:
+                    print(f"  {roll}: {outcome['result']} — {outcome['description']}")
+            print()
+        
+        # Check detection system (from escort_ai_baseline)
+        print("=== Detection System (from escort_ai_baseline) ===")
+        detection = rules.get_section_by_id("detection_rules")
+        if detection:
+            print(f"Phase: {detection.get('phase')}")
+            print(f"Range: {detection.get('range')} hexes")
+            print(f"LOS Required: {detection.get('requires_los')}")
+            print("\nBase Detection Thresholds:")
+            for depth in ["SURFACED", "PERISCOPE", "MEDIUM", "DEEP"]:
+                threshold = rules.get_detection_threshold(depth)
+                print(f"  {depth}: {threshold}+ on d6")
+            print("\nModifiers:")
+            mods = detection.get('modifiers', [])
+            for mod in mods:
+                print(f"  {mod.get('condition')}: {mod.get('effect'):+d} ({mod.get('description')})")
         print()
         
-        # Check detection thresholds (from escort_ai_baseline)
-        print("=== Detection Thresholds (from escort_ai_baseline) ===")
-        for depth in ["SURFACED", "PERISCOPE", "MEDIUM", "DEEP"]:
-            threshold = rules.get_detection_threshold(depth)
-            print(f"  {depth}: {threshold}+ on d6")
+        # Check escort activation (from escort_ai_baseline)
+        print("=== Escort Activation (from escort_ai_baseline) ===")
+        activation = rules.get_section_by_id("escort_activation_order")
+        if activation:
+            print(f"Rule: {activation.get('rule')}")
+            print(f"Tie-breaking: {activation.get('tie_breaking')}")
+            print("Dice Calculation:")
+            dice_calc = activation.get('dice_calculation', {})
+            for ship_type, calc in dice_calc.items():
+                formula = calc.get('formula', '')
+                print(f"  {ship_type.capitalize()}: {formula}")
+            print(f"Resolution: {activation.get('resolution')}")
         print()
         
-        # Check Phase 1 sections
-        print("=== Phase 1 Sections ===")
-        phase_1_sections = rules.get_sections_by_phase(1)
-        for section in phase_1_sections:
-            print(f"  - {section['label']} ({section['type']})")
+        # Check escort action table (from escort_ai_baseline)
+        print("=== Escort Action Table (from escort_ai_baseline) ===")
+        escort_actions = rules.get_section_by_id("destroyer_actions")
+        if escort_actions:
+            print(f"Label: {escort_actions.get('label')}")
+            print(f"Applies to: {escort_actions.get('ship_type').replace('_', ' ').title()}")
+            print(f"Dice: {escort_actions.get('dice')}")
+            print("\nAction Results:")
+            for result in escort_actions.get('results', []):
+                print(f"  {result.get('roll')}: {result.get('description')}")
+        print()
+        
+        # Check merchant movement (from escort_ai_baseline)
+        print("=== Merchant Ship Movement (from escort_ai_baseline) ===")
+        merchant = rules.get_section_by_id("merchant_movement_default")
+        if merchant:
+            for rule in merchant.get('rules', []):
+                condition = rule.get('condition', '')
+                action = rule.get('action', '')
+                if 'roll_required' in rule:
+                    roll = rule.get('roll_required')
+                    print(f"{condition}: Roll {roll} to {action}")
+                elif 'distance' in rule:
+                    distance = rule.get('distance', '')
+                    path = rule.get('path', '')
+                    print(f"{condition}: {action} {distance} hex ({path})")
+                else:
+                    print(f"{condition}: {action}")
+        print()
+        
+        # Check B24 aircraft (from escort_ai_baseline)
+        print("=== B24 Aircraft (from escort_ai_baseline) ===")
+        b24 = rules.get_section_by_id("b24_default")
+        if b24:
+            print(f"Phase: {b24.get('phase')}")
+            print(f"Max on map: {b24.get('max_on_map')}")
+            move = b24.get('move', {})
+            print(f"Movement: {move.get('distance')} hexes {move.get('direction')}")
+            turn = b24.get('turn', {})
+            print(f"Turn: {turn.get('condition')}")
+            attack = b24.get('attack', {})
+            print(f"Attack requirements: {', '.join(attack.get('requirements', []))}")
+            flak = attack.get('flak_defense', {})
+            print(f"Flak defense: {flak.get('roll')} {flak.get('success_base')} ({flak.get('success_with_lookout')})")
         print()
         
         # Check victory conditions (mission-specific)
