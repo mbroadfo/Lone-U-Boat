@@ -58,7 +58,8 @@
             "roll_max": 4,
             "result": "TORPEDO_TUBES_3_4",
             "description": "Torpedo Tubes 3-4 Damaged",
-            "effect": "Roll 3d6: tubes matching 1-5 are damaged (ignore 6s and duplicates)"
+            "effect": "Roll 3d6: tubes matching 1-5 are damaged (ignore 6s, duplicates, and already damaged tubes). Loaded tubes become unloaded.",
+            "note": "Lucky escape if all matching tubes already damaged"
           },
           {
             "roll_min": 5,
@@ -85,28 +86,32 @@
             "roll_max": 2,
             "result": "FLAK_GUN_DAMAGE",
             "description": "Flak Gun Damaged",
-            "effect": "Mark flak gun as damaged. Cannot use until repaired (Surfaced only)"
+            "effect": "Mark flak gun as damaged. Cannot use until repaired (Surfaced only)",
+            "note": "No effect if already damaged (lucky escape)"
           },
           {
             "roll_min": 3,
             "roll_max": 3,
             "result": "TORPEDO_TUBES",
             "description": "Torpedo Tubes Damaged",
-            "effect": "Roll 2d6: tubes matching 1-5 are damaged (ignore 6s and duplicates). Loaded tubes become unloaded."
+            "effect": "Roll 2d6: tubes matching 1-5 are damaged (ignore 6s, duplicates, and already damaged tubes). Loaded tubes become unloaded.",
+            "note": "Lucky escape if all matching tubes already damaged"
           },
           {
             "roll_min": 4,
             "roll_max": 5,
             "result": "ENGINE_DAMAGE",
             "description": "Engine Damaged",
-            "effect": "Mark engine as damaged. Roll 2d6 for AP instead of 3d6. Easier to detect (detection -1)"
+            "effect": "Mark engine as damaged. Roll 2d6 for AP instead of 3d6. Easier to detect (detection -1)",
+            "note": "No effect if already damaged (lucky escape)"
           },
           {
             "roll_min": 6,
             "roll_max": 6,
             "result": "DECK_GUN_DAMAGE",
             "description": "Deck Gun Damaged",
-            "effect": "Mark deck gun as damaged. Cannot use until repaired (Surfaced only)"
+            "effect": "Mark deck gun as damaged. Cannot use until repaired (Surfaced only)",
+            "note": "No effect if already damaged (lucky escape)"
           }
         ]
       }
@@ -124,6 +129,33 @@
         "No effect if crew member already KIA",
         "Medic cannot save himself",
         "If Medic dead, all hits are automatic KIA"
+      ]
+    },
+    "depth_charge_rules": {
+      "id": "depth_charge_mechanics",
+      "type": "core_mechanic",
+      "label": "Depth Charge Attack Rules",
+      "requirements": [
+        "U-Boat must not be Surfaced (must be at Periscope, Medium, or Deep)",
+        "Range must be 0-1 hexes (same hex or adjacent)"
+      ],
+      "attack_mechanics": {
+        "corvette": {
+          "dice": "1d6",
+          "table": "U-Boat Damage Chart",
+          "description": "Roll 1d6 on U-Boat Damage Chart"
+        },
+        "destroyer": {
+          "dice": "2d6",
+          "take": "lowest",
+          "table": "U-Boat Damage Chart",
+          "description": "Roll 2d6, take lowest result on U-Boat Damage Chart",
+          "advantage": "More likely to roll Critical Hit (1) or Hull Damage (2-3)"
+        }
+      },
+      "notes": [
+        "Destroyer attacks are more devastating due to taking lowest of 2d6",
+        "Cannot depth charge U-Boat when Surfaced (use FIRE action instead)"
       ]
     },
     "hull_damage_system": {

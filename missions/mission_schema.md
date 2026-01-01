@@ -32,7 +32,7 @@ Missions use a layered inheritance system to avoid duplicating ~1000 lines of ga
 ### Layer 1: Core System Rules (`core_system_rules.json`)
 
 - **Override Policy:** NEVER - These are immutable game mechanics
-- **Contents:** Damage charts, forced dive rules, collision mechanics, repair restrictions
+- **Contents:** Damage charts, forced dive rules, hex occupancy rules, repair restrictions
 - **Rationale:** Universal rules that never change across missions
 
 ### Layer 2: U-Boat Ruleset (`u_boat_ruleset_default.json`)
@@ -778,10 +778,11 @@ Basic mission identification and objectives.
       "applies_to": "MOVE action"
     },
     {
-      "category": "collision",
-      "title": "Collision with Ships",
-      "description": "If U-Boat enters a ship's hex at Surfaced or Periscope depth, collision occurs (see collision rules)",
-      "severity": "critical"
+      "category": "forced_dive_ship_movement",
+      "title": "Ship Movement into U-Boat Hex",
+      "description": "If a ship moves into U-Boat hex when U-Boat is Surfaced or at Periscope depth, U-Boat forced to dive to Medium (see forced dive rules)",
+      "severity": "critical",
+      "note": "U-Boat destroyed if cannot dive to Medium (shallow water or hull damage 2+)"
     },
     {
       "category": "depth_change_limit",
