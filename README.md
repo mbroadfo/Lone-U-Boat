@@ -1,17 +1,20 @@
 # Lone U-Boat
 
-A digital implementation of the solitaire board game "Lone U-Boat" where you command a German submarine during World War II, navigating through dangerous waters while evading enemy ships and completing mission objectives.
+A digital implementation of the solitaire board game "Lone U-Boat" where you
+command a German submarine during World War II, navigating through dangerous
+waters while evading enemy ships and completing mission objectives.
 
 ## Overview
 
-Lone U-Boat is a hex-based tactical game where you control a U-boat navigating through mission-specific maps. The game features:
+Lone U-Boat is a hex-based tactical game where you control a U-boat navigating
+through mission-specific maps. The game features:
 
 - **Hex-based movement system** with axial coordinates
-- **Depth management** (Surfaced, Periscope, Shallow, Deep)
+- **Depth management** (Surfaced, Periscope, Medium, Deep)
 - **Facing and direction** tracking for realistic submarine navigation
 - **Detection mechanics** based on depth and enemy proximity
 - **Mission-based gameplay** with unique objectives and map layouts
-- **Status tracking** for oxygen, battery, torpedoes, and damage
+- **Status tracking** for torpedoes, hull damage, crew, and detection
 
 ## Installation
 
@@ -24,14 +27,19 @@ Lone U-Boat is a hex-based tactical game where you control a U-boat navigating t
 
 1. Clone or download this repository
 2. Create a virtual environment (recommended):
+
    ```powershell
    python -m venv .venv
    ```
+
 3. Activate the virtual environment:
+
    ```powershell
    .\.venv\Scripts\Activate.ps1
    ```
+
 4. Install dependencies:
+
    ```powershell
    pip install pygame
    ```
@@ -41,11 +49,13 @@ Lone U-Boat is a hex-based tactical game where you control a U-boat navigating t
 ### Play Mode
 
 To start the game:
+
 ```powershell
 python main.py
 ```
 
 To play a specific mission:
+
 ```powershell
 python main.py --mission 1
 ```
@@ -59,14 +69,17 @@ python main.py --mission 1
 
 ### Editor Mode
 
-The editor allows you to view the game board, test positioning, and (with the `--edit` flag) modify the map configuration.
+The editor allows you to view the game board, test positioning, and
+(with the `--edit` flag) modify the map configuration.
 
 **View-Only Mode** (safe):
+
 ```powershell
 python editor.py
 ```
 
 **Edit Mode** (for development/debugging only):
+
 ```powershell
 python editor.py --edit
 ```
@@ -96,7 +109,7 @@ python editor.py --edit
 
 ## Project Structure
 
-```
+```text
 LoneUBoat/
 ├── main.py                 # Game entry point (22 lines)
 ├── editor.py              # Board editor and testing tool (360 lines)
@@ -140,8 +153,8 @@ The codebase follows a clean modular architecture:
 - **`core/models.py`**: Pure data classes
   - `HexCoord`: Axial coordinate system (q, r)
   - `Facing`: Six directions (N, NE, SE, S, SW, NW)
-  - `Depth`: Four depth levels (Surfaced, Periscope, Shallow, Deep)
-  - `UBoat`: Submarine state (position, facing, depth, oxygen, battery, torpedoes)
+  - `Depth`: Four depth levels (Surfaced, Periscope, Medium, Deep)
+  - `UBoat`: Submarine state (position, facing, depth, crew, torpedoes)
   - `Ship`: Enemy ship state (position, facing, type)
 
 - **`core/hex_grid.py`**: Hex geometry calculations
@@ -189,12 +202,15 @@ The codebase follows a clean modular architecture:
 To create a new mission:
 
 1. **Extract the map image** from the game PDF:
+
    ```powershell
    python extract_maps.py
    ```
+
    Place the extracted image in `assets/maps/`
 
 2. **Create mission configuration** file:
+
    ```python
    # missions/mission_2_config.py
    
@@ -236,15 +252,18 @@ To create a new mission:
    ```
 
 3. **Use the editor** to align the hex grid:
+
    ```powershell
    python editor.py --mission 2 --edit
    ```
+
    - Drag the grid to align with the map
    - Use arrow keys for fine adjustment
    - Press **O** to print the final offset values
    - Update `board_config.py` with mission-specific offset if needed
 
 4. **Test in game mode**:
+
    ```powershell
    python main.py --mission 2
    ```
@@ -300,27 +319,30 @@ Hex directions are flat-top oriented:
 
 1. **Surfaced**: Maximum speed, highly visible, vulnerable
 2. **Periscope**: Balanced visibility and stealth
-3. **Shallow**: Reduced visibility, slower
-4. **Deep**: Safest, slowest, oxygen/battery drain
+3. **Medium**: Reduced visibility, slower
+4. **Deep**: Safest, slowest, limited operations
 
 ### Status Tracking
 
 The game tracks multiple status indicators:
-- **Oxygen levels**: 3 markers (depletes when submerged)
-- **Battery charge**: 4 markers (depletes with movement)
-- **Torpedo tubes**: 5 tubes (bow: 4, stern: 1)
-- **Damage**: 3 hit points
-- **Detection level**: 0-3 (increases based on enemy proximity)
+- **Torpedo tubes**: 5 tubes (4 bow, 1 stern)
+- **Hull damage**: 3 hit points
+- **Detection level**: 0-3 (Silent, Aware, Traced, Locked)
+- **Crew status**: Captain, Engineer, Sonar Operator, Weapons Officer,
+  Lookout, Medic
+- **Action points**: Available actions per turn
 
 ## Contributing
 
-This is a personal project implementing the Lone U-Boat board game. The game rules and original design belong to the original publisher.
+This is a personal project implementing the Lone U-Boat board game.
+The game rules and original design belong to the original publisher.
 
 ## Technical Notes
 
 ### Type Hints
 
 The codebase uses Python type hints extensively:
+
 ```python
 def hex_to_pixel(hex_coord: HexCoord) -> Tuple[float, float]:
     """Convert hex coordinate to pixel position."""
@@ -328,6 +350,7 @@ def hex_to_pixel(hex_coord: HexCoord) -> Tuple[float, float]:
 ```
 
 Type checking can be performed with:
+
 ```powershell
 pip install mypy
 mypy .
@@ -356,9 +379,10 @@ Enable debug mode in the editor to see:
 
 ## License
 
-This is a personal implementation of the board game for educational purposes. All game rules and artwork belong to the original publisher.
+This is a personal implementation of the board game for educational purposes.
+All game rules and artwork belong to the original publisher.
 
 ---
 
-**Last Updated**: December 31, 2025  
+**Last Updated**: January 1, 2026  
 **Version**: 0.1.0 (Refactored Architecture)
