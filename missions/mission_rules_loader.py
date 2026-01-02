@@ -12,7 +12,7 @@ Layered Architecture:
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 
 
 class MissionRules:
@@ -400,6 +400,405 @@ class MissionRules:
                 return rule
         
         return None
+    
+    # ==================== PHASE CONTENT HELPERS (FOR UI) ====================
+    
+    def get_phase_content(self, phase: int) -> Dict[str, Any]:
+        """
+        Get organized content for a specific phase for UI display.
+        Returns structured content ready for rendering in Mission Rules panel.
+        
+        Args:
+            phase: Phase number (1-6)
+        
+        Returns:
+            Dictionary with phase_name, phase_number, and content sections
+        """
+        phase_info: Dict[int, Dict[str, Any]] = {
+            1: {
+                "name": "U-Boat Phase",
+                "sections": self._get_phase_1_content()
+            },
+            2: {
+                "name": "Merchant Phase",
+                "sections": self._get_phase_2_content()
+            },
+            3: {
+                "name": "Detection Phase",
+                "sections": self._get_phase_3_content()
+            },
+            4: {
+                "name": "Escort Phase",
+                "sections": self._get_phase_4_content()
+            },
+            5: {
+                "name": "Allied B24 Phase",
+                "sections": self._get_phase_5_content()
+            },
+            6: {
+                "name": "End of Turn Events",
+                "sections": self._get_phase_6_content()
+            }
+        }
+        
+        info = phase_info.get(phase, {"name": "Unknown", "sections": []})
+        return {
+            "phase_number": phase,
+            "phase_name": info["name"],  # type: ignore[typeddict-item]
+            "sections": info["sections"]  # type: ignore[typeddict-item]
+        }
+    
+    def _get_phase_1_content(self) -> List[Dict[str, Any]]:
+        """Get Phase 1 (U-Boat) content sections."""
+        sections: List[Dict[str, Any]] = []
+        
+        # AP Generation
+        ap_rules = self.get_section_by_id("u_boat_ap_rules")
+        if ap_rules:
+            lines: List[str] = []
+            dice_info = ap_rules.get("dice", {})
+            lines.append(f"Roll: {dice_info.get('normal', '3d6')} (take highest)")
+            lines.append(f"Damaged: {dice_info.get('damaged', '2d6')}")
+            
+            for mod in ap_rules.get("modifiers", []):
+                condition = mod.get("condition", "").replace("_", " ").title()
+                effect = mod.get("effect", "")
+                lines.append(f"{condition}: {effect}")
+            
+            sections.append({
+                "title": "Action Points",
+                "type": "bullets",
+                "content": lines
+            })
+        
+        # Depth Modifiers
+        depth_mods = self.get_section_by_id("u_boat_depth_modifiers")
+        if depth_mods:
+            lines: List[str] = []
+            for mod in depth_mods.get("modifiers", []):
+                depth = mod["depth"]
+                dl_mod = mod["dl_modifier"]
+                if dl_mod < 0:
+                    lines.append(f"{depth}: DL {dl_mod}")
+                else:
+                    lines.append(f"{depth}: No change")
+            sections.append({
+                "title": "DL Reduction by Depth",
+                "type": "bullets",
+                "content": lines
+            })
+        
+        # Action Costs Table
+        action_costs = self.get_section_by_id("u_boat_action_costs")
+        if action_costs:
+            table_rows: List[Dict[str, Any]] = []
+            depths = ["SURFACED", "PERISCOPE", "MEDIUM", "DEEP"]
+            
+            # Shortened depth names for display
+            depth_display = {"SURFACED": "Surf", "PERISCOPE": "Peri", "MEDIUM": "Med", "DEEP": "Deep"}
+            
+            for action_data in action_costs.get("actions", [])[:7]:  # First 7 actions
+                action_name = action_data["action"]
+                costs = action_data["costs"]
+                
+                # Shorten action names
+                action_short = action_name.replace("CHANGE DEPTH", "CHG DEPTH").replace("FIRE ", "").replace(" ", " ")
+                
+                row_costs: List[str] = []
+                for d in depths:
+                    cost = costs.get(d)
+                    row_costs.append(str(cost) if cost is not None else "--")
+                
+                table_rows.append({
+                    "action": action_short,
+                    "costs": row_costs
+                })
+            
+            sections.append({
+                "title": "Action Costs (AP)",
+                "type": "table",
+                "headers": [depth_display[d] for d in depths],
+                "rows": table_rows
+            })
+        
+        # Key reminders
+        sections.append({
+            "title": "Reminders",
+            "type": "bullets",
+            "content": [
+                "Depth change: once per turn, 1 level only",
+                "Cannot enter land or shallow (unless surf/peri)",
+                "Repair: 2 AP surf, 4 AP submerged (needs Eng)"
+            ]
+        })
+        
+        return sections
+    
+    def _get_phase_2_content(self) -> List[Dict[str, Any]]:
+        """Get Phase 2 (Merchant/Allied Ship) content sections."""
+        sections: List[Dict[str, Any]] = []
+        
+        # Check for mission-specific merchant movement
+        merchant_movement = self.get_section_by_id("merchant_movement")
+        if not merchant_movement:
+            merchant_movement = self.get_section_by_id("merchant_movement_default")
+        
+        if merchant_movement:
+            lines: List[str] = []
+            for rule in merchant_movement.get("rules", []):
+                condition = rule.get("condition", "")
+                action = rule.get("action", "")
+                
+                if "distance" in rule:
+                    distance = rule.get("distance", "")
+                    lines.append(f"{condition}: Move {distance} hex")
+                elif "roll_required" in rule:
+                    roll = rule.get("roll_required", "")
+                    lines.append(f"{condition}: Roll {roll} to move")
+                else:
+                    lines.append(f"{condition}: {action}")
+            
+            sections.append({
+                "title": "Merchant Ship Movement",
+                "type": "bullets",
+                "content": lines if lines else ["Follow dotted line on map"]
+            })
+        
+        return sections
+    
+    def _get_phase_3_content(self) -> List[Dict[str, Any]]:
+        """Get Phase 3 (Detection) content sections."""
+        sections: List[Dict[str, Any]] = []
+        
+        detection = self.get_section_by_id("detection_rules")
+        if detection:
+            # Base thresholds
+            lines: List[str] = []
+            for threshold in detection.get("base_detection_thresholds", []):
+                depth = threshold["depth"]
+                roll = threshold["roll_required"]
+                lines.append(f"{depth}: {roll}+ on d6")
+            
+            sections.append({
+                "title": "Detection Roll by Depth",
+                "type": "bullets",
+                "content": lines
+            })
+            
+            # Modifiers
+            mod_lines: List[str] = []
+            for mod in detection.get("modifiers", []):
+                condition = mod.get("condition", "")
+                effect = mod.get("effect", 0)
+                mod_lines.append(f"{condition}: {effect:+d}")
+            
+            if mod_lines:
+                sections.append({
+                    "title": "Detection Modifiers",
+                    "type": "bullets",
+                    "content": mod_lines
+                })
+            
+            # Range and LOS
+            sections.append({
+                "title": "Detection Rules",
+                "type": "bullets",
+                "content": [
+                    f"Range: {detection.get('range', 4)} hexes",
+                    f"LOS Required: {'Yes' if detection.get('requires_los') else 'No'}",
+                    "Each escort rolls separately"
+                ]
+            })
+        
+        return sections
+    
+    def _get_phase_4_content(self) -> List[Dict[str, Any]]:
+        """Get Phase 4 (Escort) content sections."""
+        sections: List[Dict[str, Any]] = []
+        
+        # Escort activation order
+        activation = self.get_section_by_id("escort_activation_order")
+        if activation:
+            lines: List[str] = [activation.get("rule", "")]
+            dice_calc = activation.get("dice_calculation", {})
+            for ship_type, calc in dice_calc.items():
+                formula = calc.get("formula", "")
+                lines.append(f"{ship_type.capitalize()}: {formula}")
+            
+            sections.append({
+                "title": "Activation Order",
+                "type": "bullets",
+                "content": lines
+            })
+        
+        # Destroyer actions
+        destroyer_actions = self.get_section_by_id("destroyer_actions")
+        if destroyer_actions:
+            lines: List[str] = []
+            for result in destroyer_actions.get("results", []):
+                roll = result.get("roll", "")
+                desc = result.get("description", "")
+                lines.append(f"{roll}: {desc}")
+            
+            sections.append({
+                "title": "Destroyer Actions (d6)",
+                "type": "bullets",
+                "content": lines
+            })
+        
+        # Corvette actions
+        corvette_actions = self.get_section_by_id("corvette_actions")
+        if corvette_actions:
+            lines: List[str] = []
+            for result in corvette_actions.get("results", []):
+                roll = result.get("roll", "")
+                desc = result.get("description", "")
+                lines.append(f"{roll}: {desc}")
+            
+            sections.append({
+                "title": "Corvette Actions (d6)",
+                "type": "bullets",
+                "content": lines
+            })
+        
+        # Allied ship damage chart
+        damage_chart = self.get_section_by_id("allied_ship_damage")
+        if damage_chart:
+            # Just show the types available
+            ship_types = [sc["ship_type"].capitalize() for sc in damage_chart.get("ship_classes", [])]
+            sections.append({
+                "title": "Ship Damage Charts",
+                "type": "bullets",
+                "content": [f"Available: {', '.join(ship_types)}", "Roll d6 on appropriate chart"]
+            })
+        
+        return sections
+    
+    def _get_phase_5_content(self) -> List[Dict[str, Any]]:
+        """Get Phase 5 (B24) content sections."""
+        sections: List[Dict[str, Any]] = []
+        
+        # Check if B24 is enabled for this mission
+        b24_section = self.get_section_by_id("b24_phase")
+        if b24_section and not b24_section.get("enabled", True):
+            sections.append({
+                "title": "B24 Aircraft",
+                "type": "bullets",
+                "content": [b24_section.get("note", "Not present in this mission")]
+            })
+            return sections
+        
+        # Get B24 rules
+        b24_rules = self.get_section_by_id("b24_default")
+        if b24_rules:
+            move = b24_rules.get("move", {})
+            turn = b24_rules.get("turn", {})
+            attack = b24_rules.get("attack", {})
+            
+            sections.append({
+                "title": "B24 Movement",
+                "type": "bullets",
+                "content": [
+                    f"Move: {move.get('distance', 0)} hexes {move.get('direction', '')}",
+                    f"Turn: {turn.get('condition', '')}"
+                ]
+            })
+            
+            if attack:
+                lines: List[str] = []
+                reqs = attack.get("requirements", [])
+                if reqs:
+                    lines.append(f"Requirements: {', '.join(reqs)}")
+                
+                flak = attack.get("flak_defense", {})
+                if flak:
+                    lines.append(f"Flak: {flak.get('roll', '')} - {flak.get('success_base', '')}")
+                
+                sections.append({
+                    "title": "B24 Attack",
+                    "type": "bullets",
+                    "content": lines
+                })
+        
+        return sections
+    
+    def _get_phase_6_content(self) -> List[Dict[str, Any]]:
+        """Get Phase 6 (End of Turn) content sections."""
+        sections: List[Dict[str, Any]] = []
+        
+        # Check if events are enabled
+        events_section = self.get_section_by_id("end_of_turn_events")
+        if events_section and not events_section.get("enabled", True):
+            sections.append({
+                "title": "End of Turn Events",
+                "type": "bullets",
+                "content": [events_section.get("note", "No events in this mission")]
+            })
+            return sections
+        
+        # If we have an event table, describe it
+        event_table = self.get_section_by_id("event_table")
+        if event_table:
+            sections.append({
+                "title": "Event Table",
+                "type": "bullets",
+                "content": [
+                    "Roll 2d6 for random event",
+                    "See event table for outcomes"
+                ]
+            })
+        else:
+            sections.append({
+                "title": "End of Turn",
+                "type": "bullets",
+                "content": [
+                    "Check victory conditions",
+                    "Advance to next turn"
+                ]
+            })
+        
+        return sections
+
+
+def create_mission_rules_view_model(rules: MissionRules, current_phase: int = 1) -> Dict[str, Any]:
+    """
+    Create a UI-friendly view model for the Mission Rules panel.
+    
+    Args:
+        rules: Loaded MissionRules instance
+        current_phase: Current game phase (1-6, or uses phase enum values 3-8)
+        
+    Returns:
+        Dictionary with mission_info and phases array for UI rendering
+    """
+    # Map GamePhase enum values (3-8) to our phase numbering (1-6)
+    phase_map = {3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6}
+    if current_phase in phase_map:
+        current_phase = phase_map[current_phase]
+    
+    # Clamp to valid range
+    current_phase = max(1, min(6, current_phase))
+    
+    view_model: Dict[str, Any] = {
+        "mission_info": {
+            "number": rules.mission_number,
+            "title": rules.mission_title,
+            "objective": rules.objective,
+            "difficulty": rules.difficulty
+        },
+        "phases": []
+    }
+    
+    for phase_num in range(1, 7):
+        phase_content = rules.get_phase_content(phase_num)
+        view_model["phases"].append({
+            "phase_number": phase_num,
+            "phase_name": phase_content["phase_name"],
+            "is_active": (phase_num == current_phase),
+            "sections": phase_content["sections"]
+        })
+    
+    return view_model
 
 
 def load_mission_rules(mission_number: int, missions_dir: str = "missions") -> MissionRules:
@@ -635,7 +1034,9 @@ if __name__ == "__main__":
         escort_actions = rules.get_section_by_id("destroyer_actions")
         if escort_actions:
             print(f"Label: {escort_actions.get('label')}")
-            print(f"Applies to: {escort_actions.get('ship_type').replace('_', ' ').title()}")
+            ship_type = escort_actions.get('ship_type', '')
+            if ship_type:
+                print(f"Applies to: {ship_type.replace('_', ' ').title()}")
             print(f"Dice: {escort_actions.get('dice')}")
             print("\nAction Results:")
             for result in escort_actions.get('results', []):

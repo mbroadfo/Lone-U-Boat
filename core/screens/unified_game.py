@@ -62,61 +62,22 @@ class UnifiedGameScreen(BaseScreen):
         
         # Load mission rules for left panel display
         self.mission_rules: Any = None
+        self.mission_rules_view: Any = None
         try:
             sys.path.insert(0, 'missions')
-            from mission_rules_loader import load_mission_rules  # type: ignore[import-not-found]
+            from mission_rules_loader import load_mission_rules, create_mission_rules_view_model  # type: ignore[import-not-found]
             self.mission_rules = load_mission_rules(mission_number)
+            self.mission_rules_view = create_mission_rules_view_model(self.mission_rules, 1)
         except Exception as e:
             print(f"Warning: Could not load mission rules: {e}")
+        
+        # Mission Rules panel state
+        self.expanded_phases = {1: True, 2: False, 3: False, 4: False, 5: False, 6: False}  # Phase 1 expanded by default
+        self.phase_header_rects = {}  # Store clickable regions for phase headers
         
         # Panel scroll positions
         self.left_panel_scroll = 0
         self.right_panel_scroll = 0
-    
-    def _get_phase_rules_text(self) -> str:
-        """Generate rules text for current game phase."""
-        if not self.mission_rules:
-            return f"Mission {self.mission_number}\\n\\nMission rules could not be loaded."
-        
-        phase = self.game.current_phase
-        
-        # Mission header
-        text = f"MISSION {self.mission_rules.mission_number}: {self.mission_rules.mission_title}\n"
-        text += f"Difficulty: {self.mission_rules.difficulty.upper()}\n\n"
-        text += f"OBJECTIVE:\n{self.mission_rules.objective}\n\n"
-        text += "=" * 40 + "\n\n"
-        
-        # Phase-specific rules
-        phase_names = {
-            GamePhase.UBOAT_PHASE: ("U-BOAT PHASE", 3),
-            GamePhase.MERCHANT_PHASE: ("MERCHANT PHASE", 4),
-            GamePhase.DETECTION_PHASE: ("DETECTION PHASE", 5),
-            GamePhase.ESCORT_PHASE: ("ESCORT PHASE", 6),
-            GamePhase.B24_PHASE: ("B-24 PHASE", 7),
-            GamePhase.END_TURN_PHASE: ("END TURN PHASE", 8),
-        }
-        
-        if phase in phase_names:
-            phase_name, phase_num = phase_names[phase]
-            text += f">>> CURRENT PHASE: {phase_name} <<<\n\n"
-            
-            # Get phase-specific sections
-            phase_sections = self.mission_rules.get_sections_by_phase(phase_num)
-            
-            if phase_sections:
-                for section in phase_sections:
-                    text += f"{section.get('title', 'Rules')}:\n"
-                    text += f"{section.get('description', '')}\n\n"
-            else:
-                text += "No specific rules for this phase.\n\n"
-        else:
-            # Setup or other phases
-            text += "GAME SETUP\n\n"
-            text += "1. Select starting depth (1-4 keys)\n"
-            text += "2. Select starting facing (Q/E to rotate)\n"
-            text += "3. Press ENTER to begin mission\n\n"
-        
-        return text
     
     def add_event(self, message: str) -> None:
         """Add an event to the log."""
@@ -177,12 +138,22 @@ class UnifiedGameScreen(BaseScreen):
                 pass
         
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            if self.awaiting_initial_setup:
-                # Handle setup clicks
-                pass  # Will implement click handling
-            else:
-                # Handle game clicks
-                pass
+            if event.button == 1:  # Left click
+                mouse_pos = event.pos
+                
+                # Check if clicking on a phase header in left panel
+                for phase_num, rect in self.phase_header_rects.items():
+                    if rect.collidepoint(mouse_pos):
+                        # Toggle expansion
+                        self.expanded_phases[phase_num] = not self.expanded_phases[phase_num]
+                        break
+                
+                if self.awaiting_initial_setup:
+                    # Handle setup clicks
+                    pass  # Will implement click handling
+                else:
+                    # Handle game clicks
+                    pass
     
     def _handle_setup_input(self, event: pygame.event.Event) -> None:
         """Handle input during initial setup phase."""
@@ -228,7 +199,24 @@ class UnifiedGameScreen(BaseScreen):
     def update(self) -> None:
         """Update game state."""
         if not self.awaiting_initial_setup:
+            old_phase = self.game.current_phase
             self.game.update()
+            
+            # Update mission rules view if phase changed
+            if self.mission_rules and old_phase != self.game.current_phase:
+                try:
+                    sys.path.insert(0, 'missions')
+                    from mission_rules_loader import create_mission_rules_view_model  # type: ignore[import-not-found]
+                    # Map GamePhase enum to phase number (3->1, 4->2, etc.)
+                    phase_map = {3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6}
+                    current_phase_num = phase_map.get(self.game.current_phase.value, 1)
+                    self.mission_rules_view = create_mission_rules_view_model(self.mission_rules, current_phase_num)
+                    
+                    # Auto-expand the current phase
+                    for phase_num in range(1, 7):
+                        self.expanded_phases[phase_num] = (phase_num == current_phase_num)
+                except Exception as e:
+                    print(f"Warning: Could not update mission rules view: {e}")
     
     def render(self) -> None:
         """Render the unified game screen."""
@@ -302,55 +290,273 @@ class UnifiedGameScreen(BaseScreen):
         )
     
     def _draw_left_panel(self, width: int, y: int, height: int) -> None:
-        """Draw the left panel with mission briefing."""
+        """Draw the left panel with mission rules."""
         panel_rect = pygame.Rect(0, y, width, height)
         pygame.draw.rect(self.screen, (20, 25, 35), panel_rect)
         pygame.draw.line(self.screen, (50, 70, 100), (width-1, y), (width-1, y+height), 2)
         
-        # Header
-        self.draw_text(
-            "MISSION BRIEF",
-            width // 2,
-            y + 15,
-            self.font_medium,
-            color=(200, 220, 255),
-            center=True
-        )
+        if not self.mission_rules_view:
+            # Fallback if rules couldn't load
+            self.draw_text(
+                "MISSION RULES",
+                width // 2,
+                y + 15,
+                self.font_medium,
+                color=(200, 220, 255),
+                center=True
+            )
+            self.draw_text(
+                "Rules could not be loaded",
+                10,
+                y + 50,
+                self.font_small,
+                color=(150, 150, 150)
+            )
+            return
         
-        # Get phase-specific rules text
-        mission_text = self._get_phase_rules_text()
+        # Clear phase header rects for click detection
+        self.phase_header_rects.clear()
         
-        # Mission text (scrollable)
-        text_y = y + 50
+        mission_info = self.mission_rules_view["mission_info"]
+        phases = self.mission_rules_view["phases"]
+        
         text_x = 10
+        text_y = y + 10
         text_width = width - 20
         
-        lines = mission_text.split('\n')
-        for line in lines[:30]:  # Show first 30 lines
-            if not line.strip():
-                text_y += 10
-                continue
+        # === MISSION HEADER ===
+        # Mission title
+        title_text = f"MISSION {mission_info['number']}"
+        self.draw_text(
+            title_text,
+            width // 2,
+            text_y,
+            self.font_medium,
+            color=(255, 220, 100),
+            center=True
+        )
+        text_y += 25
+        
+        # Mission name
+        name_lines = self._wrap_text(mission_info['title'], text_width, self.font_small)
+        for line in name_lines:
+            self.draw_text(
+                line,
+                width // 2,
+                text_y,
+                self.font_small,
+                color=(200, 220, 255),
+                center=True
+            )
+            text_y += 16
+        
+        text_y += 5
+        
+        # Objective
+        self.draw_text(
+            "OBJECTIVE:",
+            text_x,
+            text_y,
+            self.font_small,
+            color=(180, 200, 220)
+        )
+        text_y += 18
+        
+        objective_lines = self._wrap_text(mission_info['objective'], text_width, self.font_small)
+        for line in objective_lines[:3]:  # Limit to 3 lines to save space
+            self.draw_text(
+                line,
+                text_x,
+                text_y,
+                self.font_small,
+                color=(160, 180, 200)
+            )
+            text_y += 16
+        
+        # Divider
+        text_y += 5
+        pygame.draw.line(
+            self.screen,
+            (70, 90, 120),
+            (text_x, text_y),
+            (width - text_x, text_y),
+            1
+        )
+        text_y += 10
+        
+        # === PHASE SECTIONS ===
+        for phase_data in phases:
+            phase_num = phase_data["phase_number"]
+            phase_name = phase_data["phase_name"]
+            is_active = phase_data["is_active"]
+            is_expanded = self.expanded_phases.get(phase_num, False)
+            sections = phase_data["sections"]
             
-            # Word wrap
-            words = line.split()
-            current_line = ""
-            for word in words:
-                test_line = current_line + word + " "
-                if self.font_small.size(test_line)[0] > text_width:
-                    if current_line:
-                        self.draw_text(current_line.strip(), text_x, text_y, self.font_small, color=(180, 190, 210))
-                        text_y += 18
+            # Phase header
+            header_height = 22
+            header_rect = pygame.Rect(0, text_y, width, header_height)
+            
+            # Background color for active phase
+            if is_active:
+                pygame.draw.rect(self.screen, (40, 60, 90), header_rect)
+            else:
+                pygame.draw.rect(self.screen, (25, 30, 40), header_rect)
+            
+            # Store rect for click detection
+            self.phase_header_rects[phase_num] = header_rect
+            
+            # Expand/collapse indicator
+            indicator = "▼" if is_expanded else "▶"
+            self.draw_text(
+                indicator,
+                text_x,
+                text_y + 3,
+                self.font_small,
+                color=(180, 200, 220)
+            )
+            
+            # Phase name
+            phase_label = f"Phase {phase_num} - {phase_name}"
+            label_color = (255, 255, 150) if is_active else (180, 200, 220)
+            self.draw_text(
+                phase_label,
+                text_x + 20,
+                text_y + 3,
+                self.font_small,
+                color=label_color
+            )
+            
+            # Border
+            border_color = (100, 140, 180) if is_active else (50, 70, 100)
+            pygame.draw.rect(self.screen, border_color, header_rect, 1)
+            
+            text_y += header_height + 2
+            
+            # Phase content (if expanded)
+            if is_expanded and sections:
+                content_y = text_y
+                
+                for section in sections:
+                    section_title = section.get("title", "")
+                    section_type = section.get("type", "bullets")
+                    content = section.get("content", [])
+                    
+                    # Section title
+                    self.draw_text(
+                        section_title,
+                        text_x + 5,
+                        content_y,
+                        self.font_small,
+                        color=(200, 220, 150)
+                    )
+                    content_y += 16
+                    
+                    # Section content
+                    if section_type == "bullets":
+                        for line in content[:8]:  # Limit bullets to avoid overflow
+                            # Wrap long lines
+                            wrapped = self._wrap_text(f"• {line}", text_width - 10, self.font_small)
+                            for wrapped_line in wrapped[:2]:  # Max 2 lines per bullet
+                                self.draw_text(
+                                    wrapped_line,
+                                    text_x + 10,
+                                    content_y,
+                                    self.font_small,
+                                    color=(170, 185, 200)
+                                )
+                                content_y += 14
+                    
+                    elif section_type == "table":
+                        # Table headers
+                        headers = section.get("headers", [])
+                        rows = section.get("rows", [])
+                        
+                        # Calculate column widths
+                        col_width = (text_width - 80) // len(headers) if headers else 30
+                        
+                        # Header row
+                        header_x = text_x + 80
+                        for header in headers:
+                            self.draw_text(
+                                header,
+                                header_x,
+                                content_y,
+                                self.font_small,
+                                color=(200, 220, 150)
+                            )
+                            header_x += col_width
+                        content_y += 14
+                        
+                        # Table rows
+                        for row in rows[:6]:  # Limit rows
+                            # Action name
+                            action_name = row.get("action", "")
+                            self.draw_text(
+                                action_name[:10],  # Truncate if needed
+                                text_x + 10,
+                                content_y,
+                                self.font_small,
+                                color=(170, 185, 200)
+                            )
+                            
+                            # Costs
+                            costs_x = text_x + 80
+                            for cost in row.get("costs", []):
+                                self.draw_text(
+                                    cost,
+                                    costs_x,
+                                    content_y,
+                                    self.font_small,
+                                    color=(170, 185, 200)
+                                )
+                                costs_x += col_width
+                            content_y += 14
+                    
+                    content_y += 5  # Gap between sections
+                    
+                    # Check if we're running out of space
+                    if content_y > y + height - 30:
+                        break
+                
+                text_y = content_y + 5
+            
+            # Check if we need to stop (running out of space)
+            if text_y > y + height - 30:
+                break
+    
+    def _wrap_text(self, text: str, max_width: int, font: pygame.font.Font) -> List[str]:
+        """
+        Wrap text to fit within max_width.
+        
+        Args:
+            text: Text to wrap
+            max_width: Maximum width in pixels
+            font: Font to use for measuring
+            
+        Returns:
+            List of wrapped lines
+        """
+        words = text.split()
+        lines = []
+        current_line = ""
+        
+        for word in words:
+            test_line = current_line + word + " "
+            if font.size(test_line)[0] > max_width:
+                if current_line:
+                    lines.append(current_line.strip())
                     current_line = word + " "
                 else:
-                    current_line = test_line
-            
-            if current_line.strip():
-                self.draw_text(current_line.strip(), text_x, text_y, self.font_small, color=(180, 190, 210))
-                text_y += 18
-            
-            # Stop if running out of space
-            if text_y > y + height - 20:
-                break
+                    # Single word is too long
+                    lines.append(word)
+                    current_line = ""
+            else:
+                current_line = test_line
+        
+        if current_line.strip():
+            lines.append(current_line.strip())
+        
+        return lines
     
     def _draw_game_board(self, x: int, y: int, width: int, height: int) -> None:
         """Draw the central game board."""
