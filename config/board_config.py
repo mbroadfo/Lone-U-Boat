@@ -76,12 +76,32 @@ COLORS: dict[str, tuple[int, int, int] | tuple[int, int, int, int]] = {
 # HEX GRID CONFIGURATION
 # ====================
 
+# These offsets were calibrated at 1600x900 window size with unified game layout
+# where the map is positioned at (LEFT_PANEL_WIDTH + map_x_offset, TOP_BAR_HEIGHT)
+# For the map to stay aligned at different window sizes, we need to store:
+# - The base map position used during calibration
+# - The hex grid offset relative to that map position
+
+# Calibration reference (for 1600x900 window, board area 950x710)
+CALIBRATION_MAP_POSITION = {
+    'board_x': 300,     # LEFT_PANEL_WIDTH
+    'board_y': 40,      # TOP_BAR_HEIGHT  
+    'board_width': 950, # GAME_BOARD_WIDTH
+}
+
+# Global board offset - fine-tuning adjustment for hex grid and status boxes
+# This offset is ADDED to the calculated map position to align everything
+GLOBAL_BOARD_OFFSET = {
+    'offset_x': 74,     # Horizontal fine-tuning offset
+    'offset_y': -12,    # Vertical fine-tuning offset
+}
+
 HEX_GRID: HexGridConfig = {
     'size': 32,         # Radius of hexagon
     'cols': 11,         # Maximum columns (0-10)
     'rows': 12,         # Rows 0-11
-    'offset_x': 457,    # Horizontal offset to align with map
-    'offset_y': -15,    # Vertical offset to align with map
+    'offset_x': 457,    # Horizontal offset from calibration board position
+    'offset_y': -15,    # Vertical offset from calibration board position  
 }
 
 

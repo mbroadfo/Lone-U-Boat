@@ -4,8 +4,9 @@ Left: Mission briefing | Center: Game board | Right: Event log | Bottom: Control
 """
 
 import pygame
-from typing import Optional, Any, List
-from ..models import Facing, Depth
+import sys
+from typing import Optional, Any, List, Dict
+from ..models import Facing, Depth, GamePhase
 from .base_screen import BaseScreen
 
 
@@ -56,27 +57,82 @@ class UnifiedGameScreen(BaseScreen):
         self.add_event(f"Mission {mission_number} started")
         self.add_event("Select your starting depth and facing direction")
         
-        # Load mission text for left panel
-        self.mission_text = self._load_mission_text()
+        # Dice roll history
+        self.dice_rolls: List[Dict[str, Any]] = []
+        
+        # Load mission rules for left panel display
+        self.mission_rules: Any = None
+        try:
+            sys.path.insert(0, 'missions')
+            from mission_rules_loader import load_mission_rules  # type: ignore[import-not-found]
+            self.mission_rules = load_mission_rules(mission_number)
+        except Exception as e:
+            print(f"Warning: Could not load mission rules: {e}")
         
         # Panel scroll positions
         self.left_panel_scroll = 0
         self.right_panel_scroll = 0
     
-    def _load_mission_text(self) -> str:
-        """Load mission description from file."""
-        mission_file = f'missions/M{self.mission_number}.txt'
-        try:
-            with open(mission_file, 'r', encoding='utf-8') as f:
-                return f.read()
-        except FileNotFoundError:
-            return f"Mission {self.mission_number}"
+    def _get_phase_rules_text(self) -> str:
+        """Generate rules text for current game phase."""
+        if not self.mission_rules:
+            return f"Mission {self.mission_number}\\n\\nMission rules could not be loaded."
+        
+        phase = self.game.current_phase
+        
+        # Mission header
+        text = f"MISSION {self.mission_rules.mission_number}: {self.mission_rules.mission_title}\n"
+        text += f"Difficulty: {self.mission_rules.difficulty.upper()}\n\n"
+        text += f"OBJECTIVE:\n{self.mission_rules.objective}\n\n"
+        text += "=" * 40 + "\n\n"
+        
+        # Phase-specific rules
+        phase_names = {
+            GamePhase.UBOAT_PHASE: ("U-BOAT PHASE", 3),
+            GamePhase.MERCHANT_PHASE: ("MERCHANT PHASE", 4),
+            GamePhase.DETECTION_PHASE: ("DETECTION PHASE", 5),
+            GamePhase.ESCORT_PHASE: ("ESCORT PHASE", 6),
+            GamePhase.B24_PHASE: ("B-24 PHASE", 7),
+            GamePhase.END_TURN_PHASE: ("END TURN PHASE", 8),
+        }
+        
+        if phase in phase_names:
+            phase_name, phase_num = phase_names[phase]
+            text += f">>> CURRENT PHASE: {phase_name} <<<\n\n"
+            
+            # Get phase-specific sections
+            phase_sections = self.mission_rules.get_sections_by_phase(phase_num)
+            
+            if phase_sections:
+                for section in phase_sections:
+                    text += f"{section.get('title', 'Rules')}:\n"
+                    text += f"{section.get('description', '')}\n\n"
+            else:
+                text += "No specific rules for this phase.\n\n"
+        else:
+            # Setup or other phases
+            text += "GAME SETUP\n\n"
+            text += "1. Select starting depth (1-4 keys)\n"
+            text += "2. Select starting facing (Q/E to rotate)\n"
+            text += "3. Press ENTER to begin mission\n\n"
+        
+        return text
     
     def add_event(self, message: str) -> None:
         """Add an event to the log."""
         self.event_log.append(message)
         # Auto-scroll to bottom
         self.right_panel_scroll = max(0, len(self.event_log) * 20 - 500)
+    
+    def add_dice_roll(self, action: str, dice: str, result: str) -> None:
+        """Add a dice roll to the history."""
+        self.dice_rolls.append({
+            'action': action,
+            'dice': dice,
+            'result': result
+        })
+        # Also add to event log
+        self.add_event(f"{action}: Rolled {dice} = {result}")
     
     def handle_events(self, event: pygame.event.Event) -> None:
         """Handle all game events."""
@@ -90,6 +146,27 @@ class UnifiedGameScreen(BaseScreen):
                 self.screen_manager.toggle_fullscreen()
                 mode = "fullscreen" if self.screen_manager.fullscreen else "windowed"
                 self.add_event(f"Switched to {mode} mode (F11 to toggle)")
+            
+            # Toggle display options (work in both setup and game modes)
+            elif event.key == pygame.K_g:
+                self.game.show_grid = not self.game.show_grid
+                state = "ON" if self.game.show_grid else "OFF"
+                self.add_event(f"Hex grid: {state}")
+            
+            elif event.key == pygame.K_m:
+                self.game.show_map = not self.game.show_map
+                state = "ON" if self.game.show_map else "OFF"
+                self.add_event(f"Map display: {state}")
+            
+            elif event.key == pygame.K_v:
+                self.game.show_terrain = not self.game.show_terrain
+                state = "ON" if self.game.show_terrain else "OFF"
+                self.add_event(f"Terrain overlay: {state}")
+            
+            elif event.key == pygame.K_s:
+                self.game.show_status_boxes = not self.game.show_status_boxes
+                state = "ON" if self.game.show_status_boxes else "OFF"
+                self.add_event(f"Status boxes: {state}")
             
             # If awaiting initial setup
             if self.awaiting_initial_setup:
@@ -240,12 +317,15 @@ class UnifiedGameScreen(BaseScreen):
             center=True
         )
         
+        # Get phase-specific rules text
+        mission_text = self._get_phase_rules_text()
+        
         # Mission text (scrollable)
         text_y = y + 50
         text_x = 10
         text_width = width - 20
         
-        lines = self.mission_text.split('\n')
+        lines = mission_text.split('\n')
         for line in lines[:30]:  # Show first 30 lines
             if not line.strip():
                 text_y += 10
@@ -277,17 +357,51 @@ class UnifiedGameScreen(BaseScreen):
         board_rect = pygame.Rect(x, y, width, height)
         pygame.draw.rect(self.screen, (15, 20, 30), board_rect)
         
-        # Create a subsurface for the game to render to
-        board_surface = self.screen.subsurface(board_rect)
+        # Render directly to main screen (not subsurface) to preserve alignment
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(board_rect)
         
-        # Temporarily adjust game renderer for this viewport
-        old_screen = self.game.screen
-        self.game.screen = board_surface
-        self.game.renderer.screen = board_surface
+        # Calculate map position (centered horizontally in board area)
+        map_x_offset = 0
+        if self.game.map_image:
+            map_x_offset = (width - self.game.map_image.get_width()) // 2
         
-        # Render game (but only the essentials)
+        # Actual map position on screen
+        actual_map_x = x + map_x_offset
+        actual_map_y = y
+        
+        # Calculate offset adjustment: difference between actual position and calibration position
+        # Calibration was done with map at a specific board position
+        cal_board_x = self.config.CALIBRATION_MAP_POSITION['board_x']
+        cal_board_y = self.config.CALIBRATION_MAP_POSITION['board_y']
+        cal_board_width = self.config.CALIBRATION_MAP_POSITION['board_width']
+        
+        if self.game.map_image:
+            cal_map_x_offset = (cal_board_width - self.game.map_image.get_width()) // 2
+        else:
+            cal_map_x_offset = 0
+            
+        cal_map_x = cal_board_x + cal_map_x_offset
+        cal_map_y = cal_board_y
+        
+        # Adjust hex grid and renderer for current vs calibration position
+        adjustment_x = actual_map_x - cal_map_x
+        adjustment_y = actual_map_y - cal_map_y
+        
+        # Temporarily adjust global offsets for this render
+        original_global_x = self.game.hex_grid.global_offset_x
+        original_global_y = self.game.hex_grid.global_offset_y
+        original_renderer_x = self.game.renderer.global_offset_x
+        original_renderer_y = self.game.renderer.global_offset_y
+        
+        self.game.hex_grid.global_offset_x = original_global_x + adjustment_x
+        self.game.hex_grid.global_offset_y = original_global_y + adjustment_y
+        self.game.renderer.global_offset_x = original_renderer_x + adjustment_x
+        self.game.renderer.global_offset_y = original_renderer_y + adjustment_y
+        
+        # Render game at board position, center map horizontally
         if self.game.show_map and self.game.map_image:
-            board_surface.blit(self.game.map_image, (0, 0))
+            self.screen.blit(self.game.map_image, (actual_map_x, actual_map_y))
         
         if self.game.show_grid:
             self.game.renderer.render_hex_grid(self.game.mission_hexes)
@@ -298,6 +412,10 @@ class UnifiedGameScreen(BaseScreen):
                 self.game.land_hexes, 
                 self.game.mission_hexes
             )
+        
+        # Render status boxes and torpedoes (if enabled)
+        if self.game.show_status_boxes:
+            self.game.renderer.render_status_markers(self.game.status_boxes, show_all=True)
         
         # Render ships
         for ship in self.game.ships:
@@ -313,31 +431,76 @@ class UnifiedGameScreen(BaseScreen):
         else:
             self.game.renderer.render_u_boat(self.game.u_boat)
         
-        # Restore original screen
-        self.game.screen = old_screen
-        self.game.renderer.screen = old_screen
+        # Restore original offsets
+        self.game.hex_grid.global_offset_x = original_global_x
+        self.game.hex_grid.global_offset_y = original_global_y
+        self.game.renderer.global_offset_x = original_renderer_x
+        self.game.renderer.global_offset_y = original_renderer_y
+        
+        # Restore clip region
+        self.screen.set_clip(old_clip)
         
         # Draw border
         pygame.draw.rect(self.screen, (50, 70, 100), board_rect, 2)
     
     def _draw_right_panel(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw the right panel with event log."""
+        """Draw the right panel with dice rolls and event log."""
         panel_rect = pygame.Rect(x, y, width, height)
         pygame.draw.rect(self.screen, (20, 25, 35), panel_rect)
         pygame.draw.line(self.screen, (50, 70, 100), (x, y), (x, y+height), 2)
         
-        # Header
+        # Split panel into dice area and event log
+        dice_area_height = 150
+        log_area_y = y + dice_area_height
+        
+        # === DICE ROLL SECTION ===
+        self.draw_text(
+            "DICE ROLLS",
+            x + width // 2,
+            y + 15,
+            self.font_medium,
+            color=(255, 220, 100),
+            center=True
+        )
+        
+        # Show last 5 dice rolls
+        dice_y = y + 45
+        dice_x = x + 10
+        
+        visible_rolls = self.dice_rolls[-5:] if self.dice_rolls else []
+        if visible_rolls:
+            for roll_info in visible_rolls:
+                action = roll_info.get('action', 'Unknown')
+                dice = roll_info.get('dice', '?')
+                result = roll_info.get('result', '?')
+                
+                roll_text = f"{action}: [{dice}] = {result}"
+                self.draw_text(roll_text, dice_x, dice_y, self.font_small, color=(255, 255, 150))
+                dice_y += 20
+        else:
+            self.draw_text("No rolls yet", dice_x, dice_y, self.font_small, color=(120, 120, 120))
+        
+        # Separator line
+        pygame.draw.line(
+            self.screen,
+            (50, 70, 100),
+            (x, log_area_y),
+            (x + width, log_area_y),
+            2
+        )
+        
+        # === EVENT LOG SECTION ===
         self.draw_text(
             "EVENT LOG",
             x + width // 2,
-            y + 15,
+            log_area_y + 15,
             self.font_medium,
             color=(200, 220, 255),
             center=True
         )
         
         # Event log entries
-        log_y = y + 50
+        log_y = log_area_y + 50
         log_x = x + 10
         log_width = width - 20
         
@@ -436,7 +599,8 @@ class UnifiedGameScreen(BaseScreen):
         
         controls = [
             "Q/E: Rotate | W: Move Forward | Z/X: Change Depth",
-            "G: Toggle Grid | M: Toggle Map | V: Toggle Terrain"
+            "G: Toggle Grid | M: Toggle Map | V: Toggle Terrain",
+            "S: Toggle Status/Torps"
         ]
         
         for control_text in controls:

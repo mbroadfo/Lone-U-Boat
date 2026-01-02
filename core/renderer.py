@@ -29,6 +29,10 @@ class GameRenderer:
         self.config = config
         self.hex_grid = hex_grid
         
+        # Get global board offset from config
+        self.global_offset_x = config.GLOBAL_BOARD_OFFSET.get('offset_x', 0)
+        self.global_offset_y = config.GLOBAL_BOARD_OFFSET.get('offset_y', 0)
+        
         # Unpack assets
         self.u_boat_images: Dict[Depth, pygame.Surface] = assets['u_boat_images']
         self.ship_images: Dict[str, pygame.Surface] = assets['ship_images']
@@ -298,14 +302,22 @@ class GameRenderer:
             if not should_render:
                 continue
             
+            # Apply global board offset to status box position
+            adjusted_rect = pygame.Rect(
+                rect[0] + self.global_offset_x, 
+                rect[1] + self.global_offset_y, 
+                rect[2], 
+                rect[3]
+            )
+            
             # Get marker image
             marker_img = self.marker_images.get(marker_type)
             if marker_img is None:
                 continue
             
             # Scale marker to fit box
-            scaled_marker = pygame.transform.smoothscale(marker_img, (rect.width, rect.height))
-            self.screen.blit(scaled_marker, rect)
+            scaled_marker = pygame.transform.smoothscale(marker_img, (adjusted_rect.width, adjusted_rect.height))
+            self.screen.blit(scaled_marker, adjusted_rect)
     
     def render_ui(self, game_state: Any) -> None:
         """Render UI panels and information."""

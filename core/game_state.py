@@ -64,7 +64,9 @@ class Game:
             cols=cfg.HEX_GRID['cols'],
             rows=cfg.HEX_GRID['rows'],
             offset_x=cfg.HEX_GRID['offset_x'],
-            offset_y=cfg.HEX_GRID['offset_y']
+            offset_y=cfg.HEX_GRID['offset_y'],
+            global_offset_x=cfg.GLOBAL_BOARD_OFFSET['offset_x'],
+            global_offset_y=cfg.GLOBAL_BOARD_OFFSET['offset_y']
         )
         
         # Game entities - load from mission config
@@ -97,6 +99,7 @@ class Game:
         self.show_grid = False  # Game defaults to grid off
         self.show_map = True
         self.show_terrain = False  # Terrain off during normal gameplay
+        self.show_status_boxes = True  # Status boxes and torpedoes visible by default
         self.detection_level = 0
         
         # Status box markers

@@ -12,12 +12,15 @@ from .models import HexCoord
 class HexGrid:
     """Handles hex grid calculations and rendering."""
     
-    def __init__(self, size: int, cols: int, rows: int, offset_x: int = 0, offset_y: int = 0):
+    def __init__(self, size: int, cols: int, rows: int, offset_x: int = 0, offset_y: int = 0, 
+                 global_offset_x: int = 0, global_offset_y: int = 0):
         self.size = size
         self.cols = cols
         self.rows = rows
         self.offset_x = offset_x
         self.offset_y = offset_y
+        self.global_offset_x = global_offset_x
+        self.global_offset_y = global_offset_y
         
         # Flat-top hex math (pointy sides)
         self.width = 2 * size
@@ -33,13 +36,13 @@ class HexGrid:
         """
         x = self.size * (3/2 * coord.q)
         y = self.size * (math.sqrt(3) * (coord.r + coord.q / 2))
-        return (x + self.offset_x, y + self.offset_y)
+        return (x + self.offset_x + self.global_offset_x, y + self.offset_y + self.global_offset_y)
     
     def pixel_to_hex(self, x: float, y: float) -> HexCoord:
         """Convert pixel coordinates to axial hex coordinates (flat-top hexes)."""
-        # Adjust for offset
-        x -= self.offset_x
-        y -= self.offset_y
+        # Adjust for both offsets
+        x -= (self.offset_x + self.global_offset_x)
+        y -= (self.offset_y + self.global_offset_y)
         
         # Inverse axial coordinate formulas
         q = (2/3 * x) / self.size

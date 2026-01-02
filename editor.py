@@ -55,7 +55,9 @@ class BoardEditor:
             cols=cfg.HEX_GRID['cols'],
             rows=cfg.HEX_GRID['rows'],
             offset_x=cfg.HEX_GRID['offset_x'],
-            offset_y=cfg.HEX_GRID['offset_y']
+            offset_y=cfg.HEX_GRID['offset_y'],
+            global_offset_x=cfg.GLOBAL_BOARD_OFFSET['offset_x'],
+            global_offset_y=cfg.GLOBAL_BOARD_OFFSET['offset_y']
         )
         
         # Game entities - load from mission config
@@ -200,20 +202,26 @@ class BoardEditor:
                         print(f"Depth changed to: {self.u_boat.depth.name}")
                 
                 # Arrow keys for fine grid adjustment (only in edit mode)
+                # Now adjusts GLOBAL offset which moves both grid and status boxes together
                 elif self.edit_mode and event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
                     shift_pressed = pygame.key.get_mods() & pygame.KMOD_SHIFT
                     step = 10 if shift_pressed else 1
                     
                     if event.key == pygame.K_LEFT:
-                        self.hex_grid.offset_x -= step
+                        self.hex_grid.global_offset_x -= step
+                        self.renderer.global_offset_x -= step
                     elif event.key == pygame.K_RIGHT:
-                        self.hex_grid.offset_x += step
+                        self.hex_grid.global_offset_x += step
+                        self.renderer.global_offset_x += step
                     elif event.key == pygame.K_UP:
-                        self.hex_grid.offset_y -= step
+                        self.hex_grid.global_offset_y -= step
+                        self.renderer.global_offset_y -= step
                     elif event.key == pygame.K_DOWN:
-                        self.hex_grid.offset_y += step
+                        self.hex_grid.global_offset_y += step
+                        self.renderer.global_offset_y += step
                     
-                    print(f"Grid offset: ({int(self.hex_grid.offset_x)}, {int(self.hex_grid.offset_y)})")
+                    print(f"Global board offset: ({int(self.hex_grid.global_offset_x)}, {int(self.hex_grid.global_offset_y)})")
+                    print(f"  -> Update board_config.py GLOBAL_BOARD_OFFSET to: {{'offset_x': {int(self.hex_grid.global_offset_x)}, 'offset_y': {int(self.hex_grid.global_offset_y)}}}")
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
