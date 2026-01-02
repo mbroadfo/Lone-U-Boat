@@ -452,84 +452,78 @@ class MissionRules:
         """Get Phase 1 (U-Boat) content sections."""
         sections: List[Dict[str, Any]] = []
         
-        # AP Generation
-        ap_rules = self.get_section_by_id("u_boat_ap_rules")
-        if ap_rules:
-            lines: List[str] = []
-            dice_info = ap_rules.get("dice", {})
-            lines.append(f"Roll: {dice_info.get('normal', '3d6')} (take highest)")
-            lines.append(f"Damaged: {dice_info.get('damaged', '2d6')}")
-            
-            for mod in ap_rules.get("modifiers", []):
-                condition = mod.get("condition", "").replace("_", " ").title()
-                effect = mod.get("effect", "")
-                lines.append(f"{condition}: {effect}")
-            
-            sections.append({
-                "title": "Action Points",
-                "type": "bullets",
-                "content": lines
-            })
+        # Phase header line with depth modifiers
+        sections.append({
+            "type": "compact_line",
+            "content": "Phase 1 — U-Boat Phase: If Medium DL-1 | If Deep DL-2"
+        })
         
-        # Depth Modifiers
-        depth_mods = self.get_section_by_id("u_boat_depth_modifiers")
-        if depth_mods:
-            lines: List[str] = []
-            for mod in depth_mods.get("modifiers", []):
-                depth = mod["depth"]
-                dl_mod = mod["dl_modifier"]
-                if dl_mod < 0:
-                    lines.append(f"{depth}: DL {dl_mod}")
-                else:
-                    lines.append(f"{depth}: No change")
-            sections.append({
-                "title": "DL Reduction by Depth",
-                "type": "bullets",
-                "content": lines
-            })
-        
-        # Action Costs Table
+        # Action Costs Table with nested torpedo range sub-table
         action_costs = self.get_section_by_id("u_boat_action_costs")
         if action_costs:
-            table_rows: List[Dict[str, Any]] = []
-            depths = ["SURFACED", "PERISCOPE", "MEDIUM", "DEEP"]
+            rows: List[Dict[str, Any]] = []
             
-            # Shortened depth names for display
-            depth_display = {"SURFACED": "Surf", "PERISCOPE": "Peri", "MEDIUM": "Med", "DEEP": "Deep"}
-            
-            for action_data in action_costs.get("actions", [])[:7]:  # First 7 actions
+            for action_data in action_costs.get("actions", []):
                 action_name = action_data["action"]
                 costs = action_data["costs"]
                 
-                # Shorten action names
-                action_short = action_name.replace("CHANGE DEPTH", "CHG DEPTH").replace("FIRE ", "").replace(" ", " ")
+                cells: List[str] = [
+                    action_name,
+                    str(costs.get("SURFACED", "--")),
+                    str(costs.get("PERISCOPE", "--")),
+                    str(costs.get("MEDIUM", "--")),
+                    str(costs.get("DEEP", "--"))
+                ]
                 
-                row_costs: List[str] = []
-                for d in depths:
-                    cost = costs.get(d)
-                    row_costs.append(str(cost) if cost is not None else "--")
+                row: Dict[str, Any] = {"cells": cells}
                 
-                table_rows.append({
-                    "action": action_short,
-                    "costs": row_costs
-                })
+                # Special case: FIRE TORPS has nested sub-table and notes
+                if action_name == "FIRE TORPS":
+                    row["children"] = [
+                        {
+                            "type": "mini_table",
+                            "style": "fire_torps_range",
+                            "headers": ["Range", "1–2", "3–4", "5–6", "7–9"],
+                            "rows": [
+                                ["To Hit Side", "3+", "4+", "5+", "6+"],
+                                ["To Hit Front/Rear", "4+", "5+", "6+", "6+"]
+                            ]
+                        },
+                        {
+                            "type": "inline_text_block",
+                            "lines": [
+                                "If Fire 3, DL +1",
+                                "If any hit, DL +1",
+                                "Target first ship along line of fire. Missed torps continue to other ships beyond."
+                            ]
+                        }
+                    ]
+                
+                rows.append(row)
             
             sections.append({
-                "title": "Action Costs (AP)",
                 "type": "table",
-                "headers": [depth_display[d] for d in depths],
-                "rows": table_rows
+                "style": "action_costs",
+                "headers": ["Action", "Surf", "Peri", "Med", "Deep"],
+                "rows": rows
             })
         
-        # Key reminders
+        # Inline rules about depth change, land, repair
         sections.append({
-            "title": "Reminders",
-            "type": "bullets",
-            "content": [
-                "Depth change: once per turn, 1 level only",
-                "Cannot enter land or shallow (unless surf/peri)",
-                "Repair: 2 AP surf, 4 AP submerged (needs Eng)"
+            "type": "inline_text_block",
+            "lines": [
+                "Depth change: once per turn, one level only.",
+                "Cannot enter land or shallow (unless surfaced or periscope).",
+                "Repair: 2 AP surfaced, 4 AP submerged (needs Engineer)."
             ]
+        })
+        
+        # Allied Ship Damage Chart (referenced from shared rules)
+        sections.append({
+            "type": "result_table_ref",
+            "ref": "allied_ship_damage",
+            "style": "allied_ship_damage",
+            "title": "Allied Ship Damage Chart: For each Torpedo / Deck Gun Hit on a Ship, roll d6 for Damage:"
         })
         
         return sections
@@ -538,31 +532,11 @@ class MissionRules:
         """Get Phase 2 (Merchant/Allied Ship) content sections."""
         sections: List[Dict[str, Any]] = []
         
-        # Check for mission-specific merchant movement
-        merchant_movement = self.get_section_by_id("merchant_movement")
-        if not merchant_movement:
-            merchant_movement = self.get_section_by_id("merchant_movement_default")
-        
-        if merchant_movement:
-            lines: List[str] = []
-            for rule in merchant_movement.get("rules", []):
-                condition = rule.get("condition", "")
-                action = rule.get("action", "")
-                
-                if "distance" in rule:
-                    distance = rule.get("distance", "")
-                    lines.append(f"{condition}: Move {distance} hex")
-                elif "roll_required" in rule:
-                    roll = rule.get("roll_required", "")
-                    lines.append(f"{condition}: Roll {roll} to move")
-                else:
-                    lines.append(f"{condition}: {action}")
-            
-            sections.append({
-                "title": "Merchant Ship Movement",
-                "type": "bullets",
-                "content": lines if lines else ["Follow dotted line on map"]
-            })
+        # Single compact line for merchant movement
+        sections.append({
+            "type": "compact_line",
+            "content": "Each Merchant Ship moves 1 hex forward along its dotted line."
+        })
         
         return sections
     
@@ -572,43 +546,38 @@ class MissionRules:
         
         detection = self.get_section_by_id("detection_rules")
         if detection:
-            # Base thresholds
-            lines: List[str] = []
-            for threshold in detection.get("base_detection_thresholds", []):
-                depth = threshold["depth"]
-                roll = threshold["roll_required"]
-                lines.append(f"{depth}: {roll}+ on d6")
-            
+            # Header line
             sections.append({
-                "title": "Detection Roll by Depth",
-                "type": "bullets",
-                "content": lines
+                "type": "compact_line",
+                "content": "Roll d6 for each Escort Ship within 4 hexes and LOS to U-Boat:"
             })
             
-            # Modifiers
+            # Detection threshold mini-table
+            threshold_rows: List[List[str]] = []
+            for threshold in detection.get("base_detection_thresholds", []):
+                depth = threshold["depth"].capitalize()
+                roll = f"{threshold['roll_required']}+"
+                threshold_rows.append([depth, roll])
+            
+            sections.append({
+                "type": "mini_table",
+                "style": "detection_thresholds",
+                "headers": ["U-Boat Depth", "Detect On"],
+                "rows": threshold_rows
+            })
+            
+            # Detection modifiers as inline text
             mod_lines: List[str] = []
             for mod in detection.get("modifiers", []):
                 condition = mod.get("condition", "")
                 effect = mod.get("effect", 0)
-                mod_lines.append(f"{condition}: {effect:+d}")
+                mod_lines.append(f"{condition}: {effect:+d} to roll")
             
             if mod_lines:
                 sections.append({
-                    "title": "Detection Modifiers",
-                    "type": "bullets",
-                    "content": mod_lines
+                    "type": "inline_text_block",
+                    "lines": mod_lines
                 })
-            
-            # Range and LOS
-            sections.append({
-                "title": "Detection Rules",
-                "type": "bullets",
-                "content": [
-                    f"Range: {detection.get('range', 4)} hexes",
-                    f"LOS Required: {'Yes' if detection.get('requires_los') else 'No'}",
-                    "Each escort rolls separately"
-                ]
-            })
         
         return sections
     
@@ -616,61 +585,49 @@ class MissionRules:
         """Get Phase 4 (Escort) content sections."""
         sections: List[Dict[str, Any]] = []
         
-        # Escort activation order
-        activation = self.get_section_by_id("escort_activation_order")
-        if activation:
-            lines: List[str] = [activation.get("rule", "")]
-            dice_calc = activation.get("dice_calculation", {})
-            for ship_type, calc in dice_calc.items():
-                formula = calc.get("formula", "")
-                lines.append(f"{ship_type.capitalize()}: {formula}")
-            
-            sections.append({
-                "title": "Activation Order",
-                "type": "bullets",
-                "content": lines
-            })
+        # Dice count rule
+        sections.append({
+            "type": "compact_line",
+            "content": "Roll (6 + DL) d6 for Destroyer, (4 + DL) d6 for Corvette."
+        })
         
-        # Destroyer actions
+        # Escort action table (combined Destroyer/Corvette)
         destroyer_actions = self.get_section_by_id("destroyer_actions")
-        if destroyer_actions:
-            lines: List[str] = []
-            for result in destroyer_actions.get("results", []):
-                roll = result.get("roll", "")
-                desc = result.get("description", "")
-                lines.append(f"{roll}: {desc}")
-            
-            sections.append({
-                "title": "Destroyer Actions (d6)",
-                "type": "bullets",
-                "content": lines
-            })
-        
-        # Corvette actions
         corvette_actions = self.get_section_by_id("corvette_actions")
-        if corvette_actions:
-            lines: List[str] = []
-            for result in corvette_actions.get("results", []):
-                roll = result.get("roll", "")
-                desc = result.get("description", "")
-                lines.append(f"{roll}: {desc}")
+        
+        if destroyer_actions and corvette_actions:
+            rows: List[Dict[str, Any]] = []
+            
+            for roll_num in range(1, 7):
+                destroyer_result = next(
+                    (r["description"] for r in destroyer_actions.get("results", []) if r["roll"] == roll_num),
+                    ""
+                )
+                corvette_result = next(
+                    (r["description"] for r in corvette_actions.get("results", []) if r["roll"] == roll_num),
+                    ""
+                )
+                
+                rows.append({
+                    "cells": [str(roll_num), destroyer_result, corvette_result]
+                })
             
             sections.append({
-                "title": "Corvette Actions (d6)",
-                "type": "bullets",
-                "content": lines
+                "type": "table",
+                "style": "escort_actions",
+                "headers": ["d6", "Destroyer", "Corvette"],
+                "rows": rows
             })
         
-        # Allied ship damage chart
-        damage_chart = self.get_section_by_id("allied_ship_damage")
-        if damage_chart:
-            # Just show the types available
-            ship_types = [sc["ship_type"].capitalize() for sc in damage_chart.get("ship_classes", [])]
-            sections.append({
-                "title": "Ship Damage Charts",
-                "type": "bullets",
-                "content": [f"Available: {', '.join(ship_types)}", "Roll d6 on appropriate chart"]
-            })
+        # Action definitions as inline text
+        sections.append({
+            "type": "inline_text_block",
+            "lines": [
+                "DEPTH CHARGE: If same hex as U-Boat, roll d6. On 4+, U-Boat takes 1 damage.",
+                "TURN: Escort turns to face U-Boat hex.",
+                "FIRE: Range 1-4 hexes, roll d6. Destroyer hits on 4+, Corvette on 5+. On hit, roll for Allied Ship Damage."
+            ]
+        })
         
         return sections
     
@@ -682,9 +639,8 @@ class MissionRules:
         b24_section = self.get_section_by_id("b24_phase")
         if b24_section and not b24_section.get("enabled", True):
             sections.append({
-                "title": "B24 Aircraft",
-                "type": "bullets",
-                "content": [b24_section.get("note", "Not present in this mission")]
+                "type": "compact_line",
+                "content": b24_section.get("note", "B24 Aircraft: Not present in this mission")
             })
             return sections
         
@@ -692,32 +648,42 @@ class MissionRules:
         b24_rules = self.get_section_by_id("b24_default")
         if b24_rules:
             move = b24_rules.get("move", {})
-            turn = b24_rules.get("turn", {})
             attack = b24_rules.get("attack", {})
             
+            # Movement and attack rules as inline text
+            lines: List[str] = []
+            lines.append(f"B24 moves {move.get('distance', 6)} hexes straight.")
+            lines.append(f"If B24 is adjacent to U-Boat: Roll d6 for attack.")
+            
+            flak = attack.get("flak_defense", {})
+            if flak:
+                lines.append(f"U-Boat Flak defense (if surfaced/periscope): Roll d6, on {flak.get('success_base', '5+')} aircraft aborts.")
+            
+            lines.append("If attack succeeds, roll d6 on U-Boat Damage Chart:")
+            
             sections.append({
-                "title": "B24 Movement",
-                "type": "bullets",
-                "content": [
-                    f"Move: {move.get('distance', 0)} hexes {move.get('direction', '')}",
-                    f"Turn: {turn.get('condition', '')}"
-                ]
+                "type": "inline_text_block",
+                "lines": lines
             })
             
-            if attack:
-                lines: List[str] = []
-                reqs = attack.get("requirements", [])
-                if reqs:
-                    lines.append(f"Requirements: {', '.join(reqs)}")
-                
-                flak = attack.get("flak_defense", {})
-                if flak:
-                    lines.append(f"Flak: {flak.get('roll', '')} - {flak.get('success_base', '')}")
+            # U-Boat damage chart
+            damage_chart = self.get_section_by_id("u_boat_damage_chart")
+            if damage_chart:
+                result_rows: List[List[str]] = []
+                for outcome in damage_chart.get("outcomes", []):
+                    roll_range = f"{outcome['roll_min']}"
+                    if outcome['roll_max'] != outcome['roll_min']:
+                        roll_range = f"{outcome['roll_min']}-{outcome['roll_max']}"
+                    
+                    result = outcome.get("result", "")
+                    description = outcome.get("description", "")
+                    result_rows.append([roll_range, result, description])
                 
                 sections.append({
-                    "title": "B24 Attack",
-                    "type": "bullets",
-                    "content": lines
+                    "type": "result_table",
+                    "style": "u_boat_damage",
+                    "headers": ["Roll", "Result", "Effect"],
+                    "rows": result_rows
                 })
         
         return sections
@@ -730,30 +696,41 @@ class MissionRules:
         events_section = self.get_section_by_id("end_of_turn_events")
         if events_section and not events_section.get("enabled", True):
             sections.append({
-                "title": "End of Turn Events",
-                "type": "bullets",
-                "content": [events_section.get("note", "No events in this mission")]
+                "type": "compact_line",
+                "content": events_section.get("note", "End of Turn Events: None in this mission")
             })
             return sections
         
-        # If we have an event table, describe it
+        # Event roll instruction
+        sections.append({
+            "type": "compact_line",
+            "content": "Roll 2d6:"
+        })
+        
+        # Event table with outcomes
         event_table = self.get_section_by_id("event_table")
         if event_table:
+            result_rows: List[List[str]] = []
+            for event in event_table.get("events", []):
+                roll_range = event.get("roll_range", "")
+                outcome = event.get("outcome", "")
+                effect = event.get("effect", "")
+                result_rows.append([roll_range, outcome, effect])
+            
             sections.append({
-                "title": "Event Table",
-                "type": "bullets",
-                "content": [
-                    "Roll 2d6 for random event",
-                    "See event table for outcomes"
-                ]
+                "type": "result_table",
+                "style": "event_outcomes",
+                "headers": ["2d6", "Event", "Effect"],
+                "rows": result_rows
             })
         else:
+            # Generic end of turn if no event table
             sections.append({
-                "title": "End of Turn",
-                "type": "bullets",
-                "content": [
-                    "Check victory conditions",
-                    "Advance to next turn"
+                "type": "inline_text_block",
+                "lines": [
+                    "Check victory/defeat conditions",
+                    "Advance turn counter",
+                    "Begin next turn"
                 ]
             })
         
@@ -769,7 +746,7 @@ def create_mission_rules_view_model(rules: MissionRules, current_phase: int = 1)
         current_phase: Current game phase (1-6, or uses phase enum values 3-8)
         
     Returns:
-        Dictionary with mission_info and phases array for UI rendering
+        Dictionary with mission_info, phases array, and reminder_block for UI rendering
     """
     # Map GamePhase enum values (3-8) to our phase numbering (1-6)
     phase_map = {3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6}
@@ -797,6 +774,18 @@ def create_mission_rules_view_model(rules: MissionRules, current_phase: int = 1)
             "is_active": (phase_num == current_phase),
             "sections": phase_content["sections"]
         })
+    
+    # Add reminder block (always shown after Phase 6)
+    view_model["reminder_block"] = {
+        "type": "reminder_block",
+        "style": "movement_forced_dive",
+        "title": "Movement & Forced Dive Reminder",
+        "lines": [
+            "Ships cannot enter a hex with another Ship. 'Blocked' = Land, off-Map or another Ship.",
+            "If a Ship enters a hex with Surfaced or Periscope Depth U-Boat, it is Forced to Dive to Medium: DL+1 now, and -2 AP next turn.",
+            "Hull Damage: U-Boat immediately ascends to permitted depth. If it cannot dive/ascend as required here, it is Destroyed."
+        ]
+    }
     
     return view_model
 

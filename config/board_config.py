@@ -1,6 +1,36 @@
 """
 Board Configuration
 Contains all game board settings that are constant across all missions.
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+CRITICAL: DO NOT TOUCH CALIBRATION CONSTANTS
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+The following values are FROZEN CALIBRATION CONSTANTS that were hand-tuned to
+align the hex grid and status box markers perfectly with the mission map image:
+
+- CALIBRATION_MAP_POSITION (board_x, board_y, board_width)
+- GLOBAL_BOARD_OFFSET (offset_x, offset_y)
+- HEX_GRID['offset_x'] and HEX_GRID['offset_y']
+- All STATUS_BOXES rect values
+
+These values must NOT be derived from or updated based on:
+- LEFT_PANEL_WIDTH
+- RIGHT_PANEL_WIDTH
+- GAME_BOARD_WIDTH
+- Any other layout variables
+
+They represent "where the map was positioned when we calibrated the overlays",
+and the rendering code uses them to compute adjustment offsets.
+
+When changing UI layout:
+✅ You MAY adjust: LEFT_PANEL_WIDTH, RIGHT_PANEL_WIDTH, font sizes, spacing
+✅ You MAY modify: left panel rendering logic in UnifiedGame._draw_left_panel
+❌ You MUST NOT change: Any calibration constants listed above
+
+Only change calibration values during an explicit "re-calibration session" with
+visual verification and user approval.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 """
 
 from typing import TypedDict
@@ -46,8 +76,8 @@ SCREEN_WIDTH = 1600
 SCREEN_HEIGHT = 900
 
 # Panel layout for unified game screen
-LEFT_PANEL_WIDTH = 300      # Mission briefing and rules
-RIGHT_PANEL_WIDTH = 350      # Event log/commentary
+LEFT_PANEL_WIDTH = 480      # Mission rules panel (rulebook-style)
+RIGHT_PANEL_WIDTH = 250      # Event log/commentary
 BOTTOM_PANEL_HEIGHT = 150    # Player controls
 TOP_BAR_HEIGHT = 40         # Title and game info
 
@@ -82,11 +112,15 @@ COLORS: dict[str, tuple[int, int, int] | tuple[int, int, int, int]] = {
 # - The base map position used during calibration
 # - The hex grid offset relative to that map position
 
+# !!!!! DO NOT TOUCH - CALIBRATION CONSTANTS !!!!!
+# These values were hand-tuned when LEFT_PANEL_WIDTH was 300 and represent
+# "where the map lived when we calibrated the overlays".
+# They must NOT be derived from current layout variables.
 # Calibration reference (for 1600x900 window, board area 950x710)
 CALIBRATION_MAP_POSITION = {
-    'board_x': 300,     # LEFT_PANEL_WIDTH
-    'board_y': 40,      # TOP_BAR_HEIGHT  
-    'board_width': 950, # GAME_BOARD_WIDTH
+    'board_x': 300,     # LEFT_PANEL_WIDTH at calibration time
+    'board_y': 40,      # TOP_BAR_HEIGHT at calibration time
+    'board_width': 950, # GAME_BOARD_WIDTH at calibration time (1600 - 300 - 350)
 }
 
 # Global board offset - fine-tuning adjustment for hex grid and status boxes

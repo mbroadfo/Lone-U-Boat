@@ -290,7 +290,7 @@ class UnifiedGameScreen(BaseScreen):
         )
     
     def _draw_left_panel(self, width: int, y: int, height: int) -> None:
-        """Draw the left panel with mission rules."""
+        """Draw the left panel with mission rules (rulebook-style layout)."""
         panel_rect = pygame.Rect(0, y, width, height)
         pygame.draw.rect(self.screen, (20, 25, 35), panel_rect)
         pygame.draw.line(self.screen, (50, 70, 100), (width-1, y), (width-1, y+height), 2)
@@ -319,14 +319,14 @@ class UnifiedGameScreen(BaseScreen):
         
         mission_info = self.mission_rules_view["mission_info"]
         phases = self.mission_rules_view["phases"]
+        reminder_block = self.mission_rules_view.get("reminder_block")
         
-        text_x = 10
+        text_x = 12
         text_y = y + 10
-        text_width = width - 20
+        text_width = width - 24
         
         # === MISSION HEADER ===
-        # Mission title
-        title_text = f"MISSION {mission_info['number']}"
+        title_text = f"MISSION {mission_info['number']}: {mission_info['title']}"
         self.draw_text(
             title_text,
             width // 2,
@@ -335,22 +335,7 @@ class UnifiedGameScreen(BaseScreen):
             color=(255, 220, 100),
             center=True
         )
-        text_y += 25
-        
-        # Mission name
-        name_lines = self._wrap_text(mission_info['title'], text_width, self.font_small)
-        for line in name_lines:
-            self.draw_text(
-                line,
-                width // 2,
-                text_y,
-                self.font_small,
-                color=(200, 220, 255),
-                center=True
-            )
-            text_y += 16
-        
-        text_y += 5
+        text_y += 28
         
         # Objective
         self.draw_text(
@@ -363,7 +348,7 @@ class UnifiedGameScreen(BaseScreen):
         text_y += 18
         
         objective_lines = self._wrap_text(mission_info['objective'], text_width, self.font_small)
-        for line in objective_lines[:3]:  # Limit to 3 lines to save space
+        for line in objective_lines[:2]:  # Limit to 2 lines
             self.draw_text(
                 line,
                 text_x,
@@ -374,7 +359,7 @@ class UnifiedGameScreen(BaseScreen):
             text_y += 16
         
         # Divider
-        text_y += 5
+        text_y += 8
         pygame.draw.line(
             self.screen,
             (70, 90, 120),
@@ -382,7 +367,7 @@ class UnifiedGameScreen(BaseScreen):
             (width - text_x, text_y),
             1
         )
-        text_y += 10
+        text_y += 12
         
         # === PHASE SECTIONS ===
         for phase_data in phases:
@@ -393,14 +378,14 @@ class UnifiedGameScreen(BaseScreen):
             sections = phase_data["sections"]
             
             # Phase header
-            header_height = 22
+            header_height = 26
             header_rect = pygame.Rect(0, text_y, width, header_height)
             
             # Background color for active phase
             if is_active:
                 pygame.draw.rect(self.screen, (40, 60, 90), header_rect)
             else:
-                pygame.draw.rect(self.screen, (25, 30, 40), header_rect)
+                pygame.draw.rect(self.screen, (28, 33, 42), header_rect)
             
             # Store rect for click detection
             self.phase_header_rects[phase_num] = header_rect
@@ -410,18 +395,18 @@ class UnifiedGameScreen(BaseScreen):
             self.draw_text(
                 indicator,
                 text_x,
-                text_y + 3,
+                text_y + 5,
                 self.font_small,
                 color=(180, 200, 220)
             )
             
             # Phase name
-            phase_label = f"Phase {phase_num} - {phase_name}"
+            phase_label = f"Phase {phase_num} — {phase_name}"
             label_color = (255, 255, 150) if is_active else (180, 200, 220)
             self.draw_text(
                 phase_label,
                 text_x + 20,
-                text_y + 3,
+                text_y + 5,
                 self.font_small,
                 color=label_color
             )
@@ -430,99 +415,317 @@ class UnifiedGameScreen(BaseScreen):
             border_color = (100, 140, 180) if is_active else (50, 70, 100)
             pygame.draw.rect(self.screen, border_color, header_rect, 1)
             
-            text_y += header_height + 2
+            text_y += header_height + 3
             
             # Phase content (if expanded)
             if is_expanded and sections:
-                content_y = text_y
-                
-                for section in sections:
-                    section_title = section.get("title", "")
-                    section_type = section.get("type", "bullets")
-                    content = section.get("content", [])
-                    
-                    # Section title
-                    self.draw_text(
-                        section_title,
-                        text_x + 5,
-                        content_y,
-                        self.font_small,
-                        color=(200, 220, 150)
-                    )
-                    content_y += 16
-                    
-                    # Section content
-                    if section_type == "bullets":
-                        for line in content[:8]:  # Limit bullets to avoid overflow
-                            # Wrap long lines
-                            wrapped = self._wrap_text(f"• {line}", text_width - 10, self.font_small)
-                            for wrapped_line in wrapped[:2]:  # Max 2 lines per bullet
-                                self.draw_text(
-                                    wrapped_line,
-                                    text_x + 10,
-                                    content_y,
-                                    self.font_small,
-                                    color=(170, 185, 200)
-                                )
-                                content_y += 14
-                    
-                    elif section_type == "table":
-                        # Table headers
-                        headers = section.get("headers", [])
-                        rows = section.get("rows", [])
-                        
-                        # Calculate column widths
-                        col_width = (text_width - 80) // len(headers) if headers else 30
-                        
-                        # Header row
-                        header_x = text_x + 80
-                        for header in headers:
-                            self.draw_text(
-                                header,
-                                header_x,
-                                content_y,
-                                self.font_small,
-                                color=(200, 220, 150)
-                            )
-                            header_x += col_width
-                        content_y += 14
-                        
-                        # Table rows
-                        for row in rows[:6]:  # Limit rows
-                            # Action name
-                            action_name = row.get("action", "")
-                            self.draw_text(
-                                action_name[:10],  # Truncate if needed
-                                text_x + 10,
-                                content_y,
-                                self.font_small,
-                                color=(170, 185, 200)
-                            )
-                            
-                            # Costs
-                            costs_x = text_x + 80
-                            for cost in row.get("costs", []):
-                                self.draw_text(
-                                    cost,
-                                    costs_x,
-                                    content_y,
-                                    self.font_small,
-                                    color=(170, 185, 200)
-                                )
-                                costs_x += col_width
-                            content_y += 14
-                    
-                    content_y += 5  # Gap between sections
-                    
-                    # Check if we're running out of space
-                    if content_y > y + height - 30:
-                        break
-                
-                text_y = content_y + 5
+                text_y = self._draw_sections(sections, text_x, text_y, text_width, y + height)
+                text_y += 8
             
             # Check if we need to stop (running out of space)
-            if text_y > y + height - 30:
+            if text_y > y + height - 100:
                 break
+        
+        # === REMINDER BLOCK (after all phases) ===
+        if reminder_block and text_y < y + height - 60:
+            text_y = self._draw_reminder_block(reminder_block, text_x, text_y, text_width, width)
+    
+    def _draw_sections(self, sections: List[Dict[str, Any]], x: int, y: int, width: int, max_y: int) -> int:
+        """
+        Draw content sections, returning the final y position.
+        
+        Args:
+            sections: List of section dictionaries
+            x: Left margin x position
+            y: Starting y position
+            width: Available width
+            max_y: Maximum y position (stop rendering if exceeded)
+        
+        Returns:
+            Final y position after rendering
+        """
+        for section in sections:
+            if y > max_y - 30:
+                break
+            
+            section_type = section.get("type", "")
+            
+            if section_type == "compact_line":
+                # Single line, no bullet, smaller font
+                content = section.get("content", "")
+                wrapped = self._wrap_text(content, width - 10, self.font_small)
+                for line in wrapped[:1]:  # Only first line
+                    self.draw_text(
+                        line,
+                        x + 5,
+                        y,
+                        self.font_small,
+                        color=(200, 220, 240)
+                    )
+                    y += 18
+                y += 4
+            
+            elif section_type == "inline_text_block":
+                # Multiple lines, no bullets, compact spacing
+                lines = section.get("lines", [])
+                for line in lines:
+                    wrapped = self._wrap_text(line, width - 10, self.font_small)
+                    for wrapped_line in wrapped:
+                        self.draw_text(
+                            wrapped_line,
+                            x + 5,
+                            y,
+                            self.font_small,
+                            color=(180, 195, 210)
+                        )
+                        y += 16
+                y += 6
+            
+            elif section_type == "table":
+                # Standard table with headers and rows
+                y = self._draw_table(section, x, y, width)
+                y += 8
+            
+            elif section_type == "mini_table":
+                # Smaller table (detection thresholds, etc.)
+                y = self._draw_mini_table(section, x, y, width)
+                y += 6
+            
+            elif section_type == "result_table":
+                # Results table with styling
+                y = self._draw_result_table(section, x, y, width)
+                y += 8
+            
+            elif section_type == "result_table_ref":
+                # Reference to shared table
+                y = self._draw_result_table_ref(section, x, y, width)
+                y += 8
+        
+        return y
+    
+    def _draw_table(self, section: Dict[str, Any], x: int, y: int, width: int) -> int:
+        """Draw a standard action table with nested children."""
+        headers = section.get("headers", [])
+        rows = section.get("rows", [])
+        style = section.get("style", "")
+        
+        # Column widths
+        if style == "action_costs":
+            action_col_width = 120
+            cost_col_width = (width - action_col_width - 20) // len(headers)
+        elif style == "escort_actions":
+            d6_col_width = 30
+            action_col_width = (width - d6_col_width - 20) // 2
+        else:
+            col_width = (width - 20) // max(len(headers) + 1, 2)
+            action_col_width = col_width
+            cost_col_width = col_width
+        
+        # Headers (bold effect by drawing twice with offset)
+        header_x = x + 5
+        if style == "action_costs":
+            self.draw_text("Action", header_x, y, self.font_small, color=(220, 230, 150))
+            header_x += action_col_width
+        elif style == "escort_actions":
+            self.draw_text("d6", header_x, y, self.font_small, color=(220, 230, 150))
+            header_x += d6_col_width
+        
+        for header in headers:
+            self.draw_text(header, header_x, y, self.font_small, color=(220, 230, 150))
+            if style == "action_costs":
+                header_x += cost_col_width
+            elif style == "escort_actions":
+                header_x += action_col_width
+            else:
+                header_x += col_width
+        y += 16
+        
+        # Rows
+        for row in rows:
+            cells = row.get("cells", [])
+            children = row.get("children", [])
+            
+            # Draw cells
+            cell_x = x + 5
+            for i, cell in enumerate(cells):
+                if style == "action_costs":
+                    if i == 0:
+                        # Action name
+                        self.draw_text(cell[:14], cell_x, y, self.font_small, color=(180, 195, 210))
+                        cell_x += action_col_width
+                    else:
+                        # Cost value
+                        self.draw_text(str(cell), cell_x, y, self.font_small, color=(180, 195, 210))
+                        cell_x += cost_col_width
+                elif style == "escort_actions":
+                    if i == 0:
+                        # d6 roll
+                        self.draw_text(cell, cell_x, y, self.font_small, color=(180, 195, 210))
+                        cell_x += d6_col_width
+                    else:
+                        # Action description (truncate if needed)
+                        self.draw_text(cell[:28], cell_x, y, self.font_small, color=(180, 195, 210))
+                        cell_x += action_col_width
+                else:
+                    self.draw_text(str(cell), cell_x, y, self.font_small, color=(180, 195, 210))
+                    cell_x += col_width
+            y += 15
+            
+            # Draw children (indented)
+            if children:
+                for child in children:
+                    y = self._draw_child_content(child, x + 15, y, width - 15)
+        
+        return y
+    
+    def _draw_child_content(self, child: Dict[str, Any], x: int, y: int, width: int) -> int:
+        """Draw nested child content (mini_table, inline_text_block)."""
+        child_type = child.get("type", "")
+        
+        if child_type == "mini_table":
+            y = self._draw_mini_table(child, x, y, width)
+            y += 4
+        elif child_type == "inline_text_block":
+            lines = child.get("lines", [])
+            for line in lines:
+                wrapped = self._wrap_text(line, width - 10, self.font_small)
+                for wrapped_line in wrapped:
+                    self.draw_text(
+                        wrapped_line,
+                        x + 5,
+                        y,
+                        self.font_small,
+                        color=(160, 175, 190)
+                    )
+                    y += 14
+            y += 4
+        
+        return y
+    
+    def _draw_mini_table(self, section: Dict[str, Any], x: int, y: int, width: int) -> int:
+        """Draw a compact mini-table."""
+        headers = section.get("headers", [])
+        rows = section.get("rows", [])
+        
+        # Calculate column widths
+        num_cols = len(headers)
+        col_width = (width - 20) // num_cols if num_cols > 0 else 50
+        
+        # Headers
+        header_x = x + 5
+        for header in headers:
+            self.draw_text(header[:12], header_x, y, self.font_small, color=(200, 215, 230))
+            header_x += col_width
+        y += 14
+        
+        # Rows
+        for row in rows:
+            cell_x = x + 5
+            for cell in row:
+                self.draw_text(str(cell)[:12], cell_x, y, self.font_small, color=(170, 185, 200))
+                cell_x += col_width
+            y += 13
+        
+        return y
+    
+    def _draw_result_table(self, section: Dict[str, Any], x: int, y: int, width: int) -> int:
+        """Draw a result table with title."""
+        title = section.get("title", "")
+        headers = section.get("headers", [])
+        rows = section.get("rows", [])
+        
+        # Title
+        if title:
+            title_lines = self._wrap_text(title, width - 10, self.font_small)
+            for line in title_lines:
+                self.draw_text(line, x + 5, y, self.font_small, color=(220, 230, 150))
+                y += 16
+            y += 4
+        
+        # Headers
+        num_cols = len(headers)
+        col_width = (width - 20) // num_cols if num_cols > 0 else 50
+        
+        header_x = x + 5
+        for header in headers:
+            self.draw_text(header[:15], header_x, y, self.font_small, color=(200, 215, 230))
+            header_x += col_width
+        y += 14
+        
+        # Rows
+        for row in rows:
+            cell_x = x + 5
+            for i, cell in enumerate(row):
+                # Truncate long text
+                cell_text = str(cell)[:20] if i < 2 else str(cell)[:35]
+                self.draw_text(cell_text, cell_x, y, self.font_small, color=(170, 185, 200))
+                cell_x += col_width
+            y += 13
+        
+        return y
+    
+    def _draw_result_table_ref(self, section: Dict[str, Any], x: int, y: int, width: int) -> int:
+        """Draw a table referenced from shared rules."""
+        ref_id = section.get("ref", "")
+        title = section.get("title", "")
+        
+        # Look up the referenced section
+        if self.mission_rules:
+            referenced_section = self.mission_rules.get_section_by_id(ref_id)
+            if referenced_section:
+                # Convert to result_table format and draw
+                if ref_id == "allied_ship_damage":
+                    # Special handling for ship damage chart
+                    if title:
+                        title_lines = self._wrap_text(title, width - 10, self.font_small)
+                        for line in title_lines:
+                            self.draw_text(line, x + 5, y, self.font_small, color=(220, 230, 150))
+                            y += 16
+                        y += 4
+                    
+                    # Draw each ship type
+                    for ship_class in referenced_section.get("ship_classes", []):
+                        ship_type = ship_class["ship_type"].capitalize()
+                        self.draw_text(f"{ship_type}:", x + 5, y, self.font_small, color=(200, 215, 230))
+                        y += 14
+                        
+                        for outcome in ship_class["outcomes"][:4]:  # Limit to 4 outcomes
+                            roll_text = f"{outcome['roll_min']}"
+                            if outcome['roll_max'] != outcome['roll_min']:
+                                roll_text = f"{outcome['roll_min']}-{outcome['roll_max']}"
+                            result_text = f"{roll_text}: {outcome['result']} - {outcome.get('description', '')[:30]}"
+                            
+                            wrapped = self._wrap_text(result_text, width - 20, self.font_small)
+                            for line in wrapped[:1]:
+                                self.draw_text(line, x + 10, y, self.font_small, color=(170, 185, 200))
+                                y += 13
+                        y += 6
+        
+        return y
+    
+    def _draw_reminder_block(self, reminder: Dict[str, Any], x: int, y: int, width: int, panel_width: int) -> int:
+        """Draw the reminder block with special styling."""
+        title = reminder.get("title", "")
+        lines = reminder.get("lines", [])
+        
+        # Background box
+        block_height = 20 + len(lines) * 15
+        block_rect = pygame.Rect(x - 5, y, panel_width - 2*x + 10, block_height)
+        pygame.draw.rect(self.screen, (45, 50, 30), block_rect)
+        pygame.draw.rect(self.screen, (120, 130, 80), block_rect, 1)
+        
+        # Title
+        self.draw_text(title, x + 5, y + 4, self.font_small, color=(220, 230, 150))
+        y += 18
+        
+        # Lines
+        for line in lines:
+            wrapped = self._wrap_text(line, width - 20, self.font_small)
+            for wrapped_line in wrapped:
+                self.draw_text(wrapped_line, x + 5, y, self.font_small, color=(190, 200, 160))
+                y += 14
+        
+        return y + 5
     
     def _wrap_text(self, text: str, max_width: int, font: pygame.font.Font) -> List[str]:
         """
