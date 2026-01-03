@@ -16,6 +16,7 @@
 - `StatusBoxCalibration`: boxes_in_map[name] = (x, y, w, h) in map pixels
 
 **API:**
+
 ```python
 load_mission_layout(mission_number) -> MissionLayoutConfig
 save_mission_layout(mission_number, MissionLayoutConfig)
@@ -35,6 +36,7 @@ save_mission_layout(mission_number, MissionLayoutConfig)
 **Class:** `BoardLayoutRuntime(screen_size, layout_cfg, ui_cfg)`
 
 **Public API:**
+
 ```python
 recompute(screen_size: tuple[int, int])
     # Recompute positions when window size changes (full-screen case)
@@ -54,6 +56,7 @@ hit_test_status_box(pos) -> Optional[str]
 ```
 
 **Public Data:**
+
 ```python
 scale: float                                    # Uniform scale from map to screen
 board_rects.map_rect: pygame.Rect              # Where map is drawn
@@ -82,6 +85,7 @@ status_box_rects: dict[str, pygame.Rect]       # Status box positions in screen 
 - `GameRenderer` instance
 
 **APIs for Screens:**
+
 ```python
 update_screen_size(new_size: tuple[int, int])
     # Called when window resizes
@@ -102,6 +106,7 @@ update_board_region(board_rect: pygame.Rect)
 - ❌ No hardcoded pixel positions
 
 **Example:**
+
 ```python
 def update_board_region(self, board_rect: pygame.Rect) -> None:
     self.layout.recompute_for_board(board_rect)
@@ -123,6 +128,7 @@ def update_board_region(self, board_rect: pygame.Rect) -> None:
 - Delegating to game/layout for board-related operations
 
 **Pattern:**
+
 ```python
 def render(self):
     # 1. Calculate panel dimensions
@@ -166,6 +172,7 @@ def render(self):
 - `layout.status_box_rects` - where status boxes go
 
 **Key Methods:**
+
 ```python
 render_map(map_image)
     # Uses layout.board_rects.map_rect
@@ -219,7 +226,7 @@ render_debug_overlay(layout, selected_box)
 
 ### Data Flow
 
-```
+```text
 Arrow Key Press
     ↓
 Adjust layout_cfg.hex_grid_calib.origin_in_map
@@ -249,24 +256,26 @@ save_mission_layout(mission_number, layout_cfg)
 
 ## 3. Rules of Thumb for Future Changes
 
-### If You Catch Yourself Writing `x * scale + offset`...
+### If You Catch Yourself Writing x times scale plus offset
 
 **STOP.** Instead:
 1. Put that concept into calibration data (`MissionLayoutConfig`)
 2. Add computation to `BoardLayoutRuntime`
 3. Use the computed value from `layout`
 
-### If a Screen Needs to Move or Resize the Board...
+### If a Screen Needs to Move or Resize the Board
 
 Compute a new `board_rect` and call:
+
 ```python
 game.update_board_region(board_rect)
 ```
 
-### If Something Needs to Respond to Window Resize...
+### If Something Needs to Respond to Window Resize
 
 1. Handle `VIDEORESIZE` in `ScreenManager`
 2. Call `update_screen_size()` on current screen/game:
+
 ```python
 if event.type == pygame.VIDEORESIZE:
     self.screen = pygame.display.get_surface()
@@ -274,7 +283,7 @@ if event.type == pygame.VIDEORESIZE:
         self.current_screen.update_screen(self.screen)
 ```
 
-### When Adding New Missions...
+### When Adding New Missions
 
 1. Create `missions/mission_N_layout.json` by copying existing one
 2. Start the mission
@@ -413,7 +422,7 @@ def handle_events(self, event):
 
 ## 7. Architecture Diagram
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                        ScreenManager                         │
 │  - Handles VIDEORESIZE events                               │
@@ -465,6 +474,7 @@ def handle_events(self, event):
 ## 8. Common Pitfalls to Avoid
 
 ### ❌ DON'T: Add scaling logic to screens
+
 ```python
 # BAD - screen doing layout math
 def _draw_game_board(self):
@@ -474,6 +484,7 @@ def _draw_game_board(self):
 ```
 
 ### ✅ DO: Let layout handle it
+
 ```python
 # GOOD - screen just defines frame
 def _draw_game_board(self, x, y, width, height):
@@ -483,24 +494,28 @@ def _draw_game_board(self, x, y, width, height):
 ```
 
 ### ❌ DON'T: Hardcode positions
+
 ```python
 # BAD - magic numbers
 status_box_x = 475 + offset_x
 ```
 
 ### ✅ DO: Use layout rects
+
 ```python
 # GOOD - position from layout
 rect = self.layout.status_box_rects['detection_silent']
 ```
 
 ### ❌ DON'T: Store screen positions in config
+
 ```python
 # BAD - screen-dependent
 HEX_ORIGIN_SCREEN = (960, 303)  # What resolution?
 ```
 
 ### ✅ DO: Store map-relative calibration
+
 ```python
 # GOOD - resolution-independent
 "origin_in_map": [480.5, 220.0]  # Map pixels

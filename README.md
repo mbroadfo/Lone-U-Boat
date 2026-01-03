@@ -62,50 +62,46 @@ python main.py --mission 1
 
 ### Game Controls
 
+**Basic Movement:**
 - **Q/E**: Rotate U-boat counterclockwise/clockwise
 - **W**: Move U-boat forward in current facing direction
 - **Z/X**: Change depth (Z = deeper, X = shallower)
-- **ESC**: Quit game
 
-### Editor Mode
-
-The editor allows you to view the game board, test positioning, and
-(with the `--edit` flag) modify the map configuration.
-
-**View-Only Mode** (safe):
-
-```powershell
-python editor.py
-```
-
-**Edit Mode** (for development/debugging only):
-
-```powershell
-python editor.py --edit
-```
-
-### Editor Controls
-
-**View Controls (always available):**
+**Display Toggles:**
 - **G**: Toggle hex grid overlay
-- **M**: Toggle map image
-- **V**: Toggle terrain visualization (shallow/land hexes)
-- **S**: Toggle show all status markers
-- **T**: Toggle torpedo loading (for testing markers)
-- **Q/E**: Rotate U-boat
-- **W**: Move U-boat forward
-- **Z/X**: Change depth
-- **ESC**: Quit
+- **M**: Toggle map display
+- **V**: Toggle terrain overlay
+- **S**: Toggle status markers
 
-**Edit Controls (only with --edit flag):**
-- **Click-Drag**: Move the entire grid
-- **Arrow Keys**: Fine grid adjustment (1 pixel)
-- **Shift + Arrow Keys**: Coarse grid adjustment (10 pixels)
-- **Shift + Click**: Add hex to mission map
-- **Ctrl + Click**: Remove hex from mission map
-- **Alt + Click-Drag**: Detect coordinates for status box placement
-- **P**: Print current hex configuration to terminal
-- **O**: Print current grid offset values
+**Window:**
+- **F11**: Toggle fullscreen
+- **ESC**: Exit to menu / quit
+
+### Alignment Mode (F2)
+
+Press **F2** during gameplay to enter Alignment Mode for calibrating the hex grid and status box positions. This is useful if elements appear misaligned or when setting up new missions.
+
+**Alignment Controls:**
+- **F2**: Toggle alignment mode on/off
+- **Tab**: Switch between hex grid and status box adjustment
+- **Arrow Keys**: Adjust position (1 map pixel, 10 with Shift)
+- **+/-**: Scale hex grid or status boxes (1% normal, 5% with Shift)
+- **Click**: Select status box (when in status box mode)
+- **P**: Print current calibration to console
+- **L**: Save calibration to `missions/mission_N_layout.json`
+
+**Quick Calibration Workflow:**
+1. Press **F2** to enter alignment mode
+2. Use **Arrow Keys** to adjust hex grid until it aligns with the map
+3. Press **Tab** to switch to status boxes mode
+4. Use **Arrow Keys** to move all status boxes together (group operation)
+5. Use **+/-** to scale all boxes proportionally if needed
+6. Press **L** to save your calibration
+7. Press **F2** to exit and test
+
+All status boxes move and scale together as a group, maintaining their relative positions. Calibrations are stored in `missions/mission_N_layout.json` and work at any screen resolution.
+
+For detailed documentation, see [ARCHITECTURE_BOARD_LAYOUT.md](ARCHITECTURE_BOARD_LAYOUT.md).
 
 ## Project Structure
 
