@@ -12,15 +12,28 @@ from .models import HexCoord
 class HexGrid:
     """Handles hex grid calculations and rendering."""
     
-    def __init__(self, size: int, cols: int, rows: int, offset_x: int = 0, offset_y: int = 0, 
-                 global_offset_x: int = 0, global_offset_y: int = 0):
+    def __init__(self, size: int, cols: int, rows: int, offset_x: float = 0, offset_y: float = 0, 
+                 global_offset_x: float = 0, global_offset_y: float = 0):
+        """Initialize hex grid.
+        
+        Args:
+            size: Hex radius
+            cols: Number of columns
+            rows: Number of rows
+            offset_x: X offset in screen space (set by layout engine)
+            offset_y: Y offset in screen space (set by layout engine)
+            global_offset_x: Legacy parameter, kept for backward compatibility (ignored if 0)
+            global_offset_y: Legacy parameter, kept for backward compatibility (ignored if 0)
+        """
         self.size = size
         self.cols = cols
         self.rows = rows
         self.offset_x = offset_x
         self.offset_y = offset_y
-        self.global_offset_x = global_offset_x
-        self.global_offset_y = global_offset_y
+        # Legacy support: add global offset to main offset if non-zero
+        if global_offset_x != 0 or global_offset_y != 0:
+            self.offset_x += global_offset_x
+            self.offset_y += global_offset_y
         
         # Flat-top hex math (pointy sides)
         self.width = 2 * size
@@ -36,13 +49,13 @@ class HexGrid:
         """
         x = self.size * (3/2 * coord.q)
         y = self.size * (math.sqrt(3) * (coord.r + coord.q / 2))
-        return (x + self.offset_x + self.global_offset_x, y + self.offset_y + self.global_offset_y)
+        return (x + self.offset_x, y + self.offset_y)
     
     def pixel_to_hex(self, x: float, y: float) -> HexCoord:
         """Convert pixel coordinates to axial hex coordinates (flat-top hexes)."""
-        # Adjust for both offsets
-        x -= (self.offset_x + self.global_offset_x)
-        y -= (self.offset_y + self.global_offset_y)
+        # Adjust for offset
+        x -= self.offset_x
+        y -= self.offset_y
         
         # Inverse axial coordinate formulas
         q = (2/3 * x) / self.size

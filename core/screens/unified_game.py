@@ -6,7 +6,7 @@ Left: Mission briefing | Center: Game board | Right: Event log | Bottom: Control
 import pygame
 import sys
 from typing import Optional, Any, List, Dict
-from ..models import Facing, Depth, GamePhase
+from ..models import Facing, Depth
 from .base_screen import BaseScreen
 
 
@@ -67,17 +67,25 @@ class UnifiedGameScreen(BaseScreen):
             sys.path.insert(0, 'missions')
             from mission_rules_loader import load_mission_rules, create_mission_rules_view_model  # type: ignore[import-not-found]
             self.mission_rules = load_mission_rules(mission_number)
-            self.mission_rules_view = create_mission_rules_view_model(self.mission_rules, 1)
+            self.mission_rules_view = create_mission_rules_view_model(self.mission_rules, 1)  # type: ignore[reportUnknownMemberType]
         except Exception as e:
             print(f"Warning: Could not load mission rules: {e}")
         
         # Mission Rules panel state
         self.expanded_phases = {1: True, 2: False, 3: False, 4: False, 5: False, 6: False}  # Phase 1 expanded by default
-        self.phase_header_rects = {}  # Store clickable regions for phase headers
+        self.phase_header_rects: Dict[int, pygame.Rect] = {}  # Store clickable regions for phase headers
         
         # Panel scroll positions
         self.left_panel_scroll = 0
         self.right_panel_scroll = 0
+        
+        # Alignment mode (for editor functionality)
+        self.alignment_mode = False
+        self.alignment_target = 'grid'  # 'grid' or 'status_boxes'
+        self.selected_status_box: Optional[str] = None
+        
+        # Cache board rect to avoid recomputing layout every frame
+        self.cached_board_rect: Optional[pygame.Rect] = None
     
     def add_event(self, message: str) -> None:
         """Add an event to the log."""
@@ -107,6 +115,21 @@ class UnifiedGameScreen(BaseScreen):
                 self.screen_manager.toggle_fullscreen()
                 mode = "fullscreen" if self.screen_manager.fullscreen else "windowed"
                 self.add_event(f"Switched to {mode} mode (F11 to toggle)")
+            
+            elif event.key == pygame.K_F2:
+                # Toggle alignment mode (editor)
+                self.alignment_mode = not self.alignment_mode
+                if self.alignment_mode:
+                    self.add_event("ALIGNMENT MODE: Use arrow keys to adjust grid/boxes")
+                    self.add_event("Tab: Switch grid/status | Click: Select box | P: Print | L: Save")
+                    self.game.show_grid = True
+                    self.game.show_map = True
+                else:
+                    self.add_event("Alignment mode OFF")
+            
+            # Alignment mode controls
+            elif self.alignment_mode:
+                self._handle_alignment_input(event)
             
             # Toggle display options (work in both setup and game modes)
             elif event.key == pygame.K_g:
@@ -140,6 +163,10 @@ class UnifiedGameScreen(BaseScreen):
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # Left click
                 mouse_pos = event.pos
+                
+                # Handle alignment mode clicks
+                if self.alignment_mode:
+                    self.handle_mouse_click_alignment(mouse_pos)
                 
                 # Check if clicking on a phase header in left panel
                 for phase_num, rect in self.phase_header_rects.items():
@@ -189,12 +216,182 @@ class UnifiedGameScreen(BaseScreen):
         elif event.key == pygame.K_d:
             self.selected_facing = Facing.NORTHEAST
     
+    def _handle_alignment_input(self, event: pygame.event.Event) -> None:
+        """Handle input during alignment mode (editor)."""
+        # Check modifiers
+        shift_pressed = pygame.key.get_mods() & pygame.KMOD_SHIFT
+        delta_map = 10.0 if shift_pressed else 1.0  # Movement delta in map pixels
+        
+        if event.key == pygame.K_TAB:
+            # Switch between grid and status box alignment
+            self.alignment_target = 'status_boxes' if self.alignment_target == 'grid' else 'grid'
+            if self.alignment_target == 'status_boxes':
+                self.add_event("Status boxes mode: Arrow keys move ALL boxes")
+                self.add_event("+/- scales ALL boxes together")
+            else:
+                self.add_event(f"Alignment target: {self.alignment_target}")
+        
+        elif event.key == pygame.K_p:
+            # Print current calibration
+            self._print_calibration()
+        
+        elif event.key == pygame.K_l:
+            # Save current calibration
+            self._save_calibration()
+        
+        # +/- keys for scaling
+        elif event.key in (pygame.K_EQUALS, pygame.K_PLUS, pygame.K_MINUS, pygame.K_UNDERSCORE):
+            layout_cfg = self.game.layout.cfg
+            
+            if self.alignment_target == 'grid':
+                # Scale hex grid - use absolute increment
+                scale_step = 0.5 if shift_pressed else 0.1
+                current_size = layout_cfg.hex_grid_calib.hex_size
+                
+                if event.key in (pygame.K_EQUALS, pygame.K_PLUS):
+                    new_size = current_size + scale_step
+                else:  # minus/underscore
+                    new_size = max(5.0, current_size - scale_step)
+                
+                layout_cfg.hex_grid_calib.hex_size = new_size
+                self.add_event(f"Hex size: {new_size:.1f}")
+            
+            elif self.alignment_target == 'status_boxes':
+                # Scale ALL status boxes together - including positions and dimensions
+                # Use smaller multiplier for fine control: 1% or 5% per press
+                scale_percent = 0.05 if shift_pressed else 0.01
+                boxes = layout_cfg.status_calib.boxes_in_map
+                
+                # Find the center point of all boxes to scale from
+                if boxes:
+                    min_x = min(x for x, _, _, _ in boxes.values())
+                    min_y = min(y for _, y, _, _ in boxes.values())
+                    max_x = max(x + w for x, _, w, _ in boxes.values())
+                    max_y = max(y + h for _, y, _, h in boxes.values())
+                    center_x = (min_x + max_x) / 2
+                    center_y = (min_y + max_y) / 2
+                    
+                    scale_multiplier = 1.0 + scale_percent if event.key in (pygame.K_EQUALS, pygame.K_PLUS) else 1.0 - scale_percent
+                    
+                    # Apply scale to ALL boxes - both position and size
+                    for box_name in boxes:
+                        x, y, w, h = boxes[box_name]
+                        # Scale position relative to center
+                        new_x = center_x + (x - center_x) * scale_multiplier
+                        new_y = center_y + (y - center_y) * scale_multiplier
+                        # Scale dimensions
+                        new_w = max(5.0, w * scale_multiplier)
+                        new_h = max(5.0, h * scale_multiplier)
+                        boxes[box_name] = (new_x, new_y, new_w, new_h)
+                    
+                    percent_change = (scale_multiplier - 1.0) * 100
+                    self.add_event(f"All status boxes scaled by {percent_change:+.1f}%")
+            
+            # Invalidate cache and recompute
+            self.cached_board_rect = None
+            self.game.layout.recompute((self.screen.get_width(), self.screen.get_height()))
+            self.game.hex_grid.size = int(self.game.layout.hex_size)
+            self.game.hex_grid.offset_x, self.game.hex_grid.offset_y = self.game.layout.hex_origin_screen
+        
+        # Arrow key adjustments
+        elif event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
+            if self.alignment_target == 'grid':
+                # Adjust hex grid origin
+                layout_cfg = self.game.layout.cfg
+                origin_x, origin_y = layout_cfg.hex_grid_calib.origin_in_map
+                
+                if event.key == pygame.K_LEFT:
+                    origin_x -= delta_map
+                elif event.key == pygame.K_RIGHT:
+                    origin_x += delta_map
+                elif event.key == pygame.K_UP:
+                    origin_y -= delta_map
+                elif event.key == pygame.K_DOWN:
+                    origin_y += delta_map
+                
+                # Update calibration
+                layout_cfg.hex_grid_calib.origin_in_map = (origin_x, origin_y)
+                # Invalidate cache and recompute layout
+                self.cached_board_rect = None
+                self.game.layout.recompute((self.screen.get_width(), self.screen.get_height()))
+                self.game.hex_grid.size = int(self.game.layout.hex_size)
+                self.game.hex_grid.offset_x, self.game.hex_grid.offset_y = self.game.layout.hex_origin_screen
+                
+                self.add_event(f"Grid origin: ({origin_x:.1f}, {origin_y:.1f})")
+            
+            elif self.alignment_target == 'status_boxes':
+                # Move ALL status boxes together
+                layout_cfg = self.game.layout.cfg
+                boxes = layout_cfg.status_calib.boxes_in_map
+                
+                offset_x = 0.0
+                offset_y = 0.0
+                
+                if event.key == pygame.K_LEFT:
+                    offset_x = -delta_map
+                elif event.key == pygame.K_RIGHT:
+                    offset_x = delta_map
+                elif event.key == pygame.K_UP:
+                    offset_y = -delta_map
+                elif event.key == pygame.K_DOWN:
+                    offset_y = delta_map
+                
+                # Apply offset to ALL boxes
+                for box_name in boxes:
+                    x, y, w, h = boxes[box_name]
+                    boxes[box_name] = (x + offset_x, y + offset_y, w, h)
+                
+                # Invalidate cache and recompute layout
+                self.cached_board_rect = None
+                self.game.layout.recompute((self.screen.get_width(), self.screen.get_height()))
+                
+                self.add_event(f"All status boxes moved by ({offset_x:.1f}, {offset_y:.1f})")
+    
+    def _print_calibration(self) -> None:
+        """Print current calibration to console."""
+        layout_cfg = self.game.layout.cfg
+        print("\n" + "="*60)
+        print("CURRENT CALIBRATION")
+        print("="*60)
+        print(f"\nMap Size: {layout_cfg.map_calib.width}x{layout_cfg.map_calib.height}")
+        print(f"\nHex Grid:")
+        print(f"  Size: {layout_cfg.hex_grid_calib.hex_size}")
+        print(f"  Origin: {layout_cfg.hex_grid_calib.origin_in_map}")
+        print(f"\nStatus Boxes:")
+        for name, rect in sorted(layout_cfg.status_calib.boxes_in_map.items()):
+            print(f"  {name}: {rect}")
+        print("="*60 + "\n")
+        self.add_event("Calibration printed to console")
+    
+    def _save_calibration(self) -> None:
+        """Save current calibration to JSON file."""
+        from config.board_layout_config import save_mission_layout
+        layout_cfg = self.game.layout.cfg
+        save_mission_layout(self.mission_number, layout_cfg)
+        self.add_event(f"Calibration saved to mission_{self.mission_number}_layout.json")
+    
+    def handle_mouse_click_alignment(self, pos: tuple[int, int]) -> None:
+        """Handle mouse click in alignment mode to select status boxes."""
+        if self.alignment_target == 'status_boxes':
+            hit_box = self.game.layout.hit_test_status_box(pos)
+            if hit_box:
+                self.selected_status_box = hit_box
+                self.add_event(f"Selected: {hit_box}")
+            else:
+                self.selected_status_box = None
+                self.add_event("No status box selected")
+    
     def update_screen(self, screen: pygame.Surface) -> None:
         """Update screen reference when display mode changes."""
         super().update_screen(screen)
         # Propagate to game components
         self.game.screen = screen
         self.game.renderer.screen = screen
+        # Invalidate cached board rect so layout recomputes
+        self.cached_board_rect = None
+        # Update layout for new screen size
+        new_size = (screen.get_width(), screen.get_height())
+        self.game.update_screen_size(new_size)
     
     def update(self) -> None:
         """Update game state."""
@@ -230,26 +427,23 @@ class UnifiedGameScreen(BaseScreen):
         # Calculate panel dimensions based on screen size
         left_width = self.config.LEFT_PANEL_WIDTH
         right_width = self.config.RIGHT_PANEL_WIDTH
-        bottom_height = self.config.BOTTOM_PANEL_HEIGHT
         top_height = self.config.TOP_BAR_HEIGHT
+        bottom_padding = 80  # Extra padding to ensure bottom hexes have room to render completely
         
         board_width = screen_width - left_width - right_width
-        board_height = screen_height - top_height - bottom_height
+        board_height = screen_height - top_height - bottom_padding
         
         # Draw top bar
         self._draw_top_bar(screen_width, top_height)
         
-        # Draw left panel (mission briefing)
-        self._draw_left_panel(left_width, top_height, board_height + bottom_height)
+        # Draw left panel (mission rules)
+        self._draw_left_panel(left_width, top_height, board_height)
         
-        # Draw center (game board)
+        # Draw center (game board) - now extends to bottom
         self._draw_game_board(left_width, top_height, board_width, board_height)
         
-        # Draw right panel (event log)
-        self._draw_right_panel(left_width + board_width, top_height, right_width, board_height + bottom_height)
-        
-        # Draw bottom panel (controls)
-        self._draw_bottom_panel(left_width, top_height + board_height, board_width, bottom_height)
+        # Draw right panel (event log + controls)
+        self._draw_right_panel(left_width + board_width, top_height, right_width, board_height)
         
         pygame.display.flip()
     
@@ -510,16 +704,17 @@ class UnifiedGameScreen(BaseScreen):
         style = section.get("style", "")
         
         # Column widths
+        col_width = (width - 20) // max(len(headers) + 1, 2)  # Default for all styles
+        action_col_width = col_width
+        cost_col_width = col_width
+        d6_col_width = 30
+        
         if style == "action_costs":
             action_col_width = 120
             cost_col_width = (width - action_col_width - 20) // len(headers)
         elif style == "escort_actions":
             d6_col_width = 30
             action_col_width = (width - d6_col_width - 20) // 2
-        else:
-            col_width = (width - 20) // max(len(headers) + 1, 2)
-            action_col_width = col_width
-            cost_col_width = col_width
         
         # Headers (bold effect by drawing twice with offset)
         header_x = x + 5
@@ -740,7 +935,7 @@ class UnifiedGameScreen(BaseScreen):
             List of wrapped lines
         """
         words = text.split()
-        lines = []
+        lines: List[str] = []
         current_line = ""
         
         for word in words:
@@ -762,77 +957,61 @@ class UnifiedGameScreen(BaseScreen):
         return lines
     
     def _draw_game_board(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw the central game board."""
+        """Draw the central game board.
+        
+        Now much simpler: just define the board area and let the layout engine
+        handle all positioning and scaling.
+        """
         board_rect = pygame.Rect(x, y, width, height)
         pygame.draw.rect(self.screen, (15, 20, 30), board_rect)
         
-        # Render directly to main screen (not subsurface) to preserve alignment
+        # Update layout only if board region changed
+        if self.cached_board_rect != board_rect:
+            self.game.update_board_region(board_rect)
+            self.cached_board_rect = board_rect
+        
+        # Set clip region with extra padding to allow hex overhang at edges
+        # Hexes can extend ~40 pixels beyond their center point
+        hex_overhang = 60
+        clip_rect = pygame.Rect(
+            board_rect.x - hex_overhang,
+            board_rect.y - hex_overhang,
+            board_rect.width + 2 * hex_overhang,
+            board_rect.height + 2 * hex_overhang
+        )
         old_clip = self.screen.get_clip()
-        self.screen.set_clip(board_rect)
+        self.screen.set_clip(clip_rect)
         
-        # Calculate map position (centered horizontally in board area)
-        map_x_offset = 0
-        if self.game.map_image:
-            map_x_offset = (width - self.game.map_image.get_width()) // 2
-        
-        # Actual map position on screen
-        actual_map_x = x + map_x_offset
-        actual_map_y = y
-        
-        # Calculate offset adjustment: difference between actual position and calibration position
-        # Calibration was done with map at a specific board position
-        cal_board_x = self.config.CALIBRATION_MAP_POSITION['board_x']
-        cal_board_y = self.config.CALIBRATION_MAP_POSITION['board_y']
-        cal_board_width = self.config.CALIBRATION_MAP_POSITION['board_width']
-        
-        if self.game.map_image:
-            cal_map_x_offset = (cal_board_width - self.game.map_image.get_width()) // 2
-        else:
-            cal_map_x_offset = 0
-            
-        cal_map_x = cal_board_x + cal_map_x_offset
-        cal_map_y = cal_board_y
-        
-        # Adjust hex grid and renderer for current vs calibration position
-        adjustment_x = actual_map_x - cal_map_x
-        adjustment_y = actual_map_y - cal_map_y
-        
-        # Temporarily adjust global offsets for this render
-        original_global_x = self.game.hex_grid.global_offset_x
-        original_global_y = self.game.hex_grid.global_offset_y
-        original_renderer_x = self.game.renderer.global_offset_x
-        original_renderer_y = self.game.renderer.global_offset_y
-        
-        self.game.hex_grid.global_offset_x = original_global_x + adjustment_x
-        self.game.hex_grid.global_offset_y = original_global_y + adjustment_y
-        self.game.renderer.global_offset_x = original_renderer_x + adjustment_x
-        self.game.renderer.global_offset_y = original_renderer_y + adjustment_y
-        
-        # Render game at board position, center map horizontally
+        # Render map
         if self.game.show_map and self.game.map_image:
-            self.screen.blit(self.game.map_image, (actual_map_x, actual_map_y))
+            self.game.renderer.render_map(self.game.map_image)
         
+        # Render hex grid
         if self.game.show_grid:
             self.game.renderer.render_hex_grid(self.game.mission_hexes)
         
+        # Render terrain overlay
         if self.game.show_terrain:
             self.game.renderer.render_terrain_overlay(
-                self.game.shallow_hexes, 
-                self.game.land_hexes, 
+                self.game.shallow_hexes,
+                self.game.land_hexes,
                 self.game.mission_hexes
             )
         
-        # Render status boxes and torpedoes (if enabled)
+        # Render status boxes
         if self.game.show_status_boxes:
-            self.game.renderer.render_status_markers(self.game.status_boxes, show_all=True)
+            self.game.renderer.render_status_markers(
+                self.game.status_boxes,
+                show_all=True
+            )
         
         # Render ships
         for ship in self.game.ships:
             self.game.renderer.render_ship(ship)
         
-        # Render U-boat (use selected values if in setup)
+        # Render U-boat
         if self.awaiting_initial_setup:
-            # Show preview with selected depth/facing
+            # Render preview with selected depth/facing
             temp_boat = self.game.u_boat
             temp_boat.depth = self.selected_depth
             temp_boat.facing = self.selected_facing
@@ -840,11 +1019,19 @@ class UnifiedGameScreen(BaseScreen):
         else:
             self.game.renderer.render_u_boat(self.game.u_boat)
         
-        # Restore original offsets
-        self.game.hex_grid.global_offset_x = original_global_x
-        self.game.hex_grid.global_offset_y = original_global_y
-        self.game.renderer.global_offset_x = original_renderer_x
-        self.game.renderer.global_offset_y = original_renderer_y
+        # Render alignment mode highlights
+        if self.alignment_mode:
+            self.game.renderer.render_alignment_highlights(
+                self.alignment_target,
+                self.selected_status_box
+            )
+        
+        # Render debug overlay if in alignment mode
+        if self.alignment_mode:
+            self.game.renderer.render_debug_overlay(
+                self.game.layout,
+                self.selected_status_box
+            )
         
         # Restore clip region
         self.screen.set_clip(old_clip)
@@ -853,14 +1040,17 @@ class UnifiedGameScreen(BaseScreen):
         pygame.draw.rect(self.screen, (50, 70, 100), board_rect, 2)
     
     def _draw_right_panel(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw the right panel with dice rolls and event log."""
+        """Draw the right panel with dice rolls, event log, and controls."""
         panel_rect = pygame.Rect(x, y, width, height)
         pygame.draw.rect(self.screen, (20, 25, 35), panel_rect)
         pygame.draw.line(self.screen, (50, 70, 100), (x, y), (x, y+height), 2)
         
-        # Split panel into dice area and event log
+        # Split panel into three areas: dice rolls (top), event log (middle), controls (bottom)
         dice_area_height = 150
+        controls_area_height = 200
         log_area_y = y + dice_area_height
+        log_area_height = height - dice_area_height - controls_area_height
+        controls_area_y = y + dice_area_height + log_area_height
         
         # === DICE ROLL SECTION ===
         self.draw_text(
@@ -912,6 +1102,7 @@ class UnifiedGameScreen(BaseScreen):
         log_y = log_area_y + 50
         log_x = x + 10
         log_width = width - 20
+        log_max_y = controls_area_y - 10  # Stop before controls area
         
         # Show last N events that fit
         visible_events = self.event_log[-40:]  # Last 40 events
@@ -936,88 +1127,126 @@ class UnifiedGameScreen(BaseScreen):
             # Add small gap between events
             log_y += 5
             
-            if log_y > y + height - 20:
+            if log_y > log_max_y:
                 break
+        
+        # Separator line before controls
+        pygame.draw.line(
+            self.screen,
+            (50, 70, 100),
+            (x, controls_area_y),
+            (x + width, controls_area_y),
+            2
+        )
+        
+        # === CONTROLS/SETUP SECTION ===
+        if self.awaiting_initial_setup:
+            self._draw_setup_controls(x, controls_area_y, width, controls_area_height)
+        else:
+            self._draw_game_controls(x, controls_area_y, width, controls_area_height)
     
     def _draw_bottom_panel(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw the bottom control panel."""
+        """Draw the bottom panel (currently empty - controls moved to right panel)."""
         panel_rect = pygame.Rect(x, y, width, height)
         pygame.draw.rect(self.screen, (25, 35, 50), panel_rect)
         pygame.draw.line(self.screen, (50, 70, 100), (x, y), (x+width, y), 2)
-        
-        if self.awaiting_initial_setup:
-            self._draw_setup_controls(x, y, width, height)
-        else:
-            self._draw_game_controls(x, y, width, height)
     
     def _draw_setup_controls(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw initial setup controls."""
+        """Draw initial setup controls (now in right panel)."""
         self.draw_text(
             "INITIAL SETUP",
             x + width // 2,
-            y + 15,
-            self.font_large,
+            y + 10,
+            self.font_medium,
             color=(220, 220, 255),
             center=True
         )
         
         # Depth selection
-        depth_y = y + 50
+        depth_y = y + 40
         self.draw_text(
-            f"Depth [1-4]: {self.selected_depth.name}",
-            x + 20,
+            f"Depth [1-4]:",
+            x + 10,
             depth_y,
-            self.font_medium,
-            color=(200, 220, 255)
+            self.font_small,
+            color=(180, 200, 220)
+        )
+        self.draw_text(
+            self.selected_depth.name,
+            x + 10,
+            depth_y + 20,
+            self.font_small,
+            color=(255, 255, 150)
         )
         
         # Facing selection
-        facing_y = y + 80
+        facing_y = y + 90
         self.draw_text(
-            f"Facing [Q/E]: {self.selected_facing.name}",
-            x + 20,
+            f"Facing [Q/E]:",
+            x + 10,
             facing_y,
-            self.font_medium,
-            color=(200, 220, 255)
+            self.font_small,
+            color=(180, 200, 220)
+        )
+        self.draw_text(
+            self.selected_facing.name,
+            x + 10,
+            facing_y + 20,
+            self.font_small,
+            color=(255, 255, 150)
         )
         
         # Confirm button hint
         self.draw_text(
-            "Press ENTER to begin",
-            x + width - 200,
-            y + height // 2,
-            self.font_medium,
+            "Press ENTER",
+            x + width // 2,
+            y + 150,
+            self.font_small,
+            color=(100, 255, 100),
+            center=True
+        )
+        self.draw_text(
+            "to begin",
+            x + width // 2,
+            y + 170,
+            self.font_small,
             color=(100, 255, 100),
             center=True
         )
     
     def _draw_game_controls(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw normal game controls."""
+        """Draw normal game controls (now in right panel)."""
         self.draw_text(
             "CONTROLS",
             x + width // 2,
-            y + 15,
-            self.font_large,
+            y + 10,
+            self.font_medium,
             color=(220, 220, 255),
             center=True
         )
         
-        # Basic controls
-        controls_y = y + 50
-        control_x = x + 20
+        # Basic controls - compact layout for narrow panel
+        controls_y = y + 40
+        control_x = x + 10
         
         controls = [
-            "Q/E: Rotate | W: Move Forward | Z/X: Change Depth",
-            "G: Toggle Grid | M: Toggle Map | V: Toggle Terrain",
-            "S: Toggle Status/Torps"
+            "Q/E: Rotate",
+            "W: Move Forward",
+            "Z/X: Change Depth",
+            "",
+            "G: Toggle Grid",
+            "M: Toggle Map",
+            "V: Toggle Terrain",
+            "S: Status/Torps"
         ]
         
         for control_text in controls:
-            self.draw_text(
-                control_text,
-                control_x,
-                controls_y,
-                self.font_small,
-                color=(180, 200, 220)
-            )
-            controls_y += 25
+            if control_text:  # Skip empty lines for spacing
+                self.draw_text(
+                    control_text,
+                    control_x,
+                    controls_y,
+                    self.font_small,
+                    color=(180, 200, 220)
+                )
+            controls_y += 20

@@ -78,7 +78,7 @@ SCREEN_HEIGHT = 900
 # Panel layout for unified game screen
 LEFT_PANEL_WIDTH = 480      # Mission rules panel (rulebook-style)
 RIGHT_PANEL_WIDTH = 250      # Event log/commentary
-BOTTOM_PANEL_HEIGHT = 150    # Player controls
+BOTTOM_PANEL_HEIGHT = 0      # No bottom panel (controls moved to right panel)
 TOP_BAR_HEIGHT = 40         # Title and game info
 
 # Calculated game board area
@@ -112,30 +112,16 @@ COLORS: dict[str, tuple[int, int, int] | tuple[int, int, int, int]] = {
 # - The base map position used during calibration
 # - The hex grid offset relative to that map position
 
-# !!!!! DO NOT TOUCH - CALIBRATION CONSTANTS !!!!!
-# These values were hand-tuned when LEFT_PANEL_WIDTH was 300 and represent
-# "where the map lived when we calibrated the overlays".
-# They must NOT be derived from current layout variables.
-# Calibration reference (for 1600x900 window, board area 950x710)
-CALIBRATION_MAP_POSITION = {
-    'board_x': 300,     # LEFT_PANEL_WIDTH at calibration time
-    'board_y': 40,      # TOP_BAR_HEIGHT at calibration time
-    'board_width': 950, # GAME_BOARD_WIDTH at calibration time (1600 - 300 - 350)
-}
-
-# Global board offset - fine-tuning adjustment for hex grid and status boxes
-# This offset is ADDED to the calculated map position to align everything
-GLOBAL_BOARD_OFFSET = {
-    'offset_x': 74,     # Horizontal fine-tuning offset
-    'offset_y': -12,    # Vertical fine-tuning offset
-}
+# Legacy calibration constants - DEPRECATED
+# These are no longer used. All calibration is now stored in mission_X_layout.json
+# and handled by the BoardLayoutRuntime engine.
 
 HEX_GRID: HexGridConfig = {
     'size': 32,         # Radius of hexagon
     'cols': 11,         # Maximum columns (0-10)
     'rows': 12,         # Rows 0-11
-    'offset_x': 457,    # Horizontal offset from calibration board position
-    'offset_y': -15,    # Vertical offset from calibration board position  
+    'offset_x': 733,      # Horizontal offset from calibration board position
+    'offset_y': -33,      # Vertical offset from calibration board position
 }
 
 
@@ -174,8 +160,10 @@ VALID_HEXES: list[tuple[int, int]] = [
 # STATUS BOX MARKERS
 # ====================
 
-# Status box positions and their marker types
-# Each entry: 'name': {'rect': (x, y, width, height), 'marker': 'type', 'condition': 'condition_key'}
+# Status box marker types and conditions.
+# NOTE: The 'rect' field is DEPRECATED - positions now come from missions/mission_X_layout.json
+# The rects below are kept only for reference and are NOT used for positioning.
+# Each entry: 'name': {'rect': (DEPRECATED), 'marker': 'type', 'condition': 'condition_key'}
 STATUS_BOXES: dict[str, StatusBoxConfig] = {
     # Detection Levels
     'detection_silent': {

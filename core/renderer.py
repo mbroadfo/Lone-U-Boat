@@ -5,18 +5,20 @@ Separated from game logic for cleaner architecture.
 
 import pygame
 import math
-from typing import Tuple, Set, Dict, Any, TYPE_CHECKING
+from typing import Tuple, Set, Dict, Any, TYPE_CHECKING, Optional
 
 from .models import HexCoord, UBoat, Ship, Facing, Depth
 
 if TYPE_CHECKING:
     from .hex_grid import HexGrid
+    from .board_layout import BoardLayoutRuntime
 
 
 class GameRenderer:
     """Handles all rendering operations for the game."""
     
-    def __init__(self, screen: pygame.Surface, config: Any, hex_grid: 'HexGrid', assets: Dict[str, Any]):
+    def __init__(self, screen: pygame.Surface, config: Any, hex_grid: 'HexGrid', 
+                 assets: Dict[str, Any], layout: Optional['BoardLayoutRuntime'] = None):
         """Initialize renderer with dependencies.
         
         Args:
@@ -24,14 +26,12 @@ class GameRenderer:
             config: Configuration module (board_config)
             hex_grid: HexGrid instance for coordinate conversions
             assets: Dict containing loaded assets (images, fonts)
+            layout: Optional BoardLayoutRuntime for resolution-independent positioning
         """
         self.screen = screen
         self.config = config
         self.hex_grid = hex_grid
-        
-        # Get global board offset from config
-        self.global_offset_x = config.GLOBAL_BOARD_OFFSET.get('offset_x', 0)
-        self.global_offset_y = config.GLOBAL_BOARD_OFFSET.get('offset_y', 0)
+        self.layout = layout
         
         # Unpack assets
         self.u_boat_images: Dict[Depth, pygame.Surface] = assets['u_boat_images']
@@ -39,6 +39,14 @@ class GameRenderer:
         self.marker_images: Dict[str, pygame.Surface] = assets['marker_images']
         self.font: pygame.font.Font = assets['font']
         self.font_large: pygame.font.Font = assets['font_large']
+    
+    def update_layout(self, layout: 'BoardLayoutRuntime') -> None:
+        """Update the layout engine (called after window resize).
+        
+        Args:
+            layout: New BoardLayoutRuntime instance
+        """
+        self.layout = layout
     
     def render_frame(self, game_state: Any) -> None:
         """Render a complete frame.
@@ -94,10 +102,17 @@ class GameRenderer:
     
     def render_map(self, map_image: pygame.Surface) -> None:
         """Render the mission map background."""
-        map_rect = map_image.get_rect()
-        map_x = (self.config.SCREEN_WIDTH - map_rect.width) // 2
-        map_y = 50
-        self.screen.blit(map_image, (map_x, map_y))
+        if self.layout:
+            # Use layout engine for positioning and scaling
+            rect = self.layout.board_rects.map_rect
+            scaled = pygame.transform.smoothscale(map_image, (rect.width, rect.height))
+            self.screen.blit(scaled, rect.topleft)
+        else:
+            # Legacy fallback
+            map_rect = map_image.get_rect()
+            map_x = (self.config.SCREEN_WIDTH - map_rect.width) // 2
+            map_y = 50
+            self.screen.blit(map_image, (map_x, map_y))
     
     def render_hex_grid(self, mission_hexes: Set[HexCoord]) -> None:
         """Render hex grid overlay with coordinates."""
@@ -221,7 +236,11 @@ class GameRenderer:
         self.screen.blit(surface, (0, 0))
     
     def render_u_boat(self, u_boat: UBoat) -> None:
-        """Render the U-boat using depth-specific PNG images."""
+        """Render the U-boat using depth-specific PNG images.
+        
+        Args:
+            u_boat: UBoat instance to render
+        """
         center = self.hex_grid.hex_to_pixel(u_boat.position)
         
         # Get the appropriate image for current depth
@@ -238,7 +257,11 @@ class GameRenderer:
         self.screen.blit(rotated_image, rect)
     
     def render_ship(self, ship: Ship) -> None:
-        """Render an allied ship using PNG images."""
+        """Render an allied ship using PNG images.
+        
+        Args:
+            ship: Ship instance to render
+        """
         center = self.hex_grid.hex_to_pixel(ship.position)
         
         # Get the appropriate image
@@ -281,10 +304,15 @@ class GameRenderer:
         pygame.draw.rect(surface, (255, 255, 0, 255), rect, 2)  # Yellow border
         self.screen.blit(surface, (0, 0))
     
-    def render_status_markers(self, status_boxes: Dict[str, Dict[str, Any]], show_all: bool = False) -> None:
-        """Render status box markers based on game state."""
+    def render_status_markers(self, status_boxes: Dict[str, Dict[str, Any]], show_all: bool = False, scale: float = 1.0) -> None:
+        """Render status box markers based on game state.
+        
+        Args:
+            status_boxes: Dictionary of status box configurations
+            show_all: If True, render all markers regardless of conditions
+            scale: Legacy parameter, ignored when using layout engine
+        """
         for _box_name, box_data in status_boxes.items():
-            rect = box_data['rect']
             marker_type = box_data['marker_type']
             condition = box_data.get('condition', True)
             
@@ -302,13 +330,18 @@ class GameRenderer:
             if not should_render:
                 continue
             
-            # Apply global board offset to status box position
-            adjusted_rect = pygame.Rect(
-                rect[0] + self.global_offset_x, 
-                rect[1] + self.global_offset_y, 
-                rect[2], 
-                rect[3]
-            )
+            # Use layout engine if available, otherwise fall back to legacy scaling
+            if self.layout and _box_name in self.layout.status_box_rects:
+                adjusted_rect = self.layout.status_box_rects[_box_name]
+            else:
+                # Legacy fallback
+                rect = box_data['rect']
+                adjusted_rect = pygame.Rect(
+                    int(rect[0] * scale) + self.global_offset_x,
+                    int(rect[1] * scale) + self.global_offset_y,
+                    int(rect[2] * scale),
+                    int(rect[3] * scale)
+                )
             
             # Get marker image
             marker_img = self.marker_images.get(marker_type)
@@ -374,4 +407,78 @@ class GameRenderer:
         
         for i, (text, color) in enumerate(status_texts):
             rendered = self.font.render(text, True, color)
-            self.screen.blit(rendered, (panel_x, panel_y + i * 25))
+            self.screen.blit(rendered, (panel_x, panel_y + i * 25))    
+    def render_alignment_highlights(self, alignment_target: str, selected_status_box: str | None) -> None:
+        """Render visual highlights for alignment mode.
+        
+        Args:
+            alignment_target: Current alignment target ('grid' or 'status_boxes')
+            selected_status_box: Name of selected status box, if any
+        """
+        if not self.layout:
+            return
+        
+        # Highlight selected status box
+        if alignment_target == 'status_boxes' and selected_status_box and selected_status_box in self.layout.status_box_rects:
+            rect = self.layout.status_box_rects[selected_status_box]
+            # Draw yellow border around selected box
+            pygame.draw.rect(self.screen, (255, 255, 0), rect, 3)
+            # Draw corner handles
+            handle_size = 6
+            for corner in [(rect.left, rect.top), (rect.right, rect.top), 
+                          (rect.left, rect.bottom), (rect.right, rect.bottom)]:
+                handle_rect = pygame.Rect(corner[0] - handle_size//2, corner[1] - handle_size//2, 
+                                         handle_size, handle_size)
+                pygame.draw.rect(self.screen, (255, 255, 0), handle_rect)
+        
+        # Draw all status box outlines in alignment mode
+        if alignment_target == 'status_boxes':
+            for name, rect in self.layout.status_box_rects.items():
+                if name != selected_status_box:
+                    # Draw cyan outline for unselected boxes
+                    pygame.draw.rect(self.screen, (0, 255, 255, 128), rect, 1)
+    
+    def render_debug_overlay(self, layout: 'BoardLayoutRuntime', selected_status_box: str | None) -> None:
+        """Render debug information overlay for alignment mode.
+        
+        Args:
+            layout: Current layout runtime
+            selected_status_box: Name of selected status box, if any
+        """
+        if not layout:
+            return
+        
+        # Semi-transparent background panel positioned on the board area
+        panel_width = 220
+        panel_height = 140
+        # Position halfway between map edge and right side
+        map_rect = layout.board_rects.map_rect
+        panel_x = map_rect.right + 10
+        panel_y = map_rect.top + 10
+        
+        surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        pygame.draw.rect(surface, (0, 0, 0, 200), (0, 0, panel_width, panel_height))
+        pygame.draw.rect(surface, (100, 150, 200), (0, 0, panel_width, panel_height), 2)
+        
+        # Debug info text
+        info_lines = [
+            f"Screen: {layout.screen_w}x{layout.screen_h}",
+            f"Scale: {layout.scale:.3f}x",
+            f"Hex Size: {layout.hex_size:.1f}",
+            f"Hex Origin: ({int(layout.hex_origin_screen[0])}, {int(layout.hex_origin_screen[1])})",
+            f"Map Rect: {layout.board_rects.map_rect.topleft}",
+        ]
+        
+        if selected_status_box and selected_status_box in layout.status_box_rects:
+            rect = layout.status_box_rects[selected_status_box]
+            info_lines.append(f"Selected: {selected_status_box}")
+            info_lines.append(f"  Pos: ({rect.x}, {rect.y})")
+            info_lines.append(f"  Size: {rect.width}x{rect.height}")
+        
+        y_offset = 10
+        for line in info_lines:
+            text = self.font.render(line, True, (255, 255, 255))
+            surface.blit(text, (10, y_offset))
+            y_offset += 20
+        
+        self.screen.blit(surface, (panel_x, panel_y))

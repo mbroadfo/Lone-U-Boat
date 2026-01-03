@@ -3,6 +3,7 @@ Screen Manager - Handles screen transitions and the main game loop.
 """
 
 import pygame
+import sys
 from typing import Any, Optional
 from config import board_config as cfg
 from .screens import MainMenuScreen, UnifiedGameScreen
@@ -19,6 +20,14 @@ class ScreenManager:
             pygame.RESIZABLE
         )
         pygame.display.set_caption("Lone U-Boat")
+        
+        # Maximize window on Windows
+        if sys.platform == 'win32':
+            import ctypes
+            hwnd = pygame.display.get_wm_info()['window']
+            SW_MAXIMIZE = 3
+            ctypes.windll.user32.ShowWindow(hwnd, SW_MAXIMIZE)
+        
         self.clock = pygame.time.Clock()
         
         self.current_screen_name = 'menu'
@@ -79,6 +88,14 @@ class ScreenManager:
                 if event.type == pygame.QUIT:
                     self.running = False
                     break
+                
+                # Handle window resize
+                if event.type == pygame.VIDEORESIZE:
+                    # Update screen reference
+                    self.screen = pygame.display.get_surface()
+                    # Propagate to current screen
+                    if self.current_screen:
+                        self.current_screen.update_screen(self.screen)
                 
                 if self.current_screen:
                     self.current_screen.handle_events(event)
