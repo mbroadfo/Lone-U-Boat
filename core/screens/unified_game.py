@@ -155,9 +155,21 @@ class UnifiedGameScreen(BaseScreen):
             if self.awaiting_initial_setup:
                 self._handle_setup_input(event)
             else:
-                # Game is active - handle gameplay events
-                # We'll integrate game events here in Phase 2
-                pass
+                # Game is active - forward keyboard events to game for phase advancement
+                if event.type == pygame.KEYDOWN:
+                    # Create a minimal event list for the game to process
+                    # The game's handle_events expects to iterate over pygame.event.get()
+                    # but we're already handling events here, so we need to handle specific keys
+                    
+                    if event.key == pygame.K_SPACE:
+                        # Forward phase advancement to game
+                        self.game._advance_to_next_phase()
+                        # Add visual feedback
+                        phase_name = self.game.turn_manager.get_current_phase_name()
+                        self.add_event(f"→ {phase_name}")
+                    
+                    # TODO Phase 3: Forward U-Boat action keys to game
+
         
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # Left click
@@ -395,24 +407,26 @@ class UnifiedGameScreen(BaseScreen):
     def update(self) -> None:
         """Update game state."""
         if not self.awaiting_initial_setup:
-            old_phase = self.game.current_phase
+            old_phase = self.game.turn_manager.current_phase if hasattr(self.game, 'turn_manager') else None
             self.game.update()
             
             # Update mission rules view if phase changed
-            if self.mission_rules and old_phase != self.game.current_phase:
-                try:
-                    sys.path.insert(0, 'missions')
-                    from mission_rules_loader import create_mission_rules_view_model  # type: ignore[import-not-found]
-                    # Map GamePhase enum to phase number (3->1, 4->2, etc.)
-                    phase_map = {3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6}
-                    current_phase_num = phase_map.get(self.game.current_phase.value, 1)
-                    self.mission_rules_view = create_mission_rules_view_model(self.mission_rules, current_phase_num)
-                    
-                    # Auto-expand the current phase
-                    for phase_num in range(1, 7):
-                        self.expanded_phases[phase_num] = (phase_num == current_phase_num)
-                except Exception as e:
-                    print(f"Warning: Could not update mission rules view: {e}")
+            if hasattr(self, 'mission_rules') and self.mission_rules and hasattr(self.game, 'turn_manager'):
+                new_phase = self.game.turn_manager.current_phase
+                if old_phase != new_phase:
+                    try:
+                        sys.path.insert(0, 'missions')
+                        from mission_rules_loader import create_mission_rules_view_model  # type: ignore[import-not-found]
+                        # Map GamePhase enum to phase number (3->1, 4->2, etc.)
+                        phase_map = {3: 1, 4: 2, 5: 3, 6: 4, 7: 5, 8: 6}
+                        current_phase_num = phase_map.get(new_phase.value, 1)
+                        self.mission_rules_view = create_mission_rules_view_model(self.mission_rules, current_phase_num)
+                        
+                        # Auto-expand the current phase
+                        for phase_num in range(1, 7):
+                            self.expanded_phases[phase_num] = (phase_num == current_phase_num)
+                    except Exception as e:
+                        print(f"Warning: Could not update mission rules view: {e}")
     
     def render(self) -> None:
         """Render the unified game screen."""
@@ -453,7 +467,9 @@ class UnifiedGameScreen(BaseScreen):
         pygame.draw.line(self.screen, (50, 70, 100), (0, height-1), (width, height-1), 2)
         
         # Title
-        title = f"Mission {self.mission_number} - Turn {self.game.turn_number} - {self.game.current_phase.name.replace('_', ' ')}"
+        turn_num = self.game.turn_manager.turn_number if hasattr(self.game, 'turn_manager') else 1
+        phase_name = self.game.turn_manager.current_phase.name.replace('_', ' ') if hasattr(self.game, 'turn_manager') else 'SETUP'
+        title = f"Mission {self.mission_number} - Turn {turn_num} - {phase_name}"
         self.draw_text(
             title,
             width // 2,
@@ -561,7 +577,7 @@ class UnifiedGameScreen(BaseScreen):
         
         # === PHASE SECTIONS ===
         phases = self.mission_briefing.get("phases", [])
-        current_phase = self.game.current_phase.value if hasattr(self.game, 'current_phase') else 1
+        current_phase = self.game.turn_manager.current_phase.value if hasattr(self.game, 'turn_manager') else 1
         
         for phase in phases:
             phase_id = phase.get("id", 0)

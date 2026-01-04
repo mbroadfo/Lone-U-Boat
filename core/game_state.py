@@ -15,6 +15,8 @@ from .assets import AssetManager
 from .conditions import ConditionFactory
 from .renderer import GameRenderer
 from .board_layout import BoardLayoutRuntime
+from .turn_manager import TurnManager
+from missions.mission_rules_loader import MissionRules, load_mission_rules
 
 
 class Game:
@@ -41,9 +43,11 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
         
-        # Game phase tracking
-        self.current_phase = GamePhase.UBOAT_PHASE
-        self.turn_number = 1
+        # Load mission rules from JSON
+        self.mission_rules = load_mission_rules(mission_number)
+        
+        # Initialize turn manager
+        self.turn_manager = TurnManager(self.mission_rules)
         
         # Next screen for transitions (back to menu, etc.)
         self.next_screen: Optional[str] = None
@@ -161,6 +165,15 @@ class Game:
             'font_large': self.font_large
         }
         self.renderer = GameRenderer(self.screen, cfg, self.hex_grid, assets, self.layout)
+        
+        # Start first turn
+        initial_ap = self.turn_manager.start_new_turn(self.u_boat)
+        # Apply depth detection modifier at turn start
+        self.detection_level = self.turn_manager.apply_depth_detection_modifier(
+            self.detection_level, 
+            self.u_boat.depth
+        )
+        self.u_boat.action_points = initial_ap
     
     def _load_mission_config(self, mission_number: int) -> Any:
         """Dynamically load mission configuration module."""
@@ -220,7 +233,7 @@ class Game:
         self.renderer.update_layout(self.layout)
     
     def handle_events(self):
-        """Handle pygame events - gameplay controls only."""
+        """Handle pygame events - gameplay controls and phase advancement."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
@@ -229,32 +242,22 @@ class Game:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
                 
+                # Phase advancement
+                elif event.key == pygame.K_SPACE:
+                    self._advance_to_next_phase()
+                
                 # Display toggles
                 elif event.key == pygame.K_g:
                     self.show_grid = not self.show_grid
                 elif event.key == pygame.K_m:
                     self.show_map = not self.show_map
+                elif event.key == pygame.K_v:
+                    self.show_terrain = not self.show_terrain
+                elif event.key == pygame.K_s:
+                    self.show_status_boxes = not self.show_status_boxes
                 
-                # U-Boat controls
-                elif event.key == pygame.K_q:
-                    # Rotate U-boat left
-                    self.u_boat.facing = self.u_boat.facing.rotate_counterclockwise()
-                elif event.key == pygame.K_e:
-                    # Rotate U-boat right
-                    self.u_boat.facing = self.u_boat.facing.rotate_clockwise()
-                elif event.key == pygame.K_w:
-                    # Move U-boat forward
-                    new_pos = self.u_boat.facing.forward(self.u_boat.position)
-                    if self.hex_grid.is_valid_hex(new_pos, self.mission_hexes):
-                        self.u_boat.position = new_pos
-                elif event.key == pygame.K_z:
-                    # Increase depth (go deeper)
-                    if self.u_boat.depth != Depth.DEEP:
-                        self.u_boat.depth = Depth(self.u_boat.depth.value + 1)
-                elif event.key == pygame.K_x:
-                    # Decrease depth (go shallower)
-                    if self.u_boat.depth != Depth.SURFACED:
-                        self.u_boat.depth = Depth(self.u_boat.depth.value - 1)
+                # TODO Phase 3: U-Boat action controls will go here
+                # Actions will cost AP and be validated before execution
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
@@ -264,6 +267,96 @@ class Game:
                     # Select hex for gameplay
                     if self.hex_grid.is_valid_hex(hex_coord, self.mission_hexes):
                         self.selected_hex = hex_coord
+    
+    def _advance_to_next_phase(self):
+        """Advance to next phase, executing phase-specific logic."""
+        current_phase = self.turn_manager.current_phase
+        
+        # Execute phase end logic
+        if current_phase == GamePhase.UBOAT_PHASE:
+            self._end_uboat_phase()
+        elif current_phase == GamePhase.MERCHANT_PHASE:
+            self._execute_merchant_phase()
+        elif current_phase == GamePhase.DETECTION_PHASE:
+            self._execute_detection_phase()
+        elif current_phase == GamePhase.ESCORT_PHASE:
+            self._execute_escort_phase()
+        elif current_phase == GamePhase.B24_PHASE:
+            self._execute_b24_phase()
+        elif current_phase == GamePhase.END_TURN_PHASE:
+            self._execute_end_turn_phase()
+        
+        # Advance phase
+        new_phase, turn_wrapped = self.turn_manager.advance_phase()
+        
+        # If wrapped to new turn, start it
+        if turn_wrapped:
+            self._start_new_turn()
+    
+    def _end_uboat_phase(self):
+        """Clean up U-Boat phase."""
+        # Log remaining AP
+        if self.turn_manager.ap_tracker:
+            remaining = self.turn_manager.ap_tracker.remaining()
+            if remaining > 0:
+                self.turn_manager.add_phase_log("U-Boat Phase",
+                    f"Ended with {remaining} AP remaining")
+    
+    def _execute_merchant_phase(self):
+        """Execute merchant ship movements."""
+        self.turn_manager.add_phase_log("Merchant Phase", "Merchant ships acting...")
+        
+        # TODO Phase 4: Implement merchant AI
+        for ship in self.ships:
+            if ship.ship_type == 'merchant':
+                self.turn_manager.add_phase_log("Merchant Phase",
+                    f"Merchant at {ship.position.q},{ship.position.r} (no AI yet)")
+    
+    def _execute_detection_phase(self):
+        """Calculate detection level changes."""
+        self.turn_manager.add_phase_log("Detection Phase", "Calculating detection...")
+        
+        # TODO Phase 4: Implement detection calculation
+        # For now, just log current DL
+        dl_names = ["Silent", "Aware", "Traced", "Locked"]
+        dl_name = dl_names[self.detection_level] if self.detection_level < 4 else "MAX"
+        self.turn_manager.add_phase_log("Detection Phase",
+            f"Detection Level: {self.detection_level} ({dl_name})")
+    
+    def _execute_escort_phase(self):
+        """Execute escort ship behaviors."""
+        self.turn_manager.add_phase_log("Escort Phase", "Escorts acting...")
+        
+        # TODO Phase 4: Implement escort AI
+        for ship in self.ships:
+            if ship.ship_type in ['corvette', 'destroyer']:
+                self.turn_manager.add_phase_log("Escort Phase",
+                    f"{ship.ship_type.capitalize()} at {ship.position.q},{ship.position.r} (no AI yet)")
+    
+    def _execute_b24_phase(self):
+        """Execute B24 aircraft if present."""
+        # TODO Phase 4: Check for B24 aircraft in mission
+        # For now, skip this phase
+        self.turn_manager.add_phase_log("B24 Phase", "No aircraft in mission")
+    
+    def _execute_end_turn_phase(self):
+        """Clean up turn and prepare for next."""
+        self.turn_manager.add_phase_log("End Turn Phase", 
+            f"Turn {self.turn_manager.turn_number} complete")
+        
+        # TODO Phase 6: Check victory/defeat conditions
+    
+    def _start_new_turn(self):
+        """Start a new turn."""
+        # Apply depth detection modifier before rolling AP
+        self.detection_level = self.turn_manager.apply_depth_detection_modifier(
+            self.detection_level,
+            self.u_boat.depth
+        )
+        
+        # Roll new AP
+        new_ap = self.turn_manager.start_new_turn(self.u_boat)
+        self.u_boat.action_points = new_ap
     
     def update(self):
         """Update game state - NPC AI and game rules will go here."""

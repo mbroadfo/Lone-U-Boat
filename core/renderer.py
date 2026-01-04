@@ -98,6 +98,10 @@ class GameRenderer:
         # Draw UI
         self.render_ui(game_state)
         
+        # Draw phase log overlay (for non-U-Boat phases)
+        if hasattr(game_state, 'turn_manager'):
+            self.render_phase_log(game_state)
+        
         pygame.display.flip()
     
     def render_map(self, map_image: pygame.Surface) -> None:
@@ -354,7 +358,7 @@ class GameRenderer:
     
     def render_ui(self, game_state: Any) -> None:
         """Render UI panels and information."""
-        # Top bar
+        # Top bar with turn info
         ui_rect = pygame.Rect(0, 0, self.config.SCREEN_WIDTH, self.config.UI['top_bar_height'])
         pygame.draw.rect(self.screen, self.config.COLORS['panel_bg'], ui_rect)
         
@@ -362,6 +366,10 @@ class GameRenderer:
         title_text = f"{game_state.mission_config.MISSION_INFO['name']}"
         title = self.font_large.render(title_text, True, self.config.COLORS['text'])
         self.screen.blit(title, (10, 5))
+        
+        # Turn info (if turn manager exists)
+        if hasattr(game_state, 'turn_manager'):
+            self.render_turn_info(game_state)
         
         # Controls info
         if hasattr(game_state, 'alignment_mode') and game_state.alignment_mode:
@@ -371,7 +379,7 @@ class GameRenderer:
             )
         else:
             controls = self.font.render(
-                "Controls: Q/E-Rotate | W-Move | Z/X-Depth | G-Grid | M-Map | ESC-Quit",
+                "SPACE-Next Phase | G-Grid | M-Map | V-Terrain | S-Status | F2-Align | ESC-Quit",
                 True, self.config.COLORS['text']
             )
         self.screen.blit(controls, (10, self.config.SCREEN_HEIGHT - 30))
@@ -480,5 +488,101 @@ class GameRenderer:
             text = self.font.render(line, True, (255, 255, 255))
             surface.blit(text, (10, y_offset))
             y_offset += 20
+        
+        self.screen.blit(surface, (panel_x, panel_y))
+    
+    def render_turn_info(self, game_state: Any) -> None:
+        """Render turn number, phase, and AP counter in top-right."""
+        turn_mgr = game_state.turn_manager
+        
+        # Build info string
+        phase_name = turn_mgr.get_current_phase_name()
+        turn_text = f"Turn {turn_mgr.turn_number}"
+        
+        # AP info (only show in U-Boat phase)
+        if turn_mgr.ap_tracker and turn_mgr.current_phase.name == 'UBOAT_PHASE':
+            ap_text = f"AP: {turn_mgr.ap_tracker.remaining()}/{turn_mgr.ap_tracker.total_ap}"
+        else:
+            ap_text = ""
+        
+        # Render text right-aligned
+        x_right = self.config.SCREEN_WIDTH - 20
+        y_pos = 8
+        
+        # Turn number
+        turn_surface = self.font_large.render(turn_text, True, self.config.COLORS['text'])
+        turn_rect = turn_surface.get_rect()
+        turn_rect.topright = (x_right, y_pos)
+        self.screen.blit(turn_surface, turn_rect)
+        
+        # Phase name
+        phase_color = self._get_phase_color(turn_mgr.current_phase)
+        phase_surface = self.font.render(phase_name, True, phase_color)
+        phase_rect = phase_surface.get_rect()
+        phase_rect.topright = (x_right, y_pos + 30)
+        self.screen.blit(phase_surface, phase_rect)
+        
+        # AP counter
+        if ap_text:
+            ap_surface = self.font.render(ap_text, True, (100, 255, 100))
+            ap_rect = ap_surface.get_rect()
+            ap_rect.topright = (x_right, y_pos + 52)
+            self.screen.blit(ap_surface, ap_rect)
+    
+    def _get_phase_color(self, phase) -> Tuple[int, int, int]:
+        """Get color for phase display."""
+        from .models import GamePhase
+        
+        colors = {
+            GamePhase.UBOAT_PHASE: (100, 255, 100),  # Green (player active)
+            GamePhase.MERCHANT_PHASE: (200, 200, 100),  # Yellow
+            GamePhase.DETECTION_PHASE: (255, 150, 100),  # Orange
+            GamePhase.ESCORT_PHASE: (255, 100, 100),  # Red (enemy active)
+            GamePhase.B24_PHASE: (150, 150, 255),  # Blue
+            GamePhase.END_TURN_PHASE: (150, 150, 150),  # Gray
+        }
+        return colors.get(phase, (255, 255, 255))
+    
+    def render_phase_log(self, game_state: Any) -> None:
+        """Render phase execution log (for non-U-Boat phases)."""
+        turn_mgr = game_state.turn_manager
+        phase_name = turn_mgr.get_current_phase_name()
+        
+        # Only show log for non-U-Boat phases
+        if turn_mgr.current_phase.name == 'UBOAT_PHASE':
+            return
+        
+        log_entries = turn_mgr.get_phase_log(phase_name)
+        if not log_entries:
+            return
+        
+        # Create log panel (center of screen)
+        panel_width = 500
+        panel_height = min(300, 50 + len(log_entries) * 25)
+        panel_x = (self.config.SCREEN_WIDTH - panel_width) // 2
+        panel_y = (self.config.SCREEN_HEIGHT - panel_height) // 2
+        
+        # Background
+        surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        pygame.draw.rect(surface, (0, 0, 0, 230), (0, 0, panel_width, panel_height))
+        pygame.draw.rect(surface, self._get_phase_color(turn_mgr.current_phase), 
+                        (0, 0, panel_width, panel_height), 3)
+        
+        # Title
+        title = self.font_large.render(phase_name, True, (255, 255, 255))
+        surface.blit(title, (10, 10))
+        
+        # Log entries
+        y_offset = 45
+        for entry in log_entries:
+            text = self.font.render(f"• {entry}", True, (220, 220, 220))
+            surface.blit(text, (15, y_offset))
+            y_offset += 25
+        
+        # Continue prompt
+        prompt = self.font.render("[SPACE] Continue", True, (255, 255, 100))
+        prompt_rect = prompt.get_rect()
+        prompt_rect.bottomright = (panel_width - 15, panel_height - 10)
+        surface.blit(prompt, prompt_rect)
         
         self.screen.blit(surface, (panel_x, panel_y))
