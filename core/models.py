@@ -118,7 +118,7 @@ class UBoat:
     medic_alive: bool = True
     
     # Weapons
-    torpedo_tubes: List[bool] = field(default_factory=lambda: [True] * 5)  # True = loaded, 4 front + 1 rear
+    torpedo_tubes: List[bool] = field(default_factory=lambda: [True] * 5)  # True = loaded, 5 tubes: [0-3]=front (tubes 1-4), [4]=rear (tube 5)
     deck_gun_damaged: bool = False
     flak_gun_damaged: bool = False
 
