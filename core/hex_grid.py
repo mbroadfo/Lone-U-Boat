@@ -116,3 +116,88 @@ class HexGrid:
             return coord in mission_hexes
         
         return True
+    
+    @staticmethod
+    def hex_distance(a: HexCoord, b: HexCoord) -> int:
+        """
+        Calculate distance between two hexes using axial coordinates.
+        
+        Uses cube coordinate conversion for accurate hex distance:
+        - Convert axial (q, r) to cube (x, y, z) where z = -q - r
+        - Distance = (|x1-x2| + |y1-y2| + |z1-z2|) / 2
+        
+        Args:
+            a: First hex coordinate
+            b: Second hex coordinate
+            
+        Returns:
+            Distance in hex steps (0 = same hex, 1 = adjacent, etc.)
+        """
+        # Convert to cube coordinates
+        # Axial: (q, r)
+        # Cube: (x=q, y=r, z=-q-r)
+        return (abs(a.q - b.q) 
+                + abs(a.q + a.r - b.q - b.r)
+                + abs(a.r - b.r)) // 2
+    
+    @staticmethod
+    def hexes_in_range(
+        center: HexCoord,
+        range_value: int,
+        valid_hexes: Optional[Set[HexCoord]] = None
+    ) -> Set[HexCoord]:
+        """
+        Get all hexes within a given range of center hex.
+        
+        Args:
+            center: Center hex coordinate
+            range_value: Maximum distance (inclusive)
+            valid_hexes: Optional set to filter results to valid hexes only
+            
+        Returns:
+            Set of hex coordinates within range
+        """
+        results: Set[HexCoord] = set()
+        
+        # Iterate through a bounding box around the center
+        for dq in range(-range_value, range_value + 1):
+            for dr in range(-range_value, range_value + 1):
+                # Only consider hexes where the third cube coordinate is in range
+                if abs(dq + dr) <= range_value:
+                    hex_coord = HexCoord(center.q + dq, center.r + dr)
+                    
+                    # Check distance to ensure it's within range
+                    if HexGrid.hex_distance(center, hex_coord) <= range_value:
+                        # Filter by valid hexes if provided
+                        if valid_hexes is None or hex_coord in valid_hexes:
+                            results.add(hex_coord)
+        
+        return results
+    
+    @staticmethod
+    def get_neighbors(coord: HexCoord) -> List[HexCoord]:
+        """
+        Get all 6 neighboring hexes (axial coordinates).
+        
+        Flat-top hex neighbors (clockwise from right):
+        - Right: (+1, 0)
+        - Down-Right: (0, +1)
+        - Down-Left: (-1, +1)
+        - Left: (-1, 0)
+        - Up-Left: (0, -1)
+        - Up-Right: (+1, -1)
+        
+        Args:
+            coord: Center hex coordinate
+            
+        Returns:
+            List of 6 neighbor coordinates
+        """
+        return [
+            HexCoord(coord.q + 1, coord.r),      # Right
+            HexCoord(coord.q, coord.r + 1),      # Down-Right
+            HexCoord(coord.q - 1, coord.r + 1),  # Down-Left
+            HexCoord(coord.q - 1, coord.r),      # Left
+            HexCoord(coord.q, coord.r - 1),      # Up-Left
+            HexCoord(coord.q + 1, coord.r - 1),  # Up-Right
+        ]

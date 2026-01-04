@@ -7,11 +7,11 @@ Handles:
 - Phase-specific logic execution
 """
 
-import random
 from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass
 
 from .models import GamePhase, UBoat, Depth
+from .dice import DiceRoller
 
 
 @dataclass
@@ -107,12 +107,13 @@ class TurnManager:
         GamePhase.END_TURN_PHASE,
     ]
     
-    def __init__(self, mission_rules: Any):
+    def __init__(self, mission_rules: Any, dice_roller: Optional[DiceRoller] = None):
         """
         Initialize turn manager.
         
         Args:
             mission_rules: MissionRules instance with JSON rule data
+            dice_roller: Optional DiceRoller instance (creates new if None)
         """
         self.mission_rules = mission_rules
         self.turn_number: int = 1
@@ -122,8 +123,8 @@ class TurnManager:
         self.depth_changed_this_turn: bool = False
         self.forced_dive_penalty: int = 0  # -2 AP if forced to dive
         
-        # Random number generator for dice rolls
-        self.rng = random.Random()
+        # Dice roller for all random events
+        self.dice = dice_roller if dice_roller else DiceRoller()
     
     def start_new_turn(self, u_boat: UBoat) -> int:
         """
@@ -176,9 +177,9 @@ class TurnManager:
         # Determine number of dice
         num_dice = 2 if u_boat.engine_damaged else 3
         
-        # Roll dice
-        rolls = [self.rng.randint(1, 6) for _ in range(num_dice)]
-        highest = max(rolls)
+        # Roll dice using DiceRoller
+        context = "Action Points (Engine damaged)" if u_boat.engine_damaged else "Action Points"
+        highest, rolls = self.dice.roll_highest(num_dice, sides=6, context=context)
         
         # Calculate AP
         ap = highest
