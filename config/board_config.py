@@ -76,7 +76,7 @@ SCREEN_WIDTH = 1600
 SCREEN_HEIGHT = 900
 
 # Panel layout for unified game screen
-LEFT_PANEL_WIDTH = 480      # Mission rules panel (rulebook-style)
+LEFT_PANEL_WIDTH = 750      # Mission rules panel (rulebook-style)
 RIGHT_PANEL_WIDTH = 250      # Event log/commentary
 BOTTOM_PANEL_HEIGHT = 0      # No bottom panel (controls moved to right panel)
 TOP_BAR_HEIGHT = 40         # Title and game info

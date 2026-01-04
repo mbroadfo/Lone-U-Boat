@@ -60,16 +60,15 @@ class UnifiedGameScreen(BaseScreen):
         # Dice roll history
         self.dice_rolls: List[Dict[str, Any]] = []
         
-        # Load mission rules for left panel display
-        self.mission_rules: Any = None
-        self.mission_rules_view: Any = None
+        # Load mission briefing for left panel display
+        self.mission_briefing: Optional[Dict[str, Any]] = None
         try:
-            sys.path.insert(0, 'missions')
-            from mission_rules_loader import load_mission_rules, create_mission_rules_view_model  # type: ignore[import-not-found]
-            self.mission_rules = load_mission_rules(mission_number)
-            self.mission_rules_view = create_mission_rules_view_model(self.mission_rules, 1)  # type: ignore[reportUnknownMemberType]
+            import json
+            briefing_path = f"missions/mission_{mission_number}_briefing.json"
+            with open(briefing_path, 'r', encoding='utf-8') as f:
+                self.mission_briefing = json.load(f)
         except Exception as e:
-            print(f"Warning: Could not load mission rules: {e}")
+            print(f"Warning: Could not load mission briefing: {e}")
         
         # Mission Rules panel state
         self.expanded_phases = {1: True, 2: False, 3: False, 4: False, 5: False, 6: False}  # Phase 1 expanded by default
@@ -484,15 +483,15 @@ class UnifiedGameScreen(BaseScreen):
         )
     
     def _draw_left_panel(self, width: int, y: int, height: int) -> None:
-        """Draw the left panel with mission rules (rulebook-style layout)."""
+        """Draw the left panel with mission briefing (from JSON structure)."""
         panel_rect = pygame.Rect(0, y, width, height)
         pygame.draw.rect(self.screen, (20, 25, 35), panel_rect)
         pygame.draw.line(self.screen, (50, 70, 100), (width-1, y), (width-1, y+height), 2)
         
-        if not self.mission_rules_view:
-            # Fallback if rules couldn't load
+        if not self.mission_briefing:
+            # Fallback if briefing couldn't load
             self.draw_text(
-                "MISSION RULES",
+                "MISSION BRIEFING",
                 width // 2,
                 y + 15,
                 self.font_medium,
@@ -500,7 +499,7 @@ class UnifiedGameScreen(BaseScreen):
                 center=True
             )
             self.draw_text(
-                "Rules could not be loaded",
+                "Briefing could not be loaded",
                 10,
                 y + 50,
                 self.font_small,
@@ -511,18 +510,14 @@ class UnifiedGameScreen(BaseScreen):
         # Clear phase header rects for click detection
         self.phase_header_rects.clear()
         
-        mission_info = self.mission_rules_view["mission_info"]
-        phases = self.mission_rules_view["phases"]
-        reminder_block = self.mission_rules_view.get("reminder_block")
-        
         text_x = 12
         text_y = y + 10
         text_width = width - 24
         
         # === MISSION HEADER ===
-        title_text = f"MISSION {mission_info['number']}: {mission_info['title']}"
+        title = self.mission_briefing.get("title", "")
         self.draw_text(
-            title_text,
+            title,
             width // 2,
             text_y,
             self.font_medium,
@@ -541,8 +536,9 @@ class UnifiedGameScreen(BaseScreen):
         )
         text_y += 18
         
-        objective_lines = self._wrap_text(mission_info['objective'], text_width, self.font_small)
-        for line in objective_lines[:2]:  # Limit to 2 lines
+        objective = self.mission_briefing.get("objective", "")
+        objective_lines = self._wrap_text(objective, text_width, self.font_small)
+        for line in objective_lines[:3]:  # Limit to 3 lines
             self.draw_text(
                 line,
                 text_x,
@@ -564,12 +560,16 @@ class UnifiedGameScreen(BaseScreen):
         text_y += 12
         
         # === PHASE SECTIONS ===
-        for phase_data in phases:
-            phase_num = phase_data["phase_number"]
-            phase_name = phase_data["phase_name"]
-            is_active = phase_data["is_active"]
-            is_expanded = self.expanded_phases.get(phase_num, False)
-            sections = phase_data["sections"]
+        phases = self.mission_briefing.get("phases", [])
+        current_phase = self.game.current_phase.value if hasattr(self.game, 'current_phase') else 1
+        
+        for phase in phases:
+            phase_id = phase.get("id", 0)
+            phase_name = phase.get("name", "")
+            header_text = phase.get("header_text", "")
+            is_expanded = self.expanded_phases.get(phase_id, False)
+            is_active = (phase_id == current_phase)
+            sections = phase.get("sections", [])
             
             # Phase header
             header_height = 26
@@ -582,7 +582,7 @@ class UnifiedGameScreen(BaseScreen):
                 pygame.draw.rect(self.screen, (28, 33, 42), header_rect)
             
             # Store rect for click detection
-            self.phase_header_rects[phase_num] = header_rect
+            self.phase_header_rects[phase_id] = header_rect
             
             # Expand/collapse indicator
             indicator = "▼" if is_expanded else "▶"
@@ -595,7 +595,7 @@ class UnifiedGameScreen(BaseScreen):
             )
             
             # Phase name
-            phase_label = f"Phase {phase_num} — {phase_name}"
+            phase_label = f"Phase {phase_id} — {phase_name}"
             label_color = (255, 255, 150) if is_active else (180, 200, 220)
             self.draw_text(
                 phase_label,
@@ -611,18 +611,43 @@ class UnifiedGameScreen(BaseScreen):
             
             text_y += header_height + 3
             
+            # Header text (if any)
+            if is_expanded and header_text:
+                self.draw_text(
+                    header_text,
+                    text_x + 5,
+                    text_y,
+                    self.font_small,
+                    color=(220, 200, 100)
+                )
+                text_y += 18
+            
             # Phase content (if expanded)
             if is_expanded and sections:
-                text_y = self._draw_sections(sections, text_x, text_y, text_width, y + height)
+                text_y = self._draw_briefing_sections(sections, text_x, text_y, text_width, y + height)
                 text_y += 8
             
             # Check if we need to stop (running out of space)
-            if text_y > y + height - 100:
+            if text_y > y + height - 150:
                 break
         
-        # === REMINDER BLOCK (after all phases) ===
-        if reminder_block and text_y < y + height - 60:
-            text_y = self._draw_reminder_block(reminder_block, text_x, text_y, text_width, width)
+        # === GLOBAL NOTES (at bottom if space available) ===
+        global_notes = self.mission_briefing.get("global_notes", [])
+        if global_notes and text_y < y + height - 100:
+            text_y += 10
+            pygame.draw.line(
+                self.screen,
+                (70, 90, 120),
+                (text_x, text_y),
+                (width - text_x, text_y),
+                1
+            )
+            text_y += 10
+            
+            for note in global_notes:
+                text_y = self._draw_global_note(note, text_x, text_y, text_width, width, y + height)
+                if text_y > y + height - 20:
+                    break
     
     def _draw_sections(self, sections: List[Dict[str, Any]], x: int, y: int, width: int, max_y: int) -> int:
         """
@@ -919,6 +944,369 @@ class UnifiedGameScreen(BaseScreen):
             for wrapped_line in wrapped:
                 self.draw_text(wrapped_line, x + 5, y, self.font_small, color=(190, 200, 160))
                 y += 14
+        
+        return y + 5
+    
+    def _draw_briefing_sections(
+        self,
+        sections: List[Dict[str, Any]],
+        x: int,
+        y: int,
+        width: int,
+        max_y: int
+    ) -> int:
+        """
+        Draw sections from the JSON briefing structure.
+        
+        Args:
+            sections: List of section dictionaries from JSON
+            x: Left margin x position
+            y: Starting y position
+            width: Available width
+            max_y: Maximum y position (stop rendering if exceeded)
+        
+        Returns:
+            Final y position after rendering
+        """
+        for section in sections:
+            if y > max_y - 30:
+                break
+            
+            section_type = section.get("type", "")
+            
+            if section_type == "text_block":
+                # Text block with optional styling
+                text = section.get("text", "")
+                style = section.get("style", "")
+                
+                # Special handling for intro_box (phase intro in bordered box)
+                if style == "intro_box":
+                    wrapped = self._wrap_text(text, width - 16, self.font_small)
+                    box_height = 8 + len(wrapped) * 14
+                    box_rect = pygame.Rect(x + 8, y, width - 16, box_height)
+                    pygame.draw.rect(self.screen, (30, 38, 50), box_rect)
+                    pygame.draw.rect(self.screen, (60, 75, 95), box_rect, 1)
+                    
+                    text_y = y + 4
+                    for line in wrapped:
+                        self.draw_text(line, x + 12, text_y, self.font_small, color=(190, 205, 220))
+                        text_y += 14
+                    y = text_y + 4
+                
+                # Special handling for action_rules_summary (bordered box with bullets)
+                elif style == "action_rules_summary":
+                    lines = text.split('\n')
+                    
+                    # Calculate box height
+                    box_height = 10 + len(lines) * 15
+                    box_rect = pygame.Rect(x, y, width, box_height)
+                    
+                    # Draw background and border
+                    pygame.draw.rect(self.screen, (30, 35, 45), box_rect)
+                    pygame.draw.rect(self.screen, (70, 90, 120), box_rect, 1)
+                    
+                    y += 6
+                    for line in lines:
+                        self.draw_text(
+                            f"• {line}",
+                            x + 8,
+                            y,
+                            self.font_small,
+                            color=(180, 195, 210)
+                        )
+                        y += 15
+                    y += 4
+                else:
+                    # Regular text block
+                    # Color based on style
+                    if style.startswith("phase_"):
+                        color = (200, 220, 240)
+                    elif style.startswith("rules_"):
+                        color = (180, 195, 210)
+                    else:
+                        color = (170, 185, 200)
+                    
+                    wrapped = self._wrap_text(text, width - 10, self.font_small)
+                    for line in wrapped:
+                        self.draw_text(
+                            line,
+                            x + 5,
+                            y,
+                            self.font_small,
+                            color=color
+                        )
+                        y += 16
+                    y += 6
+            
+            elif section_type == "note":
+                # Short call-out / reminder (smaller, indented)
+                text = section.get("text", "")
+                wrapped = self._wrap_text(text, width - 20, self.font_small)
+                for line in wrapped:
+                    self.draw_text(
+                        f"• {line}" if line == wrapped[0] else f"  {line}",
+                        x + 10,
+                        y,
+                        self.font_small,
+                        color=(160, 175, 140)
+                    )
+                    y += 14
+                y += 4
+            
+            elif section_type == "table":
+                # Table rendering
+                y = self._draw_briefing_table(section, x, y, width)
+                y += 8
+        
+        return y
+    
+    def _draw_briefing_table(
+        self,
+        table: Dict[str, Any],
+        x: int,
+        y: int,
+        width: int
+    ) -> int:
+        """Draw a table from the JSON briefing structure."""
+        style = table.get("style", "")
+        title = table.get("title", "")
+        columns = table.get("columns", [])
+        rows = table.get("rows", [])
+        notes = table.get("notes", [])
+        header_row = table.get("header_row", "")
+        header_row = table.get("header_row", "")
+        
+        # Title (if present)
+        if title:
+            title_lines = self._wrap_text(title, width - 10, self.font_small)
+            for line in title_lines:
+                self.draw_text(line, x + 5, y, self.font_small, color=(220, 230, 150))
+                y += 16
+            y += 4
+        
+        # Calculate column widths based on style
+        num_cols = len(columns)
+        if style == "action_table_card":
+            # Card layout: Action(35%), Surf(10%), Peri(10%), Med(10%), Deep(10%)
+            # Remaining 25% for spacing and comments span full width
+            col_widths = [
+                int(width * 0.35),  # Action
+                int(width * 0.13),  # Surf
+                int(width * 0.13),  # Peri
+                int(width * 0.13),  # Med
+                int(width * 0.13)   # Deep
+            ]
+        elif style == "action_table":
+            # Fixed column widths: 40% for Action, 15% each for depth columns
+            action_col_width = int(width * 0.40)
+            depth_col_width = int((width - action_col_width) / (num_cols - 1)) if num_cols > 1 else width - action_col_width
+            col_widths = [action_col_width] + [depth_col_width] * (num_cols - 1)
+        elif style == "attack_table":
+            # Custom widths for attack table
+            col_widths = [80] + [(width - 100) // (num_cols - 1) if num_cols > 1 else 50] * (num_cols - 1)
+        elif style == "damage_chart":
+            # First column for ship name, others for roll results
+            ship_col_width = 70
+            remaining_width = width - ship_col_width - 20
+            result_col_width = remaining_width // (num_cols - 1) if num_cols > 1 else remaining_width
+            col_widths = [ship_col_width] + [result_col_width] * (num_cols - 1)
+        elif style == "detection_table" or style == "modifier_table":
+            # Two columns, roughly equal
+            col_widths = [width // 2 - 10, width // 2 - 10]
+        elif style == "escort_table":
+            # d6 column narrow, action columns wider
+            d6_col_width = 30
+            action_col_width = (width - d6_col_width - 20) // (num_cols - 1) if num_cols > 1 else width - d6_col_width - 20
+            col_widths = [d6_col_width] + [action_col_width] * (num_cols - 1)
+        elif style == "events_table":
+            # Roll column narrow, effect column wide
+            col_widths = [50, width - 70]
+        else:
+            # Default: equal widths
+            col_widths = [(width - 20) // num_cols] * num_cols
+        
+        # Draw column headers
+        header_x = x + 5
+        for i, header in enumerate(columns):
+            col_width = col_widths[i] if i < len(col_widths) else 50
+            # Center headers for action_table_card and action_table numeric columns
+            if (style == "action_table_card" and i < 4) or (style == "action_table" and i > 0):
+                # Center column headers
+                header_surface = self.font_small.render(header, True, (220, 230, 150))
+                header_center_x = header_x + (col_width - header_surface.get_width()) // 2
+                self.screen.blit(header_surface, (header_center_x, y))
+            else:
+                self.draw_text(header[:20], header_x, y, self.font_small, color=(220, 230, 150))
+            
+            header_x += col_width
+        y += 16
+        
+        # Draw horizontal line under headers for action_table_card
+        if style == "action_table_card":
+            pygame.draw.line(self.screen, (70, 90, 120), (x, y), (x + width, y), 1)
+            y += 2
+        
+        # Draw rows
+        for row in rows:
+            cells = row.get("cells", [])
+            row_style = row.get("style", "")
+            styles = row.get("styles", [])  # Per-cell styles for damage chart
+            comment = row.get("comment", "")
+            
+            # Calculate row height for action_table_card (need to wrap comment text)
+            row_height = 18
+            wrapped_comment = []
+            if style == "action_table_card" and comment:
+                comment_width = width - 20
+                wrapped_comment = self._wrap_text(comment, comment_width, self.font_small)
+                row_height = 18 + len(wrapped_comment) * 14 + 4
+            
+            cell_x = x + 5
+            cell_y = y
+            
+            for i, cell in enumerate(cells):
+                col_width = col_widths[i] if i < len(col_widths) else 50
+                
+                # Color based on row style or per-cell style
+                if styles and i < len(styles):
+                    cell_style = styles[i]
+                    if cell_style == "result_critical":
+                        color = (255, 100, 100)
+                    elif cell_style == "result_warning":
+                        color = (255, 200, 100)
+                    elif cell_style == "result_ok":
+                        color = (150, 220, 150)
+                    else:
+                        color = (180, 195, 210)
+                elif row_style == "critical":
+                    color = (255, 100, 100)
+                elif row_style == "hull":
+                    color = (255, 180, 100)
+                elif row_style == "damage":
+                    color = (255, 220, 120)
+                elif row_style == "crew":
+                    color = (200, 200, 255)
+                else:
+                    color = (180, 195, 210)
+                
+                # Special handling for action_table_card layout
+                if style == "action_table_card":
+                    # Draw row background
+                    if i == 0:
+                        row_bg = pygame.Rect(x + 8, y - 2, width - 16, row_height)
+                        pygame.draw.rect(self.screen, (25, 32, 42), row_bg)
+                        pygame.draw.rect(self.screen, (50, 62, 78), row_bg, 1)
+                    
+                    if i == 0:
+                        # Bold action name
+                        self.draw_text(str(cell), cell_x, cell_y, self.font_small, color=(230, 240, 160))
+                    else:
+                        # Center AP cost numbers (Surf, Peri, Med, Deep)
+                        cell_surface = self.font_small.render(str(cell), True, (180, 195, 210))
+                        cell_center_x = cell_x + (col_width - cell_surface.get_width()) // 2
+                        self.screen.blit(cell_surface, (cell_center_x, cell_y))
+                
+                # For action_table: left-align action names, center numbers
+                elif style == "action_table":
+                    if i == 0:
+                        # Left-align action name, no truncation
+                        self.draw_text(str(cell), cell_x, cell_y, self.font_small, color=color)
+                    else:
+                        # Center numbers
+                        cell_surface = self.font_small.render(str(cell), True, color)
+                        cell_center_x = cell_x + (col_width - cell_surface.get_width()) // 2
+                        self.screen.blit(cell_surface, (cell_center_x, cell_y))
+                else:
+                    # Regular cell rendering for other table types (like damage_chart)
+                    max_chars = col_width // 6
+                    cell_text = str(cell)[:max_chars]
+                    self.draw_text(cell_text, cell_x, cell_y, self.font_small, color=color)
+                
+                cell_x += col_width
+            
+            # For action_table_card, draw comment indented under the row
+            if style == "action_table_card" and comment:
+                comment_y = y + 18
+                for comment_line in wrapped_comment:
+                    self.draw_text(
+                        comment_line,
+                        x + 16,
+                        comment_y,
+                        self.font_small,
+                        color=(155, 170, 185)
+                    )
+                    comment_y += 14
+            
+            y += row_height + 6
+            
+            # For action_table, draw comment under the row
+            if style == "action_table" and comment:
+                # Wrap comment text to fit table width
+                comment_wrapped = self._wrap_text(comment, width - 15, self.font_small)
+                for comment_line in comment_wrapped:
+                    self.draw_text(
+                        comment_line,
+                        x + 8,
+                        y,
+                        self.font_small,
+                        color=(160, 175, 190)
+                    )
+                    y += 13
+                y += 4  # Extra spacing after comment before next row
+        
+        # Draw notes (if present)
+        if notes:
+            y += 4
+            for note in notes:
+                wrapped = self._wrap_text(note, width - 20, self.font_small)
+                for line in wrapped:
+                    self.draw_text(
+                        f"• {line}" if line == wrapped[0] else f"  {line}",
+                        x + 10,
+                        y,
+                        self.font_small,
+                        color=(160, 175, 140)
+                    )
+                    y += 14
+        
+        return y
+    
+    def _draw_global_note(
+        self,
+        note: Dict[str, Any],
+        x: int,
+        y: int,
+        width: int,
+        panel_width: int,
+        max_y: int
+    ) -> int:
+        """Draw a global note block."""
+        if y > max_y - 40:
+            return y
+        
+        title = note.get("title", "")
+        text_lines = note.get("text", [])
+        
+        # Background box
+        block_height = 20 + len(text_lines) * 15
+        block_rect = pygame.Rect(x - 5, y, panel_width - 2*x + 10, min(block_height, max_y - y))
+        pygame.draw.rect(self.screen, (45, 50, 30), block_rect)
+        pygame.draw.rect(self.screen, (120, 130, 80), block_rect, 1)
+        
+        # Title
+        self.draw_text(title, x + 5, y + 4, self.font_small, color=(220, 230, 150))
+        y += 18
+        
+        # Text lines
+        for line in text_lines:
+            if y > max_y - 15:
+                break
+            wrapped = self._wrap_text(line, width - 20, self.font_small)
+            for wrapped_line in wrapped:
+                self.draw_text(wrapped_line, x + 5, y, self.font_small, color=(190, 200, 160))
+                y += 14
+                if y > max_y - 15:
+                    break
         
         return y + 5
     

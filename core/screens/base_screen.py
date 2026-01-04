@@ -28,13 +28,13 @@ class BaseScreen(ABC):
         
         # Load fonts
         try:
-            self.font_small = pygame.font.Font(None, 24)
+            self.font_small = pygame.font.SysFont('calibri', 20)
             self.font_medium = pygame.font.Font(None, 36)
             self.font_large = pygame.font.Font(None, 48)
             self.font_title = pygame.font.Font(None, 72)
         except Exception:
             # Fallback to system default
-            self.font_small = pygame.font.SysFont('arial', 24)
+            self.font_small = pygame.font.SysFont('arial', 20)
             self.font_medium = pygame.font.SysFont('arial', 36)
             self.font_large = pygame.font.SysFont('arial', 48)
             self.font_title = pygame.font.SysFont('arial', 72)
