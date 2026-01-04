@@ -107,15 +107,28 @@ For detailed documentation, see [ARCHITECTURE_BOARD_LAYOUT.md](ARCHITECTURE_BOAR
 
 ```text
 LoneUBoat/
-├── main.py                 # Game entry point (22 lines)
-├── editor.py              # Board editor and testing tool (360 lines)
+├── main.py                 # Game entry point
+├── editor.py              # Board editor and testing tool
 ├── extract_maps.py        # Utility to extract map images from PDFs
-├── RULES.md              # Game rules documentation
 ├── README.md             # This file
+├── RULES.md              # Game rules documentation
+├── DEVELOPMENT_PLAN.md   # Overall development plan
+├── PHASE_2_REFINED.md    # Phase 2 subsystems (COMPLETE)
+│
+├── tests/                # Test suite (Phase 2: 100% complete)
+│   ├── README.md         # Test documentation
+│   ├── test_combat_resolver.py
+│   ├── test_torpedo_validator.py
+│   ├── test_repair_validator.py
+│   ├── test_depth_validator.py
+│   ├── test_movement_validator.py
+│   ├── test_range_los.py
+│   └── test_phase2_subsystems.py
 │
 ├── config/
 │   ├── __init__.py
-│   └── board_config.py   # Board dimensions, hex layout, status boxes
+│   ├── board_config.py      # Board dimensions, hex layout
+│   └── board_layout_config.py  # Status box configurations
 │
 ├── core/                 # Core game engine modules
 │   ├── models.py         # Data classes (HexCoord, UBoat, Ship, etc.)
@@ -123,22 +136,78 @@ LoneUBoat/
 │   ├── assets.py         # Asset loading (images, fonts)
 │   ├── conditions.py     # Status box condition factory
 │   ├── renderer.py       # All pygame rendering operations
-│   └── game_state.py     # Game logic and state management
+│   ├── game_state.py     # Game logic and state management
+│   ├── screen_manager.py # Screen transitions and state
+│   │
+│   ├── screens/          # Game screens
+│   │   ├── base_screen.py
+│   │   ├── main_menu.py
+│   │   └── unified_game.py
+│   │
+│   └── # Phase 2 Subsystems (JSON-driven validators)
+│       ├── dice.py                 # DiceRoller with seeded random
+│       ├── action_cost_lookup.py  # AP costs from JSON
+│       ├── range_los.py           # Range calculation & LOS
+│       ├── movement_validator.py  # Movement validation
+│       ├── depth_validator.py     # Depth change validation
+│       ├── repair_validator.py    # Repair validation
+│       ├── combat_resolver.py     # Combat resolution
+│       └── torpedo_validator.py   # Torpedo loading/firing
 │
 ├── missions/
-│   ├── M1.txt            # Mission 1 description
-│   ├── mission_1_config.py  # Mission 1 configuration
-│   └── ...               # Additional missions
+│   ├── mission_1_config.py        # Mission 1 Python configuration
+│   ├── mission_1_layout.json      # Mission 1 hex grid calibration
+│   ├── mission_1_briefing.json    # Mission 1 briefing text
+│   ├── mission_1_rules.json       # Mission 1 specific rules
+│   ├── u_boat_ruleset_default.json  # Default U-boat action rules
+│   ├── core_system_rules.json     # Core game system rules
+│   └── ...                        # Additional missions
 │
 ├── assets/
-│   └── maps/             # Mission map images
-│       └── m1.png
+│   ├── maps/             # Mission map images
+│   │   └── m1.png
+│   └── manual/           # Game manual pages (if needed)
 │
-├── rules/                # Text files with game rules
-│   ├── P1.txt - P17.txt  # Rule sections from the board game
-│
-└── references/           # Original game materials and documentation
+└── references/           # Original game materials
+    └── RULES.txt         # Original rules reference
 ```
+
+## Development Status
+
+### ✅ Phase 1: Complete
+- Turn-based gameplay system
+- Action point management
+- Game loop and state transitions
+
+### ✅ Phase 2: Complete (100% - 23/23 hours)
+All subsystems implemented with comprehensive tests:
+- 2.1 DiceRoller (seeded random for testing)
+- 2.2 Range & Line-of-Sight calculation
+- 2.3 ActionCostLookup (JSON-driven AP costs)
+- 2.4 MovementValidator (hex grid navigation)
+- 2.5 DepthValidator (ballast tank damage rules)
+- 2.6 RepairValidator (crew status & critical damage)
+- 2.7 CombatResolver (deck gun & torpedoes)
+- 2.8 TorpedoValidator (loading & firing rules)
+
+### 🚧 Phase 3: Next - Action Implementation
+Integrate validators into actual gameplay actions
+
+## Testing
+
+All Phase 2 subsystems have comprehensive test coverage. Run tests from the project root:
+
+```powershell
+# Run individual test files
+python tests/test_combat_resolver.py
+python tests/test_torpedo_validator.py
+# ... etc
+
+# Or run all tests
+python -m pytest tests/
+```
+
+See [tests/README.md](tests/README.md) for detailed test documentation.
 
 ## Architecture
 
