@@ -6,8 +6,12 @@ Left: Mission briefing | Center: Game board | Right: Event log | Bottom: Control
 import pygame
 import sys
 from typing import Optional, Any, List, Dict
-from ..models import Facing, Depth
+from ..models import Facing, Depth, HexCoord, UBoat
 from .base_screen import BaseScreen
+from ..actions import (
+    MoveAction, RotateAction, DepthChangeAction, RepairAction,
+    DeckGunAction, LoadTorpedoAction, FireTorpedoAction
+)
 
 
 class UnifiedGameScreen(BaseScreen):
@@ -85,6 +89,13 @@ class UnifiedGameScreen(BaseScreen):
         
         # Cache board rect to avoid recomputing layout every frame
         self.cached_board_rect: Optional[pygame.Rect] = None
+        
+        # Action queue button rects for click handling
+        self.undo_button_rect: Optional[pygame.Rect] = None
+        self.commit_button_rect: Optional[pygame.Rect] = None
+        
+        # Action selection button rects
+        self.action_button_rects: Dict[str, pygame.Rect] = {}
     
     def add_event(self, message: str) -> None:
         """Add an event to the log."""
@@ -130,45 +141,88 @@ class UnifiedGameScreen(BaseScreen):
             elif self.alignment_mode:
                 self._handle_alignment_input(event)
             
-            # Toggle display options (work in both setup and game modes)
-            elif event.key == pygame.K_g:
-                self.game.show_grid = not self.game.show_grid
-                state = "ON" if self.game.show_grid else "OFF"
-                self.add_event(f"Hex grid: {state}")
-            
-            elif event.key == pygame.K_m:
-                self.game.show_map = not self.game.show_map
-                state = "ON" if self.game.show_map else "OFF"
-                self.add_event(f"Map display: {state}")
-            
-            elif event.key == pygame.K_v:
-                self.game.show_terrain = not self.game.show_terrain
-                state = "ON" if self.game.show_terrain else "OFF"
-                self.add_event(f"Terrain overlay: {state}")
-            
-            elif event.key == pygame.K_s:
-                self.game.show_status_boxes = not self.game.show_status_boxes
-                state = "ON" if self.game.show_status_boxes else "OFF"
-                self.add_event(f"Status boxes: {state}")
-            
             # If awaiting initial setup
             if self.awaiting_initial_setup:
                 self._handle_setup_input(event)
             else:
-                # Game is active - forward keyboard events to game for phase advancement
-                if event.type == pygame.KEYDOWN:
-                    # Create a minimal event list for the game to process
-                    # The game's handle_events expects to iterate over pygame.event.get()
-                    # but we're already handling events here, so we need to handle specific keys
-                    
-                    if event.key == pygame.K_SPACE:
-                        # Forward phase advancement to game
-                        self.game._advance_to_next_phase()
-                        # Add visual feedback
-                        phase_name = self.game.turn_manager.get_current_phase_name()
-                        self.add_event(f"→ {phase_name}")
-                    
-                    # TODO Phase 3: Forward U-Boat action keys to game
+                # Game is active - handle game keys
+                if event.key == pygame.K_SPACE:
+                    # Forward phase advancement to game
+                    self.game._advance_to_next_phase()
+                    # Add visual feedback
+                    phase_name = self.game.turn_manager.get_current_phase_name()
+                    self.add_event(f"→ {phase_name}")
+                
+                elif event.key == pygame.K_u:
+                    # Undo last action from queue
+                    if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
+                        undone_action = self.game.action_queue.remove_last()
+                        if undone_action:
+                            action_desc = self._get_action_description(undone_action)
+                            remaining = self.game.action_queue.get_remaining_ap(self.game)
+                            self.add_event(f"Undone: {action_desc} (AP: {remaining}/{self.game.action_queue.max_ap})")
+                    else:
+                        self.add_event("Nothing to undo")
+                
+                elif event.key == pygame.K_c:
+                    # Commit queued actions
+                    current_phase = self.game.turn_manager.current_phase
+                    from ..models import GamePhase
+                    if current_phase == GamePhase.UBOAT_PHASE:
+                        if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
+                            # Execute all actions immediately
+                            results = self.game.action_queue.commit_all(self.game)
+                            for result in results:
+                                if result.success:
+                                    action_name = result.state_changes.get('action_name', 'Action')
+                                    self.add_event(f"✓ {action_name}")
+                                else:
+                                    self.add_event(f"✗ Failed: {result.message}")
+                            self.game.action_queue.clear()
+                            remaining = self.game.action_queue.get_remaining_ap(self.game)
+                            self.add_event(f"Committed (AP: {remaining}/{self.game.action_queue.max_ap})")
+                        else:
+                            self.add_event("No actions to commit")
+                    else:
+                        self.add_event("Can only commit during U-Boat phase")
+                
+                # Action hotkeys
+                elif event.key == pygame.K_w:
+                    self._queue_action("move")
+                elif event.key == pygame.K_q:
+                    self._queue_action("rotate_l")
+                elif event.key == pygame.K_e:
+                    self._queue_action("rotate_r")
+                elif event.key == pygame.K_z:
+                    self._queue_action("dive")
+                elif event.key == pygame.K_x:
+                    self._queue_action("surface")
+                elif event.key == pygame.K_r:
+                    self._queue_action("repair")
+                elif event.key == pygame.K_f:
+                    self._queue_action("deck_gun")
+                elif event.key == pygame.K_l:
+                    self._queue_action("load_torp")
+                elif event.key == pygame.K_t:
+                    self._queue_action("fire_torp")
+                
+                # Display toggles (work during game)
+                elif event.key == pygame.K_g:
+                    self.game.show_grid = not self.game.show_grid
+                    state = "ON" if self.game.show_grid else "OFF"
+                    self.add_event(f"Hex grid: {state}")
+                elif event.key == pygame.K_m:
+                    self.game.show_map = not self.game.show_map
+                    state = "ON" if self.game.show_map else "OFF"
+                    self.add_event(f"Map display: {state}")
+                elif event.key == pygame.K_v:
+                    self.game.show_terrain = not self.game.show_terrain
+                    state = "ON" if self.game.show_terrain else "OFF"
+                    self.add_event(f"Terrain overlay: {state}")
+                elif event.key == pygame.K_s:
+                    self.game.show_status_boxes = not self.game.show_status_boxes
+                    state = "ON" if self.game.show_status_boxes else "OFF"
+                    self.add_event(f"Status boxes: {state}")
 
         
         elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -185,6 +239,43 @@ class UnifiedGameScreen(BaseScreen):
                         # Toggle expansion
                         self.expanded_phases[phase_num] = not self.expanded_phases[phase_num]
                         break
+                
+                # Check if clicking action queue buttons
+                if not self.awaiting_initial_setup:
+                    if self.undo_button_rect and self.undo_button_rect.collidepoint(mouse_pos):
+                        if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
+                            undone_action = self.game.action_queue.remove_last()
+                            if undone_action:
+                                action_name = type(undone_action).__name__.replace('Action', '')
+                                self.add_event(f"Undone: {action_name}")
+                    
+                    elif self.commit_button_rect and self.commit_button_rect.collidepoint(mouse_pos):
+                        current_phase = self.game.turn_manager.current_phase
+                        from ..models import GamePhase
+                        if current_phase == GamePhase.UBOAT_PHASE:
+                            if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
+                                # Execute all actions immediately
+                                results = self.game.action_queue.commit_all(self.game)
+                                for result in results:
+                                    if result.success:
+                                        action_name = result.state_changes.get('action_name', 'Action')
+                                        self.add_event(f"✓ {action_name}")
+                                    else:
+                                        self.add_event(f"✗ Failed: {result.message}")
+                                self.game.action_queue.clear()
+                                remaining = self.game.action_queue.get_remaining_ap(self.game)
+                                self.add_event(f"Committed (AP: {remaining}/{self.game.action_queue.max_ap})")
+                            else:
+                                self.add_event("No actions to commit")
+                        else:
+                            self.add_event("Can only commit during U-Boat phase")
+                    
+                    # Check if clicking action selection buttons
+                    else:
+                        for action_id, rect in self.action_button_rects.items():
+                            if rect.collidepoint(mouse_pos):
+                                self._queue_action(action_id)
+                                break
                 
                 if self.awaiting_initial_setup:
                     # Handle setup clicks
@@ -1423,6 +1514,10 @@ class UnifiedGameScreen(BaseScreen):
         else:
             self.game.renderer.render_u_boat(self.game.u_boat)
         
+        # Render action preview (outline showing where u-boat will be after queued actions)
+        if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
+            self._render_action_preview()
+        
         # Render alignment mode highlights
         if self.alignment_mode:
             self.game.renderer.render_alignment_highlights(
@@ -1443,18 +1538,110 @@ class UnifiedGameScreen(BaseScreen):
         # Draw border
         pygame.draw.rect(self.screen, (50, 70, 100), board_rect, 2)
     
+    def _render_action_preview(self) -> None:
+        """Render an outline showing where the u-boat will be after all queued actions."""
+        # Use queued actions
+        actions_to_preview = self.game.action_queue.actions
+        
+        if not actions_to_preview:
+            return
+        
+        # Calculate preview state by simulating all queued actions
+        # Start from either setup state or current state
+        if self.awaiting_initial_setup:
+            preview_position = self.game.u_boat.position
+            preview_facing = self.selected_facing
+            preview_depth = self.selected_depth
+        else:
+            preview_position = self.game.u_boat.position
+            preview_facing = self.game.u_boat.facing
+            preview_depth = self.game.u_boat.depth
+        
+        for action in actions_to_preview:
+            action_type = type(action).__name__
+            
+            if action_type == "MoveAction":
+                # Move forward in current facing
+                new_position = preview_facing.forward(preview_position)
+                # Validate new position is within mission hexes
+                if new_position in self.game.mission_hexes:
+                    preview_position = new_position
+                else:
+                    # Stop preview at last valid position
+                    break
+            elif action_type == "RotateAction":
+                # Rotate left or right
+                if action.clockwise:
+                    preview_facing = Facing((preview_facing.value + 1) % 6)
+                else:
+                    preview_facing = Facing((preview_facing.value - 1) % 6)
+            elif action_type == "DepthChangeAction":
+                # Change depth
+                preview_depth = action.new_depth
+        
+        # Only draw if preview differs from current
+        if (preview_position != self.game.u_boat.position or 
+            preview_facing != self.game.u_boat.facing or
+            preview_depth != self.game.u_boat.depth):
+            
+            # Get pixel position
+            center = self.game.renderer.hex_grid.hex_to_pixel(preview_position)
+            
+            # Define rectangle size (similar to u-boat image size)
+            rect_width = 50
+            rect_height = 30
+            
+            # Rotate rectangle based on facing (add 90 degrees to align with forward direction)
+            angle_deg = -60 * preview_facing.value - 90
+            
+            # Depth-based colors (semi-transparent)
+            depth_colors = {
+                Depth.SURFACED: (100, 200, 255, 180),    # Light blue
+                Depth.PERISCOPE: (50, 150, 255, 180),    # Medium blue
+                Depth.MEDIUM: (30, 100, 200, 180),       # Dark blue
+                Depth.DEEP: (20, 50, 150, 180)           # Very dark blue
+            }
+            
+            color = depth_colors.get(preview_depth, (100, 200, 255, 180))
+            
+            # Create a surface for the rotated rectangle
+            # Make it larger to accommodate rotation
+            surf_size = int((rect_width + rect_height) * 1.5)
+            temp_surface = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
+            
+            # Draw rectangle at center of temp surface
+            rect_x = (surf_size - rect_width) // 2
+            rect_y = (surf_size - rect_height) // 2
+            
+            # Draw filled rectangle with transparency
+            pygame.draw.rect(temp_surface, color, 
+                           (rect_x, rect_y, rect_width, rect_height))
+            
+            # Draw outline (thicker, more visible)
+            pygame.draw.rect(temp_surface, (255, 255, 255, 255), 
+                           (rect_x, rect_y, rect_width, rect_height), 3)
+            
+            # Rotate the surface
+            rotated_surface = pygame.transform.rotate(temp_surface, angle_deg)
+            
+            # Blit to screen centered on hex
+            rect = rotated_surface.get_rect(center=(int(center[0]), int(center[1])))
+            self.screen.blit(rotated_surface, rect)
+    
     def _draw_right_panel(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw the right panel with dice rolls, event log, and controls."""
+        """Draw the right panel with dice rolls, action queue, event log, and controls."""
         panel_rect = pygame.Rect(x, y, width, height)
         pygame.draw.rect(self.screen, (20, 25, 35), panel_rect)
         pygame.draw.line(self.screen, (50, 70, 100), (x, y), (x, y+height), 2)
         
-        # Split panel into three areas: dice rolls (top), event log (middle), controls (bottom)
+        # Split panel into four areas: dice rolls (top), action queue, event log (middle), controls (bottom)
         dice_area_height = 150
+        action_queue_height = 250
         controls_area_height = 200
-        log_area_y = y + dice_area_height
-        log_area_height = height - dice_area_height - controls_area_height
-        controls_area_y = y + dice_area_height + log_area_height
+        queue_area_y = y + dice_area_height
+        log_area_y = y + dice_area_height + action_queue_height
+        log_area_height = height - dice_area_height - action_queue_height - controls_area_height
+        controls_area_y = y + dice_area_height + action_queue_height + log_area_height
         
         # === DICE ROLL SECTION ===
         self.draw_text(
@@ -1482,6 +1669,18 @@ class UnifiedGameScreen(BaseScreen):
                 dice_y += 20
         else:
             self.draw_text("No rolls yet", dice_x, dice_y, self.font_small, color=(120, 120, 120))
+        
+        # Separator line
+        pygame.draw.line(
+            self.screen,
+            (50, 70, 100),
+            (x, queue_area_y),
+            (x + width, queue_area_y),
+            2
+        )
+        
+        # === ACTION QUEUE SECTION ===
+        self._draw_action_queue(x, queue_area_y, width, action_queue_height)
         
         # Separator line
         pygame.draw.line(
@@ -1549,6 +1748,77 @@ class UnifiedGameScreen(BaseScreen):
         else:
             self._draw_game_controls(x, controls_area_y, width, controls_area_height)
     
+    def _draw_action_queue(self, x: int, y: int, width: int, height: int) -> None:
+        """Draw the action queue panel showing queued actions and Undo/Commit buttons."""
+        # Title
+        self.draw_text(
+            "ACTION QUEUE",
+            x + width // 2,
+            y + 15,
+            self.font_medium,
+            color=(255, 200, 100),
+            center=True
+        )
+        
+        # Show AP info
+        ap_y = y + 45
+        if hasattr(self.game, 'action_queue') and self.game.action_queue:
+            queue = self.game.action_queue
+            remaining = queue.get_remaining_ap(self.game)
+            max_ap = queue.max_ap
+            
+            ap_text = f"AP: {remaining}/{max_ap}"
+            self.draw_text(ap_text, x + width // 2, ap_y, self.font_small, 
+                          color=(100, 255, 150), center=True)
+            
+            # Show queued actions
+            actions_y = ap_y + 30
+            actions_x = x + 10
+            
+            if queue.actions:
+                for i, action in enumerate(queue.actions):
+                    # Format: "1. Rotate Left (1 AP)"
+                    action_name = self._get_action_description(action)
+                    action_cost = action.get_cost(self.game.u_boat)
+                    action_text = f"{i+1}. {action_name} ({action_cost} AP)"
+                    
+                    self.draw_text(action_text, actions_x, actions_y, 
+                                 self.font_small, color=(200, 220, 255))
+                    actions_y += 20
+                    
+                    if actions_y > y + height - 60:  # Leave room for buttons
+                        break
+            else:
+                self.draw_text("No actions queued", actions_x, actions_y, 
+                             self.font_small, color=(120, 120, 120))
+            
+            # Undo and Commit buttons at bottom
+            button_y = y + height - 45
+            button_width = (width - 30) // 2
+            button_height = 35
+            
+            # Undo button
+            self.undo_button_rect = pygame.Rect(x + 10, button_y, button_width, button_height)
+            undo_color = (80, 80, 100) if not queue.actions else (100, 60, 60)
+            pygame.draw.rect(self.screen, undo_color, self.undo_button_rect)
+            pygame.draw.rect(self.screen, (150, 150, 150), self.undo_button_rect, 2)
+            self.draw_text("UNDO (U)", self.undo_button_rect.centerx, 
+                          self.undo_button_rect.centery, self.font_small, 
+                          color=(255, 255, 255), center=True)
+            
+            # Commit button
+            self.commit_button_rect = pygame.Rect(x + 15 + button_width, button_y, 
+                                                  button_width, button_height)
+            commit_color = (80, 80, 100) if not queue.actions else (60, 100, 60)
+            pygame.draw.rect(self.screen, commit_color, self.commit_button_rect)
+            pygame.draw.rect(self.screen, (150, 150, 150), self.commit_button_rect, 2)
+            self.draw_text("COMMIT (C)", self.commit_button_rect.centerx, 
+                          self.commit_button_rect.centery, self.font_small, 
+                          color=(255, 255, 255), center=True)
+        else:
+            self.draw_text("Initializing...", x + width // 2, ap_y + 30, 
+                         self.font_small, color=(120, 120, 120), center=True)
+    
     def _draw_bottom_panel(self, x: int, y: int, width: int, height: int) -> None:
         """Draw the bottom panel (currently empty - controls moved to right panel)."""
         panel_rect = pygame.Rect(x, y, width, height)
@@ -1609,6 +1879,111 @@ class UnifiedGameScreen(BaseScreen):
             color=(100, 255, 100),
             center=True
         )
+    
+    def _draw_action_queue(self, x: int, y: int, width: int, height: int) -> None:
+        """Draw the action queue with queued actions, AP, and Undo/Commit buttons."""
+        self.draw_text(
+            "ACTION QUEUE",
+            x + width // 2,
+            y + 15,
+            self.font_medium,
+            color=(100, 255, 150),
+            center=True
+        )
+        
+        # Show remaining AP
+        if hasattr(self.game, 'action_queue'):
+            remaining_ap = self.game.action_queue.get_remaining_ap(self.game)
+            total_ap = self.game.action_queue.max_ap
+            
+            ap_text = f"AP: {remaining_ap}/{total_ap}"
+            ap_color = (100, 255, 100) if remaining_ap > 0 else (150, 150, 150)
+            self.draw_text(
+                ap_text,
+                x + width // 2,
+                y + 40,
+                self.font_medium,
+                color=ap_color,
+                center=True
+            )
+            
+            # Show queued actions
+            queue_y = y + 70
+            queue_x = x + 10
+            
+            if self.game.action_queue.actions:
+                for idx, action in enumerate(self.game.action_queue.actions, 1):
+                    # Action description
+                    action_name = self._get_action_description(action)
+                    action_cost = action.get_cost(self.game.u_boat)
+                    
+                    action_text = f"{idx}. {action_name} ({action_cost} AP)"
+                    self.draw_text(
+                        action_text,
+                        queue_x,
+                        queue_y,
+                        self.font_small,
+                        color=(220, 240, 255)
+                    )
+                    queue_y += 20
+                    
+                    # Stop if we run out of space
+                    if queue_y > y + height - 80:
+                        break
+            else:
+                self.draw_text(
+                    "No actions queued",
+                    queue_x,
+                    queue_y,
+                    self.font_small,
+                    color=(120, 120, 120)
+                )
+            
+            # Buttons at bottom
+            button_y = y + height - 55
+            button_width = (width - 30) // 2
+            button_height = 40
+            
+            # Undo button (left)
+            undo_rect = pygame.Rect(x + 10, button_y, button_width, button_height)
+            undo_color = (100, 50, 50) if self.game.action_queue.actions else (40, 40, 40)
+            pygame.draw.rect(self.screen, undo_color, undo_rect)
+            pygame.draw.rect(self.screen, (150, 100, 100), undo_rect, 2)
+            self.draw_text(
+                "UNDO (U)",
+                undo_rect.centerx,
+                undo_rect.centery,
+                self.font_small,
+                color=(255, 200, 200) if self.game.action_queue.actions else (100, 100, 100),
+                center=True
+            )
+            
+            # Commit button (right)
+            commit_rect = pygame.Rect(x + 20 + button_width, button_y, button_width, button_height)
+            commit_color = (50, 100, 50) if self.game.action_queue.actions else (40, 40, 40)
+            pygame.draw.rect(self.screen, commit_color, commit_rect)
+            pygame.draw.rect(self.screen, (100, 150, 100), commit_rect, 2)
+            self.draw_text(
+                "COMMIT (C)",
+                commit_rect.centerx,
+                commit_rect.centery,
+                self.font_small,
+                color=(200, 255, 200) if self.game.action_queue.actions else (100, 100, 100),
+                center=True
+            )
+            
+            # Store button rects for click handling
+            self.undo_button_rect = undo_rect
+            self.commit_button_rect = commit_rect
+        else:
+            self.draw_text(
+                "Action queue not initialized",
+                x + width // 2,
+                y + height // 2,
+                self.font_small,
+                color=(120, 120, 120),
+                center=True
+            )
         self.draw_text(
             "to begin",
             x + width // 2,
@@ -1619,38 +1994,218 @@ class UnifiedGameScreen(BaseScreen):
         )
     
     def _draw_game_controls(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw normal game controls (now in right panel)."""
+        """Draw action selection buttons."""
         self.draw_text(
-            "CONTROLS",
+            "ACTIONS",
             x + width // 2,
             y + 10,
             self.font_medium,
-            color=(220, 220, 255),
+            color=(255, 220, 100),
             center=True
         )
         
-        # Basic controls - compact layout for narrow panel
-        controls_y = y + 40
-        control_x = x + 10
+        # Clear button rects
+        self.action_button_rects.clear()
         
-        controls = [
-            "Q/E: Rotate",
-            "W: Move Forward",
-            "Z/X: Change Depth",
-            "",
-            "G: Toggle Grid",
-            "M: Toggle Map",
-            "V: Toggle Terrain",
-            "S: Status/Torps"
+        button_y = y + 35
+        button_x = x + 10
+        button_width = width - 20
+        button_height = 25
+        button_spacing = 3
+        
+        u_boat = self.game.u_boat
+        
+        # Calculate torpedo states
+        loaded_tubes = sum(1 for tube in u_boat.torpedo_tubes if tube)
+        empty_tubes = len(u_boat.torpedo_tubes) - loaded_tubes
+        
+        # Define action buttons
+        actions = [
+            ("MOVE FWD (W)", "move", u_boat.depth != Depth.DEEP),
+            ("ROTATE L (Q)", "rotate_l", True),
+            ("ROTATE R (E)", "rotate_r", True),
+            ("DIVE (Z)", "dive", u_boat.depth != Depth.DEEP),
+            ("SURFACE (X)", "surface", u_boat.depth != Depth.SURFACED),
+            ("REPAIR (R)", "repair", u_boat.engine_damaged or u_boat.deck_gun_damaged or u_boat.flak_gun_damaged),
+            ("DECK GUN (F)", "deck_gun", u_boat.depth == Depth.SURFACED and len(self.game.ships) > 0),
+            ("LOAD TORP (L)", "load_torp", empty_tubes > 0),
+            ("FIRE TORP (T)", "fire_torp", loaded_tubes > 0 and len(self.game.ships) > 0)
         ]
         
-        for control_text in controls:
-            if control_text:  # Skip empty lines for spacing
-                self.draw_text(
-                    control_text,
-                    control_x,
-                    controls_y,
-                    self.font_small,
-                    color=(180, 200, 220)
+        for label, action_id, enabled in actions:
+            rect = pygame.Rect(button_x, button_y, button_width, button_height)
+            self.action_button_rects[action_id] = rect
+            
+            # Button color based on availability
+            if enabled:
+                color = (60, 80, 100)
+                border_color = (100, 150, 200)
+                text_color = (200, 220, 255)
+            else:
+                color = (40, 40, 40)
+                border_color = (80, 80, 80)
+                text_color = (100, 100, 100)
+            
+            pygame.draw.rect(self.screen, color, rect)
+            pygame.draw.rect(self.screen, border_color, rect, 1)
+            self.draw_text(label, rect.centerx, rect.centery, self.font_small, 
+                          color=text_color, center=True)
+            
+            button_y += button_height + button_spacing
+        
+        # Info text
+        info_y = button_y + 10
+        self.draw_text("Click or use hotkeys", x + width // 2, info_y, 
+                      self.font_small, color=(120, 140, 160), center=True)
+    
+    def _get_action_description(self, action) -> str:
+        """Get descriptive name for an action."""
+        action_type = type(action).__name__
+        
+        if action_type == "RotateAction":
+            return "Rotate Left" if not action.clockwise else "Rotate Right"
+        elif action_type == "DepthChangeAction":
+            depth_names = {0: "Surfaced", 1: "Periscope", 2: "Medium", 3: "Deep"}
+            target_name = depth_names.get(action.new_depth.value, "Unknown")
+            return f"Depth → {target_name}"
+        elif action_type == "MoveAction":
+            return "Move Forward"
+        elif action_type == "RepairAction":
+            return f"Repair {action.repair_target.replace('_', ' ').title()}"
+        elif action_type == "DeckGunAction":
+            return "Fire Deck Gun"
+        elif action_type == "LoadTorpedoAction":
+            return "Load Torpedo"
+        elif action_type == "FireTorpedoAction":
+            return "Fire Torpedo"
+        else:
+            return action_type.replace('Action', '')
+    
+    def _queue_action(self, action_id: str) -> None:
+        """Queue an action based on action ID."""
+        from ..models import GamePhase
+        from ..action_costs import ActionCostLookup
+        from ..movement_validator import MovementValidator
+        from ..depth_validator import DepthValidator
+        from ..repair_validator import RepairValidator
+        
+        # Only queue during U-Boat phase
+        if self.game.turn_manager.current_phase != GamePhase.UBOAT_PHASE:
+            self.add_event("Can only queue actions during U-Boat Phase")
+            return
+        
+        u_boat = self.game.u_boat
+        cost_lookup = ActionCostLookup(self.game.mission_rules)
+        
+        # Calculate current state after all queued actions
+        # This is needed so rotations affect subsequent moves
+        preview_position = u_boat.position
+        preview_facing = u_boat.facing
+        preview_depth = u_boat.depth
+        
+        for queued_action in self.game.action_queue.actions:
+            action_type = type(queued_action).__name__
+            if action_type == "MoveAction":
+                # Simply use the target hex from the queued action
+                preview_position = queued_action.target_hex
+            elif action_type == "RotateAction":
+                if queued_action.clockwise:
+                    preview_facing = Facing((preview_facing.value + 1) % 6)
+                else:
+                    preview_facing = Facing((preview_facing.value - 1) % 6)
+            elif action_type == "DepthChangeAction":
+                preview_depth = queued_action.new_depth
+        
+        action = None
+        
+        try:
+            if action_id == "move":
+                # Calculate target hex based on preview facing (after queued rotations)
+                target_hex = preview_facing.forward(preview_position)
+                validator = MovementValidator(self.game.land_hexes, self.game.shallow_hexes, self.game.mission_hexes)
+                action = MoveAction(target_hex, cost_lookup, validator)
+                
+            elif action_id == "rotate_l":
+                action = RotateAction(clockwise=False, cost_lookup=cost_lookup)
+                
+            elif action_id == "rotate_r":
+                action = RotateAction(clockwise=True, cost_lookup=cost_lookup)
+                
+            elif action_id == "dive":
+                target_depth = Depth(u_boat.depth.value + 1) if u_boat.depth.value < 3 else u_boat.depth
+                validator = DepthValidator(self.game.shallow_hexes)
+                action = DepthChangeAction(target_depth, cost_lookup, validator)
+                
+            elif action_id == "surface":
+                target_depth = Depth(u_boat.depth.value - 1) if u_boat.depth.value > 0 else u_boat.depth
+                validator = DepthValidator(self.game.shallow_hexes)
+                action = DepthChangeAction(target_depth, cost_lookup, validator)
+                
+            elif action_id == "repair":
+                # For now, just pick first damaged system
+                validator = RepairValidator()
+                if u_boat.engine_damaged:
+                    action = RepairAction("engine", cost_lookup, validator)
+                elif u_boat.deck_gun_damaged:
+                    action = RepairAction("deck_gun", cost_lookup, validator)
+                elif u_boat.flak_gun_damaged:
+                    action = RepairAction("flak_gun", cost_lookup, validator)
+                elif not all(u_boat.torpedo_tubes):
+                    action = RepairAction("torpedoes", cost_lookup, validator)
+                else:
+                    self.add_event("No damaged systems to repair")
+                    return
+                    
+            elif action_id == "deck_gun":
+                if not self.game.selected_target:
+                    self.add_event("Select a target first (click on ship)")
+                    return
+                action = DeckGunAction(
+                    target=self.game.selected_target,
+                    cost_lookup=cost_lookup,
+                    dice_roller=self.game.turn_manager.dice_roller
                 )
-            controls_y += 20
+                
+            elif action_id == "load_torp":
+                action = LoadTorpedoAction(cost_lookup=cost_lookup)
+                
+            elif action_id == "fire_torp":
+                if not self.game.selected_target:
+                    self.add_event("Select a target first (click on ship)")
+                    return
+                action = FireTorpedoAction(
+                    target=self.game.selected_target,
+                    cost_lookup=cost_lookup,
+                    dice_roller=self.game.turn_manager.dice_roller
+                )
+            
+            # Add action to queue
+            if action:
+                # Temporarily set u_boat to preview state for validation
+                original_position = u_boat.position
+                original_facing = u_boat.facing
+                original_depth = u_boat.depth
+                
+                u_boat.position = preview_position
+                u_boat.facing = preview_facing
+                u_boat.depth = preview_depth
+                
+                success, message = self.game.action_queue.add_action(action, self.game)
+                
+                # Restore original state
+                u_boat.position = original_position
+                u_boat.facing = original_facing
+                u_boat.depth = original_depth
+                
+                if success:
+                    remaining = self.game.action_queue.get_remaining_ap(self.game)
+                    action_desc = self._get_action_description(action)
+                    self.add_event(f"Queued: {action_desc} (AP: {remaining}/{self.game.action_queue.max_ap})")
+                else:
+                    remaining = self.game.action_queue.get_remaining_ap(self.game)
+                    self.add_event(f"Cannot queue: {message} (AP: {remaining}/{self.game.action_queue.max_ap})")
+                    
+        except Exception as e:
+            import traceback
+            self.add_event(f"Error queuing action: {e}")
+            print(f"Full error: {traceback.format_exc()}")

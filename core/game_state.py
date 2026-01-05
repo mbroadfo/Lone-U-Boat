@@ -16,6 +16,7 @@ from .conditions import ConditionFactory
 from .renderer import GameRenderer
 from .board_layout import BoardLayoutRuntime
 from .turn_manager import TurnManager
+from .actions import ActionQueue
 from missions.mission_rules_loader import MissionRules, load_mission_rules
 
 
@@ -174,6 +175,10 @@ class Game:
             self.u_boat.depth
         )
         self.u_boat.action_points = initial_ap
+        
+        # Initialize action queue for turn
+        self.action_queue = ActionQueue(max_ap=initial_ap)
+        self.selected_target: Optional[Ship] = None  # For combat actions
     
     def _load_mission_config(self, mission_number: int) -> Any:
         """Dynamically load mission configuration module."""
@@ -294,13 +299,37 @@ class Game:
             self._start_new_turn()
     
     def _end_uboat_phase(self):
-        """Clean up U-Boat phase."""
+        """Clean up U-Boat phase - commit queued actions if not already animated."""
+        # Check if actions were already executed via animation
+        # If queue is empty, actions were already animated
+        if self.action_queue and self.action_queue.actions:
+            # Actions not yet executed - do it now (for SPACE key advancement)
+            self.turn_manager.add_phase_log("U-Boat Phase", 
+                f"Committing {len(self.action_queue.actions)} queued action(s)...")
+            
+            results = self.action_queue.commit_all(self)
+            
+            # Log each action result
+            for result in results:
+                if result.success:
+                    action_name = result.state_changes.get('action_name', 'Action')
+                    self.turn_manager.add_phase_log("U-Boat Phase", 
+                        f"✓ {action_name}: {result.message}")
+                else:
+                    self.turn_manager.add_phase_log("U-Boat Phase", 
+                        f"✗ Action failed: {result.message}")
+            
+            # Clear the queue after committing
+            self.action_queue.clear()
+        else:
+            self.turn_manager.add_phase_log("U-Boat Phase", 
+                "Actions already executed")
+        
         # Log remaining AP
-        if self.turn_manager.ap_tracker:
-            remaining = self.turn_manager.ap_tracker.remaining()
-            if remaining > 0:
-                self.turn_manager.add_phase_log("U-Boat Phase",
-                    f"Ended with {remaining} AP remaining")
+        remaining = self.action_queue.get_remaining_ap(self)
+        if remaining > 0:
+            self.turn_manager.add_phase_log("U-Boat Phase",
+                f"Ended with {remaining} AP remaining")
     
     def _execute_merchant_phase(self):
         """Execute merchant ship movements."""
@@ -357,6 +386,10 @@ class Game:
         # Roll new AP
         new_ap = self.turn_manager.start_new_turn(self.u_boat)
         self.u_boat.action_points = new_ap
+        
+        # Initialize new action queue for the turn
+        self.action_queue = ActionQueue(max_ap=new_ap)
+        self.selected_target = None
     
     def update(self):
         """Update game state - NPC AI and game rules will go here."""

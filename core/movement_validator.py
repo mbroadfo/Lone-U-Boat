@@ -23,7 +23,8 @@ class MovementValidator:
     def __init__(
         self,
         land_hexes: Set[HexCoord],
-        shallow_hexes: Set[HexCoord]
+        shallow_hexes: Set[HexCoord],
+        mission_hexes: Optional[Set[HexCoord]] = None
     ):
         """
         Initialize movement validator.
@@ -31,9 +32,11 @@ class MovementValidator:
         Args:
             land_hexes: Set of hexes containing land (impassable)
             shallow_hexes: Set of hexes with shallow water (depth restrictions)
+            mission_hexes: Set of valid hexes in the mission (play area). Optional for backward compatibility.
         """
         self.land_hexes = land_hexes
         self.shallow_hexes = shallow_hexes
+        self.mission_hexes = mission_hexes
     
     def can_move_to(
         self,
@@ -59,6 +62,10 @@ class MovementValidator:
             - can_move: True if movement is valid
             - reason_if_not: String explaining why movement blocked
         """
+        # Rule 0: Must stay within mission hexes (play area)
+        if self.mission_hexes is not None and target_hex not in self.mission_hexes:
+            return False, "Cannot move outside play area"
+        
         # Rule 1: Cannot enter Land hexes
         if target_hex in self.land_hexes:
             return False, "Cannot enter land"
