@@ -175,11 +175,13 @@ LoneUBoat/
 ## Development Status
 
 ### ✅ Phase 1: Complete
+
 - Turn-based gameplay system
 - Action point management
 - Game loop and state transitions
 
 ### ✅ Phase 2: Complete (100% - 23/23 hours)
+
 All subsystems implemented with comprehensive tests:
 - 2.1 DiceRoller (seeded random for testing)
 - 2.2 Range & Line-of-Sight calculation
@@ -191,6 +193,7 @@ All subsystems implemented with comprehensive tests:
 - 2.8 TorpedoValidator (loading & firing rules)
 
 ### 🚧 Phase 3: Next - Action Implementation
+
 Integrate validators into actual gameplay actions
 
 ## Testing
