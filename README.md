@@ -194,11 +194,13 @@ LoneUBoat/
 ## Development Status
 
 ### ✅ Phase 1: Complete (Turn System)
+
 - Turn-based gameplay system
 - Action point management
 - Game loop and state transitions
 
 ### ✅ Phase 2: Complete (Validators - 23/23 hours)
+
 All subsystems implemented with comprehensive tests:
 - 2.1 DiceRoller (seeded random for testing)
 - 2.2 Range & Line-of-Sight calculation
@@ -210,6 +212,7 @@ All subsystems implemented with comprehensive tests:
 - 2.8 TorpedoValidator (loading & firing rules)
 
 ### ✅ Phase 3: Complete (Action System - 35-40 hours)
+
 All action classes and damage resolution implemented:
 - 3.1 Action System Architecture (base classes, queue)
 - 3.2 Movement Actions (move, rotate, depth change)
@@ -221,6 +224,7 @@ All action classes and damage resolution implemented:
 **Tests**: 38/38 passing (8 action system + 10 movement + 9 combat + 11 damage)
 
 ### 🚧 Phase 4: Next - Enemy AI & Automation
+
 - Merchant ship movement AI
 - Escort ship combat AI
 - Patrol boat behavior
@@ -228,6 +232,7 @@ All action classes and damage resolution implemented:
 - Allied search mechanics
 
 ### 🔮 Phase 5+: Future
+
 - UI integration (action selection, preview, queue display)
 - GameState implementation (replace Any type hints)
 - Save/load game state

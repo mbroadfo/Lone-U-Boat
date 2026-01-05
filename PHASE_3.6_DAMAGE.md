@@ -1,6 +1,7 @@
 # Phase 3.6 - Damage Resolution System
 
 ## Overview
+
 Complete damage resolution system implementing Allied Ship Damage Chart, U-Boat Damage Chart, crew casualties with medic saves, and destruction conditions.
 
 **Status**: ✅ Complete  
@@ -10,6 +11,7 @@ Complete damage resolution system implementing Allied Ship Damage Chart, U-Boat 
 ## Components Implemented
 
 ### 1. Ship Damage Resolver (`core/damage/ship_damage.py`)
+
 Allied Ship Damage Chart implementation for merchant and escort ships.
 
 **Features**:
@@ -33,6 +35,7 @@ Allied Ship Damage Chart implementation for merchant and escort ships.
 - `check_if_sunk(ship)`: Check if ship should be removed from game
 
 ### 2. U-Boat Damage Resolver (`core/damage/uboat_damage.py`)
+
 U-Boat Damage Chart implementation for critical and general damage.
 
 **Critical Hit Table** (2d6):
@@ -62,6 +65,7 @@ U-Boat Damage Chart implementation for critical and general damage.
 - `check_destruction(u_boat)`: Check if U-boat is destroyed
 
 ### 3. Crew Casualty System
+
 Implemented in U-Boat damage resolution with medic saves.
 
 **Casualty Roll** (1d6, reroll 5-6):
@@ -84,6 +88,7 @@ Implemented in U-Boat damage resolution with medic saves.
 - Radio Operator KIA → No radio communications
 
 ### 4. Hull Damage Tracking
+
 U-boat can take 0-4 hull damage:
 - 0: Undamaged
 - 1-3: Damaged but operational
@@ -92,6 +97,7 @@ U-boat can take 0-4 hull damage:
 Hull damage cannot be repaired (permanent).
 
 ### 5. Victory/Defeat Conditions
+
 Implemented destruction checking:
 - **U-boat Destruction**: Hull damage ≥ 4
 - **Ship Sunk**: Removed from game state
@@ -100,6 +106,7 @@ Implemented destruction checking:
 ## Test Coverage
 
 ### Ship Damage Tests (5 tests)
+
 1. ✅ `test_ship_damage_merchant_no_effect` - Low roll causes no damage
 2. ✅ `test_ship_damage_merchant_damaged` - Medium roll damages ship
 3. ✅ `test_ship_damage_merchant_catastrophic` - High roll sinks ship
@@ -107,32 +114,35 @@ Implemented destruction checking:
 5. ✅ `test_ship_damage_escort_modifier` - Escorts resist deck gun (-2)
 
 ### U-Boat Damage Tests (6 tests)
-6. ✅ `test_uboat_damage_general` - System damage (engine)
-7. ✅ `test_uboat_damage_hull` - Hull accumulation to destruction
-8. ✅ `test_uboat_damage_critical_hull_breach` - Critical hit hull +2
-9. ✅ `test_uboat_damage_crew_casualty` - Crew casualty system
-10. ✅ `test_uboat_damage_medic_save` - Medic saves crew member
-11. ✅ `test_uboat_destruction_check` - Destruction at hull 4
+
+1. ✅ `test_uboat_damage_general` - System damage (engine)
+2. ✅ `test_uboat_damage_hull` - Hull accumulation to destruction
+3. ✅ `test_uboat_damage_critical_hull_breach` - Critical hit hull +2
+4. ✅ `test_uboat_damage_crew_casualty` - Crew casualty system
+5. ✅ `test_uboat_damage_medic_save` - Medic saves crew member
+6. ✅ `test_uboat_destruction_check` - Destruction at hull 4
 
 ## Integration Points
 
 ### With Phase 3.4 - Deck Gun Combat
+
 - `DeckGunAction.execute()` → calls `ShipDamageResolver.apply_damage()`
 - Pass weapon_type="deck_gun" for proper escort modifiers
 - Remove sunken ships from game state
 
 ### With Phase 3.5 - Torpedo Combat
+
 - `FireTorpedoAction.execute()` → calls `ShipDamageResolver.apply_damage()`
 - Pass weapon_type="torpedo" for standard damage
 - Track tonnage for mission objectives
 
 ### With Dice System
+
 - Uses `DiceRoller.roll(1)` for 1d6 rolls
 - Uses `DiceRoller.roll(2)` for 2d6 rolls
 - Uses `DiceRoller.random_choice()` for random selections
 - Supports seeded testing with MockDice
 
-### Future Integration (Phase 4 - Enemy AI)
 - Enemy actions will call `UBoatDamageResolver.apply_critical_damage()`
 - Depth charge hits → critical damage
 - Ramming → critical damage
@@ -141,18 +151,21 @@ Implemented destruction checking:
 ## Technical Improvements
 
 ### Type Safety
+
 - All classes fully type-hinted
 - TypeVar used for generic random_choice method
 - Explicit List[str], List[int] type annotations
 - Zero type errors
 
 ### Testing Infrastructure
+
 - `MockDice` class for deterministic testing
 - Fixed roll sequences for predictable outcomes
 - Comprehensive coverage of all damage paths
 - Clear test output with emoji indicators
 
 ### Code Quality
+
 - Clean separation: ship damage vs U-boat damage
 - Dataclass results for structured output
 - Helper methods for random selection
@@ -160,7 +173,7 @@ Implemented destruction checking:
 
 ## Files Created
 
-```
+``` text
 core/damage/
 ├── __init__.py              (16 lines) - Module exports
 ├── ship_damage.py          (157 lines) - Ship damage resolution
@@ -215,9 +228,11 @@ if result.is_destroyed:
 ## Next Steps
 
 ### Immediate (Complete Phase 3)
+
 Phase 3 is now 100% complete with damage resolution!
 
 ### Phase 4 - Enemy AI & Automation
+
 1. Implement merchant ship movement AI
 2. Implement escort ship combat AI
 3. Add depth charge attacks (→ critical damage)
@@ -225,6 +240,7 @@ Phase 3 is now 100% complete with damage resolution!
 5. Event phase automation
 
 ### GameState Implementation
+
 1. Replace `Any` type hints with proper GameState
 2. Track U-boat, ships, turn number
 3. Integrate with ActionQueue
@@ -232,6 +248,7 @@ Phase 3 is now 100% complete with damage resolution!
 5. Victory/defeat condition checking
 
 ### UI Integration
+
 1. Show damage results in combat log
 2. Animate ship sinking
 3. Display crew casualties
