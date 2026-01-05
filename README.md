@@ -115,15 +115,19 @@ LoneUBoat/
 ├── DEVELOPMENT_PLAN.md   # Overall development plan
 ├── PHASE_2_REFINED.md    # Phase 2 subsystems (COMPLETE)
 │
-├── tests/                # Test suite (Phase 2: 100% complete)
+├── tests/                # Test suite (Phases 2-3: 100% complete)
 │   ├── README.md         # Test documentation
-│   ├── test_combat_resolver.py
-│   ├── test_torpedo_validator.py
-│   ├── test_repair_validator.py
-│   ├── test_depth_validator.py
-│   ├── test_movement_validator.py
-│   ├── test_range_los.py
-│   └── test_phase2_subsystems.py
+│   ├── test_action_system.py       # Action queue & base classes
+│   ├── test_movement_actions.py    # Move, rotate, depth actions
+│   ├── test_combat_actions.py      # Repair, deck gun, torpedoes
+│   ├── test_damage_resolution.py   # Ship & U-boat damage
+│   ├── test_combat_resolver.py     # Combat resolution
+│   ├── test_torpedo_validator.py   # Torpedo validation
+│   ├── test_repair_validator.py    # Repair validation
+│   ├── test_depth_validator.py     # Depth validation
+│   ├── test_movement_validator.py  # Movement validation
+│   ├── test_range_los.py           # Range & LOS
+│   └── test_phase2_subsystems.py   # Phase 2 integration
 │
 ├── config/
 │   ├── __init__.py
@@ -144,15 +148,30 @@ LoneUBoat/
 │   │   ├── main_menu.py
 │   │   └── unified_game.py
 │   │
-│   └── # Phase 2 Subsystems (JSON-driven validators)
-│       ├── dice.py                 # DiceRoller with seeded random
-│       ├── action_cost_lookup.py  # AP costs from JSON
-│       ├── range_los.py           # Range calculation & LOS
-│       ├── movement_validator.py  # Movement validation
-│       ├── depth_validator.py     # Depth change validation
-│       ├── repair_validator.py    # Repair validation
-│       ├── combat_resolver.py     # Combat resolution
-│       └── torpedo_validator.py   # Torpedo loading/firing
+│   ├── # Phase 2 Subsystems (JSON-driven validators)
+│   │   ├── dice.py                 # DiceRoller with seeded random
+│   │   ├── action_cost_lookup.py  # AP costs from JSON
+│   │   ├── range_los.py           # Range calculation & LOS
+│   │   ├── movement_validator.py  # Movement validation
+│   │   ├── depth_validator.py     # Depth change validation
+│   │   ├── repair_validator.py    # Repair validation
+│   │   ├── combat_resolver.py     # Combat resolution
+│   │   └── torpedo_validator.py   # Torpedo loading/firing
+│   │
+│   ├── actions/          # Phase 3 Action System
+│   │   ├── base_action.py         # Action base class & result
+│   │   ├── action_queue.py        # Action queue with AP tracking
+│   │   ├── move_action.py         # Movement to adjacent hex
+│   │   ├── rotate_action.py       # 60° rotation
+│   │   ├── depth_change_action.py # Depth changes
+│   │   ├── repair_action.py       # System repairs
+│   │   ├── deck_gun_action.py     # Surface combat
+│   │   ├── load_torpedo_action.py # Torpedo loading
+│   │   └── fire_torpedo_action.py # Torpedo firing
+│   │
+│   └── damage/           # Phase 3.6 Damage Resolution
+│       ├── ship_damage.py         # Ship damage charts
+│       └── uboat_damage.py        # U-boat damage charts
 │
 ├── missions/
 │   ├── mission_1_config.py        # Mission 1 Python configuration
@@ -174,14 +193,12 @@ LoneUBoat/
 
 ## Development Status
 
-### ✅ Phase 1: Complete
-
+### ✅ Phase 1: Complete (Turn System)
 - Turn-based gameplay system
 - Action point management
 - Game loop and state transitions
 
-### ✅ Phase 2: Complete (100% - 23/23 hours)
-
+### ✅ Phase 2: Complete (Validators - 23/23 hours)
 All subsystems implemented with comprehensive tests:
 - 2.1 DiceRoller (seeded random for testing)
 - 2.2 Range & Line-of-Sight calculation
@@ -192,9 +209,30 @@ All subsystems implemented with comprehensive tests:
 - 2.7 CombatResolver (deck gun & torpedoes)
 - 2.8 TorpedoValidator (loading & firing rules)
 
-### 🚧 Phase 3: Next - Action Implementation
+### ✅ Phase 3: Complete (Action System - 35-40 hours)
+All action classes and damage resolution implemented:
+- 3.1 Action System Architecture (base classes, queue)
+- 3.2 Movement Actions (move, rotate, depth change)
+- 3.3 Repair Actions (system repairs)
+- 3.4 Deck Gun Combat (surface combat)
+- 3.5 Torpedo Combat (loading & firing)
+- 3.6 Damage Resolution (ship/U-boat damage, casualties)
 
-Integrate validators into actual gameplay actions
+**Tests**: 38/38 passing (8 action system + 10 movement + 9 combat + 11 damage)
+
+### 🚧 Phase 4: Next - Enemy AI & Automation
+- Merchant ship movement AI
+- Escort ship combat AI
+- Patrol boat behavior
+- Event phase automation
+- Allied search mechanics
+
+### 🔮 Phase 5+: Future
+- UI integration (action selection, preview, queue display)
+- GameState implementation (replace Any type hints)
+- Save/load game state
+- Mission objectives and victory conditions
+- Sound effects and music
 
 ## Testing
 

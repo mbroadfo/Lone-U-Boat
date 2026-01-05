@@ -6,9 +6,11 @@ Used for: AP rolls, combat resolution, damage charts, and all random events.
 """
 
 import random
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, TypeVar
 from dataclasses import dataclass
 from datetime import datetime
+
+T = TypeVar('T')
 
 
 @dataclass
@@ -274,3 +276,43 @@ class DiceRoller:
     def set_logging(self, enabled: bool):
         """Enable or disable roll logging."""
         self.enable_logging = enabled
+    
+    def roll(self, num_dice: int) -> int:
+        """
+        Convenience method for rolling dice and returning sum.
+        Equivalent to roll_dice() but simpler for common usage.
+        
+        Args:
+            num_dice: Number of d6 to roll
+            
+        Returns:
+            Sum of all dice (or single die value for 1d6)
+        """
+        if num_dice == 1:
+            return self.roll_1d6()
+        elif num_dice == 2:
+            return self.roll_2d6()
+        else:
+            _, total = self.roll_dice(num_dice, 6)
+            return total
+    
+    def set_seed(self, seed: int):
+        """
+        Set new random seed for deterministic testing.
+        
+        Args:
+            seed: New seed value
+        """
+        self.rng.seed(seed)
+    
+    def random_choice(self, choices: List[T]) -> T:
+        """
+        Pick a random element from a list.
+        
+        Args:
+            choices: List to choose from
+            
+        Returns:
+            Random element from list
+        """
+        return self.rng.choice(choices)
