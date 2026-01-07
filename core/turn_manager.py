@@ -125,6 +125,9 @@ class TurnManager:
         
         # Dice roller for all random events
         self.dice = dice_roller if dice_roller else DiceRoller()
+        
+        # Store last AP roll details for UI display
+        self.last_ap_roll: Optional[Dict[str, Any]] = None
     
     def start_new_turn(self, u_boat: UBoat) -> int:
         """
@@ -182,9 +185,19 @@ class TurnManager:
         highest, rolls = self.dice.roll_highest(num_dice, sides=6, context=context)
         
         # Calculate AP
-        ap = highest
-        if u_boat.captain_alive:
-            ap += 1
+        base_ap = highest
+        captain_bonus = 1 if u_boat.captain_alive else 0
+        ap = base_ap + captain_bonus
+        
+        # Store detailed roll info for UI display
+        self.last_ap_roll = {
+            'num_dice': num_dice,
+            'rolls': rolls,
+            'highest': highest,
+            'captain_bonus': captain_bonus,
+            'total_ap': ap,
+            'engine_damaged': u_boat.engine_damaged
+        }
         
         # Log the roll
         roll_str = ", ".join(str(r) for r in rolls)

@@ -152,6 +152,20 @@ class UnifiedGameScreen(BaseScreen):
                     # Add visual feedback
                     phase_name = self.game.turn_manager.get_current_phase_name()
                     self.add_event(f"→ {phase_name}")
+                    
+                    # If we just started U-Boat phase (new turn), show AP roll details
+                    from ..models import GamePhase
+                    if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
+                        if self.game.turn_manager.last_ap_roll:
+                            roll_info = self.game.turn_manager.last_ap_roll
+                            rolls_str = "][".join([str(r) for r in roll_info['rolls']])
+                            
+                            event_msg = f"Turn {self.game.turn_manager.turn_number}: Rolled [{rolls_str}] → {roll_info['highest']}"
+                            if roll_info['captain_bonus'] > 0:
+                                event_msg += f" +{roll_info['captain_bonus']} (Captain)"
+                            event_msg += f" = {roll_info['total_ap']} AP"
+                            
+                            self.add_event(event_msg)
                 
                 elif event.key == pygame.K_u:
                     # Undo last action from queue
@@ -1653,11 +1667,82 @@ class UnifiedGameScreen(BaseScreen):
             center=True
         )
         
-        # Show last 5 dice rolls
         dice_y = y + 45
         dice_x = x + 10
         
-        visible_rolls = self.dice_rolls[-5:] if self.dice_rolls else []
+        # Show AP roll details if available
+        if hasattr(self.game, 'turn_manager') and self.game.turn_manager.last_ap_roll:
+            roll_info = self.game.turn_manager.last_ap_roll
+            
+            # Dice type label
+            num_dice = roll_info['num_dice']
+            dice_label = f"{num_dice}d6"
+            if roll_info['engine_damaged']:
+                dice_label += " (Engine Dmg)"
+            
+            self.draw_text(
+                f"AP Roll [{dice_label}]:",
+                dice_x,
+                dice_y,
+                self.font_small,
+                color=(200, 200, 200)
+            )
+            dice_y += 20
+            
+            # Individual dice with colored boxes
+            rolls = roll_info['rolls']
+            highest = roll_info['highest']
+            
+            # Draw dice as small colored boxes
+            box_x = dice_x + 10
+            box_size = 20
+            box_spacing = 5
+            
+            for i, roll_val in enumerate(rolls):
+                box_rect = pygame.Rect(box_x, dice_y, box_size, box_size)
+                
+                # Highlight highest die
+                if roll_val == highest:
+                    box_color = (100, 200, 100)  # Green for highest
+                    text_color = (255, 255, 255)
+                else:
+                    box_color = (60, 60, 80)
+                    text_color = (180, 180, 180)
+                
+                pygame.draw.rect(self.screen, box_color, box_rect)
+                pygame.draw.rect(self.screen, (150, 150, 150), box_rect, 1)
+                
+                # Draw die value centered
+                self.draw_text(
+                    str(roll_val),
+                    box_rect.centerx,
+                    box_rect.centery,
+                    self.font_small,
+                    color=text_color,
+                    center=True
+                )
+                
+                box_x += box_size + box_spacing
+            
+            dice_y += 30
+            
+            # Result breakdown
+            result_text = f"Highest: {highest}"
+            if roll_info['captain_bonus'] > 0:
+                result_text += f" +{roll_info['captain_bonus']} (Captain)"
+            result_text += f" = {roll_info['total_ap']} AP"
+            
+            self.draw_text(
+                result_text,
+                dice_x,
+                dice_y,
+                self.font_small,
+                color=(100, 255, 150)
+            )
+            dice_y += 25
+        
+        # Show other combat rolls (last 3)
+        visible_rolls = self.dice_rolls[-3:] if self.dice_rolls else []
         if visible_rolls:
             for roll_info in visible_rolls:
                 action = roll_info.get('action', 'Unknown')
@@ -1666,8 +1751,8 @@ class UnifiedGameScreen(BaseScreen):
                 
                 roll_text = f"{action}: [{dice}] = {result}"
                 self.draw_text(roll_text, dice_x, dice_y, self.font_small, color=(255, 255, 150))
-                dice_y += 20
-        else:
+                dice_y += 18
+        elif not (hasattr(self.game, 'turn_manager') and self.game.turn_manager.last_ap_roll):
             self.draw_text("No rolls yet", dice_x, dice_y, self.font_small, color=(120, 120, 120))
         
         # Separator line
@@ -2019,22 +2104,38 @@ class UnifiedGameScreen(BaseScreen):
         loaded_tubes = sum(1 for tube in u_boat.torpedo_tubes if tube)
         empty_tubes = len(u_boat.torpedo_tubes) - loaded_tubes
         
-        # Define action buttons
+        # Get action cost lookup
+        from ..action_costs import ActionCostLookup
+        cost_lookup = ActionCostLookup(self.game.mission_rules)
+        
+        # Define action buttons with cost info
+        # Format: (label, action_id, enabled, action_name_for_cost)
         actions = [
-            ("MOVE FWD (W)", "move", u_boat.depth != Depth.DEEP),
-            ("ROTATE L (Q)", "rotate_l", True),
-            ("ROTATE R (E)", "rotate_r", True),
-            ("DIVE (Z)", "dive", u_boat.depth != Depth.DEEP),
-            ("SURFACE (X)", "surface", u_boat.depth != Depth.SURFACED),
-            ("REPAIR (R)", "repair", u_boat.engine_damaged or u_boat.deck_gun_damaged or u_boat.flak_gun_damaged),
-            ("DECK GUN (F)", "deck_gun", u_boat.depth == Depth.SURFACED and len(self.game.ships) > 0),
-            ("LOAD TORP (L)", "load_torp", empty_tubes > 0),
-            ("FIRE TORP (T)", "fire_torp", loaded_tubes > 0 and len(self.game.ships) > 0)
+            ("MOVE FWD (W)", "move", u_boat.depth != Depth.DEEP, "MOVE"),
+            ("ROTATE L (Q)", "rotate_l", True, "TURN"),
+            ("ROTATE R (E)", "rotate_r", True, "TURN"),
+            ("DIVE (Z)", "dive", u_boat.depth != Depth.DEEP, "CHANGE DEPTH"),
+            ("SURFACE (X)", "surface", u_boat.depth != Depth.SURFACED, "CHANGE DEPTH"),
+            ("REPAIR (R)", "repair", u_boat.engine_damaged or u_boat.deck_gun_damaged or u_boat.flak_gun_damaged, "REPAIR"),
+            ("DECK GUN (F)", "deck_gun", u_boat.depth == Depth.SURFACED and len(self.game.ships) > 0, "FIRE DECK GUN"),
+            ("LOAD TORP (L)", "load_torp", empty_tubes > 0, "LOAD TORPS"),
+            ("FIRE TORP (T)", "fire_torp", loaded_tubes > 0 and len(self.game.ships) > 0, "FIRE TORPS")
         ]
         
-        for label, action_id, enabled in actions:
+        for label, action_id, enabled, action_name in actions:
             rect = pygame.Rect(button_x, button_y, button_width, button_height)
             self.action_button_rects[action_id] = rect
+            
+            # Get action cost
+            cost = cost_lookup.get_cost(action_name, u_boat.depth)
+            
+            # Build label with cost
+            if cost is not None:
+                full_label = f"{label} - {cost} AP"
+            elif enabled:
+                full_label = label  # No cost info available
+            else:
+                full_label = f"{label} - N/A"
             
             # Button color based on availability
             if enabled:
@@ -2048,15 +2149,57 @@ class UnifiedGameScreen(BaseScreen):
             
             pygame.draw.rect(self.screen, color, rect)
             pygame.draw.rect(self.screen, border_color, rect, 1)
-            self.draw_text(label, rect.centerx, rect.centery, self.font_small, 
+            self.draw_text(full_label, rect.centerx, rect.centery, self.font_small, 
                           color=text_color, center=True)
             
             button_y += button_height + button_spacing
         
-        # Info text
+        # Info section: Depth cost modifiers
         info_y = button_y + 10
-        self.draw_text("Click or use hotkeys", x + width // 2, info_y, 
-                      self.font_small, color=(120, 140, 160), center=True)
+        
+        # Show current depth and its effect on costs
+        depth_name = u_boat.depth.name
+        self.draw_text(
+            f"At {depth_name}:",
+            x + width // 2,
+            info_y,
+            self.font_small,
+            color=(150, 170, 200),
+            center=True
+        )
+        info_y += 18
+        
+        # Show cost for common actions at this depth vs surfaced
+        surfaced_move = cost_lookup.get_cost("MOVE", Depth.SURFACED)
+        current_move = cost_lookup.get_cost("MOVE", u_boat.depth)
+        surfaced_turn = cost_lookup.get_cost("TURN", Depth.SURFACED)
+        current_turn = cost_lookup.get_cost("TURN", u_boat.depth)
+        
+        if surfaced_move and current_move:
+            move_diff = current_move - surfaced_move
+            move_text = f"Move: {current_move} AP"
+            if move_diff > 0:
+                move_text += f" (+{move_diff})"
+            self.draw_text(
+                move_text,
+                x + 10,
+                info_y,
+                self.font_small,
+                color=(180, 180, 180)
+            )
+        
+        if surfaced_turn and current_turn:
+            turn_diff = current_turn - surfaced_turn
+            turn_text = f"Turn: {current_turn} AP"
+            if turn_diff > 0:
+                turn_text += f" (+{turn_diff})"
+            self.draw_text(
+                turn_text,
+                x + 10,
+                info_y + 15,
+                self.font_small,
+                color=(180, 180, 180)
+            )
     
     def _get_action_description(self, action) -> str:
         """Get descriptive name for an action."""
