@@ -167,17 +167,20 @@ class Game:
         }
         self.renderer = GameRenderer(self.screen, cfg, self.hex_grid, assets, self.layout)
         
-        # Start first turn
-        initial_ap = self.turn_manager.start_new_turn(self.u_boat)
+        # Initialize turn manager but don't roll dice yet - player must click
+        self.turn_manager.turn_number = 1
+        self.turn_manager.current_phase = GamePhase.UBOAT_PHASE
+        self.turn_manager.ap_tracker = None  # No AP rolled yet
+        
         # Apply depth detection modifier at turn start
         self.detection_level = self.turn_manager.apply_depth_detection_modifier(
             self.detection_level, 
             self.u_boat.depth
         )
-        self.u_boat.action_points = initial_ap
+        self.u_boat.action_points = 0  # Will be set after dice roll
         
-        # Initialize action queue for turn
-        self.action_queue = ActionQueue(max_ap=initial_ap)
+        # Initialize action queue with 0 AP until dice are rolled
+        self.action_queue = ActionQueue(max_ap=0)
         self.selected_target: Optional[Ship] = None  # For combat actions
     
     def _load_mission_config(self, mission_number: int) -> Any:
@@ -383,12 +386,18 @@ class Game:
             self.u_boat.depth
         )
         
-        # Roll new AP
-        new_ap = self.turn_manager.start_new_turn(self.u_boat)
-        self.u_boat.action_points = new_ap
+        # Increment turn and reset to U-Boat phase, but don't roll dice yet
+        self.turn_manager.turn_number += 1
+        self.turn_manager.current_phase = GamePhase.UBOAT_PHASE
+        self.turn_manager.ap_tracker = None  # Player must click to roll
+        self.turn_manager.phase_logs.clear()
+        self.turn_manager.depth_changed_this_turn = False
         
-        # Initialize new action queue for the turn
-        self.action_queue = ActionQueue(max_ap=new_ap)
+        # Reset AP to 0 until player rolls
+        self.u_boat.action_points = 0
+        
+        # Initialize new action queue with 0 AP until dice are rolled
+        self.action_queue = ActionQueue(max_ap=0)
         self.selected_target = None
     
     def update(self):

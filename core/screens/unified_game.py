@@ -58,6 +58,7 @@ class UnifiedGameScreen(BaseScreen):
         
         # Event log for play-by-play commentary
         self.event_log: List[str] = []
+        self.event_log_scroll = 0  # Scroll position (0 = bottom/latest, positive = scroll up)
         self.add_event(f"Mission {mission_number} started")
         self.add_event("Select your starting depth and facing direction")
         
@@ -100,8 +101,8 @@ class UnifiedGameScreen(BaseScreen):
     def add_event(self, message: str) -> None:
         """Add an event to the log."""
         self.event_log.append(message)
-        # Auto-scroll to bottom
-        self.right_panel_scroll = max(0, len(self.event_log) * 20 - 500)
+        # Auto-scroll to bottom when new event added
+        self.event_log_scroll = 0
     
     def add_dice_roll(self, action: str, dice: str, result: str) -> None:
         """Add a dice roll to the history."""
@@ -200,26 +201,6 @@ class UnifiedGameScreen(BaseScreen):
                     else:
                         self.add_event("Can only commit during U-Boat phase")
                 
-                # Action hotkeys
-                elif event.key == pygame.K_w:
-                    self._queue_action("move")
-                elif event.key == pygame.K_q:
-                    self._queue_action("rotate_l")
-                elif event.key == pygame.K_e:
-                    self._queue_action("rotate_r")
-                elif event.key == pygame.K_z:
-                    self._queue_action("dive")
-                elif event.key == pygame.K_x:
-                    self._queue_action("surface")
-                elif event.key == pygame.K_r:
-                    self._queue_action("repair")
-                elif event.key == pygame.K_f:
-                    self._queue_action("deck_gun")
-                elif event.key == pygame.K_l:
-                    self._queue_action("load_torp")
-                elif event.key == pygame.K_t:
-                    self._queue_action("fire_torp")
-                
                 # Display toggles (work during game)
                 elif event.key == pygame.K_g:
                     self.game.show_grid = not self.game.show_grid
@@ -238,6 +219,12 @@ class UnifiedGameScreen(BaseScreen):
                     state = "ON" if self.game.show_status_boxes else "OFF"
                     self.add_event(f"Status boxes: {state}")
 
+        elif event.type == pygame.MOUSEWHEEL:
+            # Scroll event log
+            if event.y > 0:  # Scroll up
+                self.event_log_scroll = min(self.event_log_scroll + 3, len(self.event_log) - 10)
+            elif event.y < 0:  # Scroll down
+                self.event_log_scroll = max(0, self.event_log_scroll - 3)
         
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # Left click
@@ -254,9 +241,34 @@ class UnifiedGameScreen(BaseScreen):
                         self.expanded_phases[phase_num] = not self.expanded_phases[phase_num]
                         break
                 
-                # Check if clicking action queue buttons
+                # Check if clicking dice roll button
                 if not self.awaiting_initial_setup:
-                    if self.undo_button_rect and self.undo_button_rect.collidepoint(mouse_pos):
+                    # Only check dice button if AP hasn't been rolled
+                    if (hasattr(self, 'dice_roll_button_rect') and self.dice_roll_button_rect and 
+                        self.game.turn_manager.ap_tracker is None and
+                        self.dice_roll_button_rect.collidepoint(mouse_pos)):
+                        from ..models import GamePhase
+                        if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
+                            # Roll dice and initialize AP tracker
+                            ap = self.game.turn_manager.start_new_turn(self.game.u_boat)
+                            self.game.u_boat.action_points = ap
+                            self.game.action_queue.max_ap = ap
+                            
+                            # Clear dice button rect so it doesn't interfere with action button clicks
+                            self.dice_roll_button_rect = None
+                            
+                            # Add event log
+                            if self.game.turn_manager.last_ap_roll:
+                                roll_info = self.game.turn_manager.last_ap_roll
+                                rolls_str = "][".join([str(r) for r in roll_info['rolls']])
+                                event_msg = f"Turn {self.game.turn_manager.turn_number}: Rolled [{rolls_str}] → {roll_info['highest']}"
+                                if roll_info['captain_bonus'] > 0:
+                                    event_msg += f" +{roll_info['captain_bonus']} (Captain)"
+                                event_msg += f" = {roll_info['total_ap']} AP"
+                                self.add_event(event_msg)
+                    
+                    # Check if clicking action queue buttons
+                    elif self.undo_button_rect and self.undo_button_rect.collidepoint(mouse_pos):
                         if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
                             undone_action = self.game.action_queue.remove_last()
                             if undone_action:
@@ -286,8 +298,8 @@ class UnifiedGameScreen(BaseScreen):
                     
                     # Check if clicking action selection buttons
                     else:
-                        for action_id, rect in self.action_button_rects.items():
-                            if rect.collidepoint(mouse_pos):
+                        for action_id, (rect, is_clickable) in self.action_button_rects.items():
+                            if rect.collidepoint(mouse_pos) and is_clickable:
                                 self._queue_action(action_id)
                                 break
                 
@@ -1792,8 +1804,24 @@ class UnifiedGameScreen(BaseScreen):
         log_width = width - 20
         log_max_y = controls_area_y - 10  # Stop before controls area
         
-        # Show last N events that fit
-        visible_events = self.event_log[-40:]  # Last 40 events
+        # Calculate how many events to show based on scroll position
+        # scroll = 0 means show latest (bottom), scroll > 0 means show older events
+        total_events = len(self.event_log)
+        if self.event_log_scroll == 0:
+            # Show latest events (scrolled to bottom)
+            visible_events = self.event_log[-40:]
+        else:
+            # Show older events based on scroll position
+            end_idx = total_events - self.event_log_scroll
+            start_idx = max(0, end_idx - 40)
+            visible_events = self.event_log[start_idx:end_idx]
+        
+        # Show scroll indicator if not at bottom
+        if self.event_log_scroll > 0:
+            scroll_text = f"[Scrolled up {self.event_log_scroll} events - Use mouse wheel to scroll]"
+            self.draw_text(scroll_text, x + width // 2, log_y - 20, self.font_small, 
+                          color=(255, 200, 100), center=True)
+        
         for event_text in visible_events:
             # Word wrap
             words = event_text.split()
@@ -2089,6 +2117,13 @@ class UnifiedGameScreen(BaseScreen):
             center=True
         )
         
+        # Check if we need to roll dice first
+        from ..models import GamePhase
+        if (self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE and 
+            self.game.turn_manager.ap_tracker is None):
+            self._draw_dice_roll_button(x, y + 35, width)
+            return
+        
         # Clear button rects
         self.action_button_rects.clear()
         
@@ -2111,20 +2146,19 @@ class UnifiedGameScreen(BaseScreen):
         # Define action buttons with cost info
         # Format: (label, action_id, enabled, action_name_for_cost)
         actions = [
-            ("MOVE FWD (W)", "move", u_boat.depth != Depth.DEEP, "MOVE"),
-            ("ROTATE L (Q)", "rotate_l", True, "TURN"),
-            ("ROTATE R (E)", "rotate_r", True, "TURN"),
-            ("DIVE (Z)", "dive", u_boat.depth != Depth.DEEP, "CHANGE DEPTH"),
-            ("SURFACE (X)", "surface", u_boat.depth != Depth.SURFACED, "CHANGE DEPTH"),
-            ("REPAIR (R)", "repair", u_boat.engine_damaged or u_boat.deck_gun_damaged or u_boat.flak_gun_damaged, "REPAIR"),
-            ("DECK GUN (F)", "deck_gun", u_boat.depth == Depth.SURFACED and len(self.game.ships) > 0, "FIRE DECK GUN"),
-            ("LOAD TORP (L)", "load_torp", empty_tubes > 0, "LOAD TORPS"),
-            ("FIRE TORP (T)", "fire_torp", loaded_tubes > 0 and len(self.game.ships) > 0, "FIRE TORPS")
+            ("MOVE FORWARD", "move", u_boat.depth != Depth.DEEP, "MOVE"),
+            ("ROTATE LEFT", "rotate_l", True, "TURN"),
+            ("ROTATE RIGHT", "rotate_r", True, "TURN"),
+            ("DIVE", "dive", u_boat.depth != Depth.DEEP, "CHANGE DEPTH"),
+            ("SURFACE", "surface", u_boat.depth != Depth.SURFACED, "CHANGE DEPTH"),
+            ("REPAIR", "repair", u_boat.engine_damaged or u_boat.deck_gun_damaged or u_boat.flak_gun_damaged, "REPAIR"),
+            ("FIRE DECK GUN", "deck_gun", self._has_valid_deck_gun_targets(), "FIRE DECK GUN"),
+            ("LOAD TORPEDOES", "load_torp", empty_tubes > 0, "LOAD TORPS"),
+            ("FIRE TORPEDOES", "fire_torp", loaded_tubes > 0 and (u_boat.depth == Depth.SURFACED or u_boat.depth == Depth.PERISCOPE), "FIRE TORPS")
         ]
         
         for label, action_id, enabled, action_name in actions:
             rect = pygame.Rect(button_x, button_y, button_width, button_height)
-            self.action_button_rects[action_id] = rect
             
             # Get action cost
             cost = cost_lookup.get_cost(action_name, u_boat.depth)
@@ -2137,11 +2171,31 @@ class UnifiedGameScreen(BaseScreen):
             else:
                 full_label = f"{label} - N/A"
             
-            # Button color based on availability
-            if enabled:
-                color = (60, 80, 100)
-                border_color = (100, 150, 200)
+            # Check if button is clickable (enabled AND enough AP)
+            can_afford = cost is not None and cost <= u_boat.action_points
+            is_clickable = enabled and can_afford
+            
+            # Store rect AND clickable state
+            self.action_button_rects[action_id] = (rect, is_clickable)
+            
+            # Check hover state
+            mouse_pos = pygame.mouse.get_pos()
+            is_hover = rect.collidepoint(mouse_pos)
+            
+            # Button color based on availability and hover
+            if is_clickable:
+                if is_hover:
+                    color = (80, 110, 140)  # Lighter on hover
+                    border_color = (120, 180, 230)
+                else:
+                    color = (60, 80, 100)
+                    border_color = (100, 150, 200)
                 text_color = (200, 220, 255)
+            elif enabled:
+                # Enabled but not enough AP
+                color = (80, 80, 60)
+                border_color = (120, 120, 80)
+                text_color = (180, 180, 140)
             else:
                 color = (40, 40, 40)
                 border_color = (80, 80, 80)
@@ -2224,6 +2278,63 @@ class UnifiedGameScreen(BaseScreen):
         else:
             return action_type.replace('Action', '')
     
+    def _has_valid_deck_gun_targets(self) -> bool:
+        """Check if any ships are in LOS and range 1-3 for deck gun."""
+        u_boat = self.game.u_boat
+        
+        # Must be surfaced
+        if u_boat.depth != Depth.SURFACED:
+            return False
+        
+        # Deck gun must not be damaged
+        if u_boat.deck_gun_damaged:
+            return False
+        
+        # Check if any ship is in range 1-3 with LOS
+        from ..hex_grid import HexGrid
+        from ..los import LOSCalculator
+        
+        los_calc = LOSCalculator(self.game.land_hexes)
+        
+        for ship in self.game.ships:
+            distance = HexGrid.hex_distance(u_boat.position, ship.position)
+            if 1 <= distance <= 3:
+                has_los, _ = los_calc.has_line_of_sight(
+                    u_boat.position,
+                    ship.position
+                )
+                if has_los:
+                    return True
+        
+        return False
+    
+    def _draw_dice_roll_button(self, x: int, y: int, width: int) -> None:
+        """Draw the dice roll button."""
+        button_width = width - 40
+        button_height = 60
+        button_x = x + 20
+        button_y = y + 20
+        
+        # Store button rect for click detection
+        self.dice_roll_button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+        
+        # Draw button background
+        mouse_pos = pygame.mouse.get_pos()
+        is_hover = self.dice_roll_button_rect.collidepoint(mouse_pos)
+        button_color = (80, 120, 80) if is_hover else (60, 100, 60)
+        border_color = (120, 200, 120) if is_hover else (100, 170, 100)
+        
+        pygame.draw.rect(self.screen, button_color, self.dice_roll_button_rect)
+        pygame.draw.rect(self.screen, border_color, self.dice_roll_button_rect, 3)
+        
+        # Draw button text
+        text1 = "CLICK TO"
+        text2 = "ROLL DICE"
+        self.draw_text(text1, self.dice_roll_button_rect.centerx, self.dice_roll_button_rect.centery - 12,
+                      self.font_medium, color=(255, 255, 255), center=True)
+        self.draw_text(text2, self.dice_roll_button_rect.centerx, self.dice_roll_button_rect.centery + 12,
+                      self.font_medium, color=(255, 255, 255), center=True)
+    
     def _queue_action(self, action_id: str) -> None:
         """Queue an action based on action ID."""
         from ..models import GamePhase
@@ -2300,26 +2411,77 @@ class UnifiedGameScreen(BaseScreen):
                     return
                     
             elif action_id == "deck_gun":
-                if not self.game.selected_target:
-                    self.add_event("Select a target first (click on ship)")
+                # Deck gun attacks ALL ships with LOS in range 1-3
+                # No target selection needed
+                from ..los import LOSCalculator
+                from ..hex_grid import HexGrid
+                
+                los_calc = LOSCalculator(self.game.land_hexes)
+                
+                # Find all valid targets (in range 1-3 with LOS)
+                valid_targets = []
+                for ship in self.game.ships:
+                    distance = HexGrid.hex_distance(u_boat.position, ship.position)
+                    if 1 <= distance <= 3:
+                        has_los, _ = los_calc.has_line_of_sight(
+                            u_boat.position,
+                            ship.position
+                        )
+                        if has_los:
+                            valid_targets.append((ship, distance))
+                
+                if not valid_targets:
+                    self.add_event("No ships in range for deck gun")
                     return
+                
+                # Sort by distance (closest first), then randomly for ties
+                import random
+                valid_targets.sort(key=lambda x: (x[1], random.random()))
+                
+                # Create action that will attack all valid targets
+                from ..combat_resolver import CombatResolver
                 action = DeckGunAction(
-                    target=self.game.selected_target,
+                    targets=valid_targets,
                     cost_lookup=cost_lookup,
-                    dice_roller=self.game.turn_manager.dice_roller
+                    los_calculator=los_calc,
+                    combat_resolver=CombatResolver(self.game.turn_manager.dice)
                 )
                 
             elif action_id == "load_torp":
                 action = LoadTorpedoAction(cost_lookup=cost_lookup)
                 
             elif action_id == "fire_torp":
-                if not self.game.selected_target:
-                    self.add_event("Select a target first (click on ship)")
+                # Torpedoes fire in facing direction (forward torps) or reverse (rear torp)
+                # No target selection needed - they travel until hitting a ship or map edge
+                from ..torpedo_validator import TorpedoValidator
+                from ..los import LOSCalculator
+                from ..combat_resolver import CombatResolver
+                
+                # Determine which tubes to fire (front vs rear based on loaded tubes)
+                front_tubes = [i for i in range(4) if u_boat.torpedo_tubes[i]]  # Tubes 0-3 (front)
+                rear_tube = 4 if u_boat.torpedo_tubes[4] else None  # Tube 4 (rear)
+                
+                # Prefer front tubes, up to 3
+                if front_tubes:
+                    tubes_to_fire = front_tubes[:min(3, len(front_tubes))]
+                    fire_direction = u_boat.facing  # Forward
+                elif rear_tube is not None:
+                    tubes_to_fire = [rear_tube]
+                    # Rear fires backward
+                    fire_direction = Facing((u_boat.facing.value + 3) % 6)  # Opposite direction
+                else:
+                    self.add_event("No loaded torpedo tubes")
                     return
+                
+                los_calc = LOSCalculator(self.game.land_hexes)
+                
                 action = FireTorpedoAction(
-                    target=self.game.selected_target,
+                    tube_indices=tubes_to_fire,
+                    fire_direction=fire_direction,
                     cost_lookup=cost_lookup,
-                    dice_roller=self.game.turn_manager.dice_roller
+                    validator=TorpedoValidator(),
+                    los_calculator=los_calc,
+                    combat_resolver=CombatResolver(self.game.turn_manager.dice)
                 )
             
             # Add action to queue

@@ -1,10 +1,10 @@
 """
 Deck gun action - Surface combat with deck gun.
 
-Integrates with RangeLOSValidator and CombatResolver from Phase 2.
+Attacks ALL ships with LOS in range 1-3, from closest to furthest.
 """
 
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, List
 from .base_action import Action, ActionResult
 from ..models import UBoat, Ship, Depth
 from ..los import LOSCalculator
@@ -14,19 +14,20 @@ from ..action_costs import ActionCostLookup
 
 class DeckGunAction(Action):
     """
-    Fire deck gun at target ship.
+    Fire deck gun at all valid targets.
     
     Requirements:
     - Must be surfaced
     - Deck gun not damaged
-    - Target in LOS and range 1-3
+    - Targets in LOS and range 1-3
     
     On hit: Set DL to 3, roll damage
+    Attacks all valid targets from closest to furthest.
     """
     
     def __init__(
         self,
-        target_ship: Ship,
+        targets: List[Tuple[Ship, int]],  # List of (ship, distance) tuples
         cost_lookup: ActionCostLookup,
         los_calculator: LOSCalculator,
         combat_resolver: CombatResolver
@@ -35,13 +36,13 @@ class DeckGunAction(Action):
         Initialize deck gun action.
         
         Args:
-            target_ship: Ship to target
+            targets: List of (ship, distance) tuples, sorted by distance
             cost_lookup: Action cost lookup for AP costs
             los_calculator: LOS calculator for line of sight checks
             combat_resolver: Combat resolver for hit/damage rolls
         """
         super().__init__()
-        self.target_ship = target_ship
+        self.targets = targets
         self.cost_lookup = cost_lookup
         self.los_calculator = los_calculator
         self.combat_resolver = combat_resolver
@@ -58,8 +59,7 @@ class DeckGunAction(Action):
         Checks:
         - U-boat is surfaced
         - Deck gun not damaged
-        - Target in LOS
-        - Range 1-3 hexes
+        - At least one valid target
         """
         u_boat = game_state.u_boat
         
@@ -71,43 +71,40 @@ class DeckGunAction(Action):
         if u_boat.deck_gun_damaged:
             return False, "Deck gun is damaged"
         
-        # Check range
-        from ..hex_grid import HexGrid
-        distance = HexGrid.hex_distance(u_boat.position, self.target_ship.position)
-        
-        if distance < 1 or distance > 3:
-            return False, f"Target out of range (range: {distance}, need 1-3)"
-        
-        # Check LOS
-        has_los, reason = self.los_calculator.has_line_of_sight(
-            u_boat.position,
-            self.target_ship.position
-        )
-        
-        if not has_los:
-            return False, f"No line of sight: {reason}"
+        # Must have at least one target
+        if not self.targets:
+            return False, "No valid targets in range"
         
         return True, ""
     
     def execute(self, game_state: Any) -> ActionResult:
-        """Execute the deck gun attack."""
+        """Execute the deck gun attack on all targets."""
         u_boat = game_state.u_boat
         
-        # Calculate range for hit roll
-        from ..hex_grid import HexGrid
-        distance = HexGrid.hex_distance(u_boat.position, self.target_ship.position)
+        results = []
+        total_hits = 0
         
-        # Resolve attack
-        hit, roll_result, description = self.combat_resolver.resolve_deck_gun_attack(
-            distance
-        )
+        # Attack each target in order (closest to furthest)
+        for ship, distance in self.targets:
+            # Resolve attack
+            hit, roll_result, description = self.combat_resolver.resolve_deck_gun_attack(
+                distance
+            )
+            
+            if hit:
+                total_hits += 1
+                results.append(f"HIT {ship.ship_type} at range {distance}: {description}")
+                # TODO: Apply damage to ship
+            else:
+                results.append(f"MISS {ship.ship_type} at range {distance}: {description}")
         
-        # On hit: Set detection level to 3
-        if hit:
-            # TODO: Set game_state.detection_level = 3 when GameState has it
-            message = f"Deck gun HIT! {description} (DL set to 3)"
-        else:
-            message = f"Deck gun MISS. {description}"
+        # Build result message
+        message = f"Deck gun fired at {len(self.targets)} ship(s): {total_hits} hit(s). " + "; ".join(results)
+        
+        # On any hit: Set detection level to 3
+        if total_hits > 0:
+            message += " (DL set to 3)"
+            # TODO: Set game_state.detection_level = 3
         
         ap_cost = self.get_cost(u_boat)
         
@@ -116,10 +113,9 @@ class DeckGunAction(Action):
             message=message,
             ap_spent=ap_cost,
             state_changes={
-                "target": self.target_ship,
-                "hit": hit,
-                "roll_result": roll_result,
-                "range": distance
+                "targets": [ship for ship, _ in self.targets],
+                "hits": total_hits,
+                "action_name": "Deck Gun"
             }
         )
     
@@ -152,4 +148,4 @@ class DeckGunAction(Action):
     
     def get_description(self) -> str:
         """Get action description."""
-        return f"Fire Deck Gun at {self.target_ship.ship_type}"
+        return f"Fire Deck Gun at {len(self.targets)} ship(s)"
