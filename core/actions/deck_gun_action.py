@@ -123,12 +123,17 @@ class DeckGunAction(Action):
         """Get preview data for rendering."""
         can_fire, reason = self.validate(game_state)
         
-        # Calculate range
-        from ..hex_grid import HexGrid
-        distance = HexGrid.hex_distance(
-            game_state.u_boat.position,
-            self.target_ship.position
-        )
+        if not self.targets:
+            return {
+                "type": "deck_gun",
+                "targets": [],
+                "valid": False,
+                "reason": "No valid targets",
+                "cost": self.get_cost(game_state.u_boat)
+            }
+        
+        # Get first target for display
+        first_ship, distance = self.targets[0]
         
         # Get hit chance
         if distance <= 2:
@@ -138,7 +143,7 @@ class DeckGunAction(Action):
         
         return {
             "type": "deck_gun",
-            "target": self.target_ship,
+            "targets": [ship for ship, _ in self.targets],
             "range": distance,
             "hit_target": hit_target,
             "valid": can_fire,

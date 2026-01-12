@@ -41,6 +41,8 @@ class MockGameState:
     def __init__(self, u_boat: UBoat, ships: Optional[List[Ship]] = None):
         self.u_boat = u_boat
         self.ships = ships or []
+        self.land_hexes = set()
+        self.mission_hexes = set()  # Empty set for testing
 
 
 def test_repair_action_engine():
@@ -165,7 +167,8 @@ def test_deck_gun_action():
     
     game_state = MockGameState(u_boat, [target_ship])
     
-    action = DeckGunAction(target_ship, cost_lookup, los_calculator, combat_resolver)
+    # DeckGunAction expects list of (ship, distance) tuples
+    action = DeckGunAction([(target_ship, 2)], cost_lookup, los_calculator, combat_resolver)
     
     cost = action.get_cost(u_boat)
     print(f"Deck gun cost: {cost}")
@@ -213,7 +216,8 @@ def test_deck_gun_requires_surface():
     
     game_state = MockGameState(u_boat, [target_ship])
     
-    action = DeckGunAction(target_ship, cost_lookup, los_calculator, combat_resolver)
+    # DeckGunAction expects list of (ship, distance) tuples
+    action = DeckGunAction([(target_ship, 2)], cost_lookup, los_calculator, combat_resolver)
     
     can_fire, msg = action.validate(game_state)
     print(f"Submerged deck gun: {can_fire}, reason: {msg}")
@@ -316,8 +320,12 @@ def test_fire_torpedo_action():
     
     # Fire 2 torpedoes from front tubes (use 1-based: tubes 1 and 2)
     action = FireTorpedoAction(
-        target_ship, [1, 2], cost_lookup, validator,
-        los_calculator, combat_resolver
+        tube_indices=[1, 2],
+        fire_direction=u_boat.facing,
+        cost_lookup=cost_lookup,
+        validator=validator,
+        los_calculator=los_calculator,
+        combat_resolver=combat_resolver
     )
     
     cost = action.get_cost(u_boat)
@@ -331,7 +339,7 @@ def test_fire_torpedo_action():
     result = action.execute(game_state)
     print(f"Fire result: {result}")
     assert result.success
-    assert "Torpedo" in result.message
+    assert "torpedo" in result.message.lower()
     assert game_state.u_boat.torpedo_tubes[0] == False  # Unloaded
     assert game_state.u_boat.torpedo_tubes[1] == False  # Unloaded
     
@@ -372,8 +380,12 @@ def test_fire_torpedo_front_and_rear_restriction():
     
     # Try to fire front and rear tubes (invalid - use tubes 1 and 5)
     action = FireTorpedoAction(
-        target_ship, [1, 5], cost_lookup, validator,
-        los_calculator, combat_resolver
+        tube_indices=[1, 5],
+        fire_direction=u_boat.facing,
+        cost_lookup=cost_lookup,
+        validator=validator,
+        los_calculator=los_calculator,
+        combat_resolver=combat_resolver
     )
     
     can_fire, msg = action.validate(game_state)

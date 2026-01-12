@@ -2,7 +2,40 @@
 
 **Goal**: Integrate Phase 2 validators into actual gameplay actions with UI
 
-**Status**: 🚧 In Progress | **Estimated Time**: 2-3 weeks
+**Status**: ✅ COMPLETE | **Completed**: January 2026
+
+---
+
+## Phase 3 Completion Summary
+
+All 7 core actions implemented with comprehensive test coverage:
+
+### Implemented Actions
+1. **MoveAction** - Movement with validation (land, shallow water, ships)
+2. **RotateAction** - U-boat rotation (clockwise/counter-clockwise)
+3. **DepthChangeAction** - Depth changes with restrictions
+4. **RepairAction** - System repairs (engine, guns, torpedoes)
+5. **DeckGunAction** - Surface combat with range/LOS
+6. **LoadTorpedoAction** - Loading torpedo tubes (1-2 tubes, depth restricted)
+7. **FireTorpedoAction** - Firing torpedoes with interactive resolution
+
+### Test Coverage
+- **test_action_system.py** - Action queue, AP management, undo/redo
+- **test_movement_actions.py** - Move, rotate, depth change (10 tests)
+- **test_combat_actions.py** - Repair, deck gun, torpedo basics (9 tests)
+- **test_deck_gun_scenario.py** - Interactive deck gun combat
+- **test_torpedo_scenario.py** - Complete torpedo workflow (29 tests)
+- **test_damage_resolution.py** - Ship/U-boat damage, crew casualties
+
+### Key Features Delivered
+- Interactive resolution screens for combat
+- Visual feedback for all actions
+- Comprehensive validation using Phase 2 validators
+- Action cost calculation based on depth
+- Detection level tracking and updates
+- Damage resolution with charts
+- Continue-on-miss mechanics for torpedoes
+- Aspect-based hit tables
 
 ---
 
@@ -17,7 +50,7 @@
 
 ## Phase 3 Implementation Plan
 
-### 3.1 Action System Architecture (Foundation)
+### 3.1 Action System Architecture (Foundation) ✅ COMPLETE
 
 **Priority**: CRITICAL | **Time**: 6-8 hours
 
@@ -98,7 +131,7 @@ class ActionExecutor:
 
 ---
 
-### 3.2 Movement Actions (Quick Win)
+### 3.2 Movement Actions (Quick Win) ✅ COMPLETE
 
 **Priority**: HIGH | **Time**: 4-6 hours
 
@@ -155,16 +188,16 @@ class DepthChangeAction(Action):
 - Handle forced dive/ascent
 
 **Deliverables**:
-- [ ] MoveAction with MovementValidator integration
-- [ ] RotateAction implementation
-- [ ] DepthChangeAction with DepthValidator integration
-- [ ] Visual hex highlighting for valid moves
-- [ ] Tests for movement actions
-- [ ] Refactor WASD to use action system
+- ✅ MoveAction with MovementValidator integration
+- ✅ RotateAction implementation
+- ✅ DepthChangeAction with DepthValidator integration
+- ✅ Visual hex highlighting for valid moves
+- ✅ Tests for movement actions (test_movement_actions.py)
+- ⚠️ Refactor WASD to use action system (deferred - direct controls preferred)
 
 ---
 
-### 3.3 Repair Actions
+### 3.3 Repair Actions ✅ COMPLETE
 
 **Priority**: MEDIUM | **Time**: 4-5 hours
 
@@ -202,14 +235,14 @@ class RepairAction(Action):
 - Disabled options when not at surface
 
 **Deliverables**:
-- [ ] RepairAction with RepairValidator integration
-- [ ] Repair selection UI
-- [ ] Visual feedback for repaired systems
-- [ ] Tests for repair actions
+- ✅ RepairAction with RepairValidator integration
+- ✅ Repair selection UI (buttons in game screen)
+- ✅ Visual feedback for repaired systems
+- ✅ Tests for repair actions (test_combat_actions.py)
 
 ---
 
-### 3.4 Combat Actions - Deck Gun
+### 3.4 Combat Actions - Deck Gun ✅ COMPLETE
 
 **Priority**: HIGH | **Time**: 5-6 hours
 
@@ -250,15 +283,15 @@ class DeckGunAction(Action):
 - Link to damage resolution
 
 **Deliverables**:
-- [ ] DeckGunAction with Range/LOS/Combat integration
-- [ ] Target selection UI (click ships)
-- [ ] Range indicator overlay
-- [ ] Combat result notifications
-- [ ] Tests for deck gun actions
+- ✅ DeckGunAction with Range/LOS/Combat integration
+- ✅ Target selection UI (interactive resolution screen)
+- ✅ Range indicator overlay
+- ✅ Combat result notifications
+- ✅ Tests for deck gun actions (test_combat_actions.py, test_deck_gun_scenario.py)
 
 ---
 
-### 3.5 Combat Actions - Torpedoes
+### 3.5 Combat Actions - Torpedoes ✅ COMPLETE
 
 **Priority**: HIGH | **Time**: 6-8 hours
 
@@ -326,18 +359,18 @@ class FireTorpedoAction(Action):
 - Torpedo path visualization
 
 **Deliverables**:
-- [ ] LoadTorpedoAction with TorpedoValidator integration
-- [ ] FireTorpedoAction with TorpedoValidator integration
-- [ ] Torpedo tube status UI
-- [ ] Tube selection interface
-- [ ] Aspect auto-detection from positioning
-- [ ] Miss continuation logic
-- [ ] Detection level updates
-- [ ] Tests for torpedo actions
+- ✅ LoadTorpedoAction with TorpedoValidator integration
+- ✅ FireTorpedoAction with TorpedoValidator integration
+- ✅ Torpedo tube status UI (5 torpedo boxes on game board)
+- ✅ Tube selection interface (interactive buttons)
+- ✅ Aspect auto-detection from positioning
+- ✅ Miss continuation logic
+- ✅ Detection level updates (max +2 per salvo)
+- ✅ Tests for torpedo actions (test_torpedo_scenario.py - 29 comprehensive tests)
 
 ---
 
-### 3.6 Damage Resolution System
+### 3.6 Damage Resolution System ✅ COMPLETE
 
 **Priority**: HIGH | **Time**: 8-10 hours
 
@@ -401,14 +434,14 @@ class UBoatDamageResolver:
 - Victory/defeat condition checking
 
 **Deliverables**:
-- [ ] ShipDamageResolver with damage charts
-- [ ] UBoatDamageResolver with damage charts
-- [ ] Crew casualty and medic save system
-- [ ] Hull damage depth enforcement
-- [ ] Ship removal on sinking
-- [ ] Damage notification UI
-- [ ] Victory/defeat condition checks
-- [ ] Tests for damage resolution
+- ✅ ShipDamageResolver with damage charts
+- ✅ UBoatDamageResolver with damage charts
+- ✅ Crew casualty and medic save system
+- ✅ Hull damage depth enforcement
+- ✅ Ship removal on sinking
+- ✅ Damage notification UI (interactive resolution screens)
+- ⚠️ Victory/defeat condition checks (deferred to Phase 4)
+- ✅ Tests for damage resolution (test_damage_resolution.py, test_combat_actions.py)
 
 ---
 
@@ -459,26 +492,26 @@ class UBoatDamageResolver:
 
 ### Unit Tests
 
-- [ ] Action validation logic
-- [ ] Action queue operations
-- [ ] Damage calculations
-- [ ] Crew casualty rolls
-- [ ] Medic saves
+- ✅ Action validation logic (test_action_system.py)
+- ✅ Action queue operations (test_action_system.py)
+- ✅ Damage calculations (test_damage_resolution.py)
+- ✅ Crew casualty rolls (test_damage_resolution.py)
+- ✅ Medic saves (test_damage_resolution.py)
 
 ### Integration Tests
 
-- [ ] Full combat sequences
-- [ ] Movement → Detection → Combat flow
-- [ ] Repair → System recovery
-- [ ] Multiple actions in one turn
+- ✅ Full combat sequences (test_deck_gun_scenario.py, test_torpedo_scenario.py)
+- ✅ Movement → Detection → Combat flow (test_movement_actions.py, test_combat_actions.py)
+- ✅ Repair → System recovery (test_combat_actions.py)
+- ✅ Multiple actions in one turn (action queue system)
 
 ### Gameplay Tests
 
-- [ ] AP management works correctly
-- [ ] Can't exceed AP limit
-- [ ] Undo works properly
-- [ ] Turn commit works
-- [ ] All validators integrate correctly
+- ✅ AP management works correctly (test_action_system.py)
+- ✅ Can't exceed AP limit (action queue validation)
+- ✅ Undo works properly (action queue undo)
+- ✅ Turn commit works (action execution)
+- ✅ All validators integrate correctly (all test files)
 
 ---
 
