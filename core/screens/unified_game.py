@@ -3330,12 +3330,12 @@ class UnifiedGameScreen(BaseScreen):
         # Count hits
         hits = sum(1 for _, _, _, hit, _ in results if hit)
         
-        # Calculate DL increase
+        # Calculate DL increase (max +2 total per salvo)
         dl_increase = 0
         if torpedo_count == 3:
             dl_increase += 1  # Noise from firing 3 torpedoes
-        if hits > 0:
-            dl_increase += min(hits, 2)  # +1 DL per hit (max +2 total)
+        dl_increase += hits  # +1 DL per hit
+        dl_increase = min(dl_increase, 2)  # Enforce max +2 total
         
         # Apply DL increase
         if dl_increase > 0:
