@@ -10,7 +10,7 @@ from ..models import Facing, Depth, Ship
 from .base_screen import BaseScreen
 from ..actions import (
     MoveAction, RotateAction, DepthChangeAction, RepairAction,
-    DeckGunAction, FireTorpedoAction
+    DeckGunAction, FireTorpedoAction, LoadTorpedoAction
 )
 
 
@@ -103,6 +103,16 @@ class UnifiedGameScreen(BaseScreen):
         self.deck_gun_resolution_state: Optional[Dict[str, Any]] = None
         self.deck_gun_roll_button_rect: Optional[pygame.Rect] = None
         
+        # Torpedo resolution state (for interactive torpedo attacks)
+        self.torpedo_resolution_state: Optional[Dict[str, Any]] = None
+        self.torpedo_roll_button_rect: Optional[pygame.Rect] = None
+        
+        # Torpedo loading selection state (for interactive tube selection)
+        self.load_torpedo_selection_state: Optional[Dict[str, Any]] = None
+        self.tube_checkbox_rects: Dict[int, pygame.Rect] = {}  # tube_num -> checkbox rect
+        self.confirm_load_button_rect: Optional[pygame.Rect] = None
+        self.cancel_load_button_rect: Optional[pygame.Rect] = None
+        
         # Mission rules (loaded separately if needed)
         self.mission_rules: Optional[Any] = None
         self.mission_rules_view: Optional[Any] = None
@@ -147,8 +157,10 @@ class UnifiedGameScreen(BaseScreen):
                     self.add_event("Tab: Switch grid/status | Click: Select box | P: Print | L: Save")
                     self.game.show_grid = True
                     self.game.show_map = True
+                    self.game.show_status_boxes = True  # Enable status boxes in edit mode
                 else:
                     self.add_event("Alignment mode OFF")
+                    self.game.show_status_boxes = False  # Disable status boxes when exiting edit mode
             
             # Alignment mode controls
             elif self.alignment_mode:
@@ -227,9 +239,13 @@ class UnifiedGameScreen(BaseScreen):
                     state = "ON" if self.game.show_terrain else "OFF"
                     self.add_event(f"Terrain overlay: {state}")
                 elif event.key == pygame.K_s:
-                    self.game.show_status_boxes = not self.game.show_status_boxes
-                    state = "ON" if self.game.show_status_boxes else "OFF"
-                    self.add_event(f"Status boxes: {state}")
+                    # Status boxes only toggleable in alignment mode
+                    if self.alignment_mode:
+                        self.game.show_status_boxes = not self.game.show_status_boxes
+                        state = "ON" if self.game.show_status_boxes else "OFF"
+                        self.add_event(f"Status boxes: {state}")
+                    else:
+                        self.add_event(f"Status boxes: Only available in F2 Edit Mode")
 
         elif event.type == pygame.MOUSEWHEEL:
             # Scroll event log
@@ -292,8 +308,9 @@ class UnifiedGameScreen(BaseScreen):
                         from ..models import GamePhase
                         if current_phase == GamePhase.UBOAT_PHASE:
                             if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
-                                # Check if any action is a deck gun (needs interactive resolution)
+                                # Check if any action needs interactive resolution
                                 has_deck_gun = any(isinstance(action, DeckGunAction) for action in self.game.action_queue.actions)
+                                has_torpedo = any(isinstance(action, FireTorpedoAction) for action in self.game.action_queue.actions)
                                 
                                 if has_deck_gun:
                                     # Check if deck gun is damaged
@@ -342,8 +359,44 @@ class UnifiedGameScreen(BaseScreen):
                                                 }
                                                 self.add_event("=== DECK GUN ATTACK ===")
                                                 break
+                                
+                                elif has_torpedo:
+                                    # Find first torpedo action and start interactive resolution
+                                    for i, action in enumerate(self.game.action_queue.actions):
+                                        if isinstance(action, FireTorpedoAction):
+                                            # Execute to get targets (tubes are unloaded here)
+                                            result = action.execute(self.game)
+                                            
+                                            # Spend AP
+                                            self.game.u_boat.action_points -= result.ap_spent
+                                            
+                                            # Check if needs interactive resolution
+                                            if result.state_changes.get('needs_interactive_resolution'):
+                                                # Setup interactive resolution state
+                                                self.torpedo_resolution_state = {
+                                                    'action': action,
+                                                    'action_index': i,
+                                                    'torpedo_count': result.state_changes['torpedo_count'],
+                                                    'targets': result.state_changes['targets'],  # [(ship, distance, aspect), ...]
+                                                    'current_target_idx': 0,
+                                                    'current_torpedo_idx': 0,
+                                                    'torpedoes_available': result.state_changes['torpedo_count'],
+                                                    'waiting_for': 'hit',  # 'hit', 'damage', 'continue'
+                                                    'last_hit_roll': None,
+                                                    'last_damage_roll': None,
+                                                    'results': []  # [(torpedo_num, ship, distance, hit, damage_die), ...]
+                                                }
+                                                self.add_event(f"=== FIRING {self.torpedo_resolution_state['torpedo_count']} TORPEDO(ES) ===")
+                                            else:
+                                                # No targets, just log
+                                                self.add_event(result.message)
+                                            
+                                            # Remove this action from queue
+                                            self.game.action_queue.actions.pop(i)
+                                            break
+                                
                                 else:
-                                    # No deck gun - execute all actions immediately
+                                    # No interactive actions - execute all immediately
                                     results = self.game.action_queue.commit_all(self.game)
                                     for result in results:
                                         if result.success:
@@ -363,8 +416,16 @@ class UnifiedGameScreen(BaseScreen):
                     elif self.deck_gun_resolution_state and self.deck_gun_roll_button_rect and self.deck_gun_roll_button_rect.collidepoint(mouse_pos):
                         self._handle_deck_gun_roll()
                     
+                    # Check if clicking torpedo resolution button
+                    elif self.torpedo_resolution_state and self.torpedo_roll_button_rect and self.torpedo_roll_button_rect.collidepoint(mouse_pos):
+                        self._handle_torpedo_roll()
+                    
+                    # Check if clicking torpedo loading UI buttons
+                    elif self.load_torpedo_selection_state:
+                        self._handle_load_torpedo_clicks(mouse_pos)
+                    
                     # Check if clicking action selection buttons
-                    else:
+                    elif not self.load_torpedo_selection_state:  # Only allow if not in torpedo selection
                         for action_id, button_data in self.action_button_rects.items():
                             rect: pygame.Rect
                             is_clickable: bool
@@ -2132,6 +2193,16 @@ class UnifiedGameScreen(BaseScreen):
             self._draw_deck_gun_resolution(x, y + 35, width)
             return
         
+        # Check if in torpedo resolution mode
+        if self.torpedo_resolution_state:
+            self._draw_torpedo_resolution(x, y + 35, width)
+            return
+        
+        # Check if in torpedo loading selection mode
+        if self.load_torpedo_selection_state:
+            self._draw_torpedo_loading_selection(x, y + 35, width)
+            return
+        
         # Clear button rects
         self.action_button_rects.clear()
         
@@ -2162,8 +2233,27 @@ class UnifiedGameScreen(BaseScreen):
             ("REPAIR", "repair", u_boat.engine_damaged or u_boat.deck_gun_damaged or u_boat.flak_gun_damaged, "REPAIR"),
             ("FIRE DECK GUN", "deck_gun", self._has_valid_deck_gun_targets(), "FIRE DECK GUN"),
             ("LOAD TORPEDOES", "load_torp", empty_tubes > 0, "LOAD TORPS"),
-            ("FIRE TORPEDOES", "fire_torp", loaded_tubes > 0 and (u_boat.depth == Depth.SURFACED or u_boat.depth == Depth.PERISCOPE), "FIRE TORPS")
         ]
+        
+        # Add individual torpedo tube fire buttons
+        can_fire_depth = u_boat.depth == Depth.SURFACED or u_boat.depth == Depth.PERISCOPE
+        for tube_num in range(1, 6):
+            tube_idx = tube_num - 1
+            is_loaded = u_boat.torpedo_tubes[tube_idx]
+            # TODO: Add tube damaged check when damage system implemented
+            is_damaged = False  # u_boat.torpedo_tubes_damaged[tube_idx]
+            tube_type = "Front" if tube_num <= 4 else "Rear"
+            
+            if is_loaded and not is_damaged:
+                status = "Loaded"
+            elif is_damaged:
+                status = "Damaged"
+            else:
+                status = "Empty"
+            
+            label = f"FIRE TUBE {tube_num} ({tube_type}): {status}"
+            enabled = is_loaded and not is_damaged and can_fire_depth
+            actions.append((label, f"fire_torp_{tube_num}", enabled, "FIRE TORPS"))
         
         for label, action_id, enabled, action_name in actions:
             rect = pygame.Rect(button_x, button_y, button_width, button_height)
@@ -2556,6 +2646,158 @@ class UnifiedGameScreen(BaseScreen):
             center=True
         )
     
+    def _draw_torpedo_loading_selection(self, x: int, y: int, width: int) -> None:
+        """Draw torpedo tube selection UI for loading."""
+        state = self.load_torpedo_selection_state
+        if not state:
+            return
+        
+        self.tube_checkbox_rects.clear()
+        
+        u_boat = state['u_boat']
+        selected_tubes = state['selected_tubes']
+        max_tubes = state['max_tubes']
+        
+        # Title
+        info_y = y
+        self.draw_text(
+            "LOAD TORPEDOES",
+            x + width // 2,
+            info_y,
+            self.font_medium,
+            color=(100, 200, 255),
+            center=True
+        )
+        info_y += 30
+        
+        # Info text
+        cost = state['cost_lookup'].get_cost("LOAD TORPS", u_boat.depth)
+        cost_text = f"Cost: {cost} AP" if cost is not None else "Cost: N/A"
+        self.draw_text(
+            f"Select up to {max_tubes} tube(s) | {cost_text}",
+            x + width // 2,
+            info_y,
+            self.font_small,
+            color=(180, 180, 180),
+            center=True
+        )
+        info_y += 25
+        
+        # Tube checkboxes
+        checkbox_size = 20
+        label_x = x + 20
+        checkbox_x = x + width - 40
+        
+        for tube_num in range(1, 6):
+            tube_idx = tube_num - 1  # 0-based index
+            is_loaded = u_boat.torpedo_tubes[tube_idx]
+            is_selected = tube_num in selected_tubes
+            is_available = not is_loaded
+            
+            # Tube label
+            tube_type = "Front" if tube_num <= 4 else "Rear"
+            if is_loaded:
+                status = "Loaded"
+                status_color = (100, 255, 100)
+            elif is_selected:
+                status = "Selected"
+                status_color = (255, 220, 100)
+            else:
+                status = "Empty"
+                status_color = (150, 150, 150)
+            
+            label_text = f"Tube {tube_num} ({tube_type})"
+            self.draw_text(
+                label_text,
+                label_x,
+                info_y + checkbox_size // 2,
+                self.font_small,
+                color=(200, 200, 200)
+            )
+            
+            self.draw_text(
+                status,
+                label_x + 120,
+                info_y + checkbox_size // 2,
+                self.font_small,
+                color=status_color
+            )
+            
+            # Checkbox
+            checkbox_rect = pygame.Rect(checkbox_x, info_y, checkbox_size, checkbox_size)
+            self.tube_checkbox_rects[tube_num] = checkbox_rect
+            
+            # Checkbox appearance
+            if is_available:
+                if is_selected:
+                    pygame.draw.rect(self.screen, (100, 200, 255), checkbox_rect)
+                    pygame.draw.rect(self.screen, (150, 220, 255), checkbox_rect, 2)
+                    # Draw checkmark
+                    pygame.draw.line(self.screen, (255, 255, 255),
+                                   (checkbox_rect.left + 4, checkbox_rect.centery),
+                                   (checkbox_rect.centerx, checkbox_rect.bottom - 4), 2)
+                    pygame.draw.line(self.screen, (255, 255, 255),
+                                   (checkbox_rect.centerx, checkbox_rect.bottom - 4),
+                                   (checkbox_rect.right - 4, checkbox_rect.top + 4), 2)
+                else:
+                    pygame.draw.rect(self.screen, (60, 60, 60), checkbox_rect)
+                    pygame.draw.rect(self.screen, (120, 120, 120), checkbox_rect, 2)
+            else:
+                # Disabled (already loaded)
+                pygame.draw.rect(self.screen, (40, 40, 40), checkbox_rect)
+                pygame.draw.rect(self.screen, (80, 80, 80), checkbox_rect, 1)
+            
+            info_y += checkbox_size + 8
+        
+        # Confirm and Cancel buttons
+        info_y += 10
+        button_height = 35
+        button_width = (width - 50) // 2
+        
+        # Confirm button
+        confirm_x = x + 15
+        self.confirm_load_button_rect = pygame.Rect(confirm_x, info_y, button_width, button_height)
+        
+        can_confirm = len(selected_tubes) > 0
+        if can_confirm:
+            confirm_color = (60, 120, 60)
+            confirm_border = (100, 200, 100)
+            confirm_text_color = (200, 255, 200)
+        else:
+            confirm_color = (40, 40, 40)
+            confirm_border = (80, 80, 80)
+            confirm_text_color = (100, 100, 100)
+        
+        pygame.draw.rect(self.screen, confirm_color, self.confirm_load_button_rect)
+        pygame.draw.rect(self.screen, confirm_border, self.confirm_load_button_rect, 2)
+        self.draw_text(
+            "CONFIRM",
+            self.confirm_load_button_rect.centerx,
+            self.confirm_load_button_rect.centery,
+            self.font_small,
+            color=confirm_text_color,
+            center=True
+        )
+        
+        # Cancel button
+        cancel_x = confirm_x + button_width + 20
+        self.cancel_load_button_rect = pygame.Rect(cancel_x, info_y, button_width, button_height)
+        
+        cancel_color = (80, 60, 60)
+        cancel_border = (150, 100, 100)
+        cancel_text_color = (255, 200, 200)
+        
+        pygame.draw.rect(self.screen, cancel_color, self.cancel_load_button_rect)
+        pygame.draw.rect(self.screen, cancel_border, self.cancel_load_button_rect, 2)
+        self.draw_text(
+            "CANCEL",
+            self.cancel_load_button_rect.centerx,
+            self.cancel_load_button_rect.centery,
+            self.font_small,
+            color=cancel_text_color,
+            center=True
+        )
+    
     def _handle_deck_gun_roll(self) -> None:
         """Handle clicking the deck gun resolution button."""
         state = self.deck_gun_resolution_state
@@ -2786,6 +3028,433 @@ class UnifiedGameScreen(BaseScreen):
             # All deck gun actions resolved - clear queue
             self.game.action_queue.clear()
     
+    def _draw_torpedo_resolution(self, x: int, y: int, width: int) -> None:
+        """Draw the interactive torpedo resolution UI."""
+        state = self.torpedo_resolution_state
+        if not state:
+            return
+        
+        current_target_idx = state['current_target_idx']
+        targets = state['targets']  # [(ship, distance, aspect), ...]
+        torpedoes_available = state['torpedoes_available']
+        current_torpedo_idx = state['current_torpedo_idx']
+        waiting_for = state['waiting_for']
+        
+        # Check if all torpedoes fired or all targets exhausted
+        if torpedoes_available <= 0 or current_target_idx >= len(targets):
+            # All done - finish resolution
+            self._finish_torpedo_resolution()
+            return
+        
+        ship, distance, aspect = targets[current_target_idx]
+        
+        # Draw header
+        info_y = y
+        self.draw_text(
+            f"TORPEDO #{current_torpedo_idx + 1} of {state['torpedo_count']}",
+            x + width // 2,
+            info_y,
+            self.font_small,
+            color=(255, 220, 100),
+            center=True
+        )
+        info_y += 20
+        
+        # Draw target info
+        self.draw_text(
+            f"TARGET: {ship.ship_type.upper()}",
+            x + width // 2,
+            info_y,
+            self.font_small,
+            color=(200, 200, 200),
+            center=True
+        )
+        info_y += 20
+        
+        self.draw_text(
+            f"Range {distance}, {aspect.replace('_', '/')} aspect",
+            x + width // 2,
+            info_y,
+            self.font_small,
+            color=(180, 180, 180),
+            center=True
+        )
+        info_y += 20
+        
+        self.draw_text(
+            f"({current_target_idx + 1} of {len(targets)} ships)",
+            x + width // 2,
+            info_y,
+            self.font_small,
+            color=(150, 150, 150),
+            center=True
+        )
+        info_y += 25
+        
+        # Button defaults
+        button_color = (60, 80, 100)
+        border_color = (100, 140, 180)
+        button_text1 = "CLICK"
+        button_text2 = "BUTTON"
+        
+        # Show what we're waiting for
+        if waiting_for == 'hit':
+            # Get hit target from action
+            action = state['action']
+            hit_target = action.get_torpedo_hit_target(distance, aspect)
+            
+            self.draw_text(
+                f"Need {hit_target}+ on 1d6 to hit",
+                x + width // 2,
+                info_y,
+                self.font_small,
+                color=(200, 200, 200),
+                center=True
+            )
+            info_y += 25
+            
+            button_text1 = "CLICK TO"
+            button_text2 = "ROLL FOR HIT"
+            button_color = (100, 60, 60)
+            border_color = (180, 100, 100)
+        
+        elif waiting_for == 'damage':
+            # Show last hit roll
+            hit_roll = state['last_hit_roll']
+            self.draw_text(
+                f"HIT! Rolled {hit_roll}",
+                x + width // 2,
+                info_y,
+                self.font_small,
+                color=(100, 255, 100),
+                center=True
+            )
+            info_y += 25
+            
+            button_text1 = "CLICK TO"
+            button_text2 = "ROLL DAMAGE"
+            button_color = (100, 80, 60)
+            border_color = (180, 140, 100)
+        
+        elif waiting_for == 'continue':
+            # Show result
+            if state['last_damage_roll']:
+                # Hit
+                hit_roll = state['last_hit_roll']
+                self.draw_text(
+                    f"HIT! Rolled {hit_roll}",
+                    x + width // 2,
+                    info_y,
+                    self.font_small,
+                    color=(100, 255, 100),
+                    center=True
+                )
+                info_y += 20
+                
+                damage_roll = state['last_damage_roll']
+                self.draw_text(
+                    f"Damage: {damage_roll['description']}",
+                    x + width // 2,
+                    info_y,
+                    self.font_small,
+                    color=(255, 200, 100),
+                    center=True
+                )
+                info_y += 20
+            else:
+                # Miss
+                hit_roll = state['last_hit_roll']
+                self.draw_text(
+                    f"MISS! Rolled {hit_roll}",
+                    x + width // 2,
+                    info_y,
+                    self.font_small,
+                    color=(255, 100, 100),
+                    center=True
+                )
+                info_y += 20
+                
+                # Check if more torpedoes remaining
+                if torpedoes_available > 1:
+                    self.draw_text(
+                        "Torpedo continues to next ship...",
+                        x + width // 2,
+                        info_y,
+                        self.font_small,
+                        color=(200, 200, 100),
+                        center=True
+                    )
+                    info_y += 20
+            
+            button_text1 = "CONTINUE"
+            button_text2 = "NEXT"
+            button_color = (60, 80, 100)
+            border_color = (100, 140, 180)
+        
+        # Draw button
+        button_width = width - 40
+        button_height = 60
+        button_x = x + 20
+        button_y = info_y + 10
+        
+        self.torpedo_roll_button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+        
+        mouse_pos = pygame.mouse.get_pos()
+        is_hover = self.torpedo_roll_button_rect.collidepoint(mouse_pos)
+        
+        if is_hover:
+            button_color = tuple(min(c + 30, 255) for c in button_color)
+            border_color = tuple(min(c + 30, 255) for c in border_color)
+        
+        pygame.draw.rect(self.screen, button_color, self.torpedo_roll_button_rect)
+        pygame.draw.rect(self.screen, border_color, self.torpedo_roll_button_rect, 3)
+        
+        self.draw_text(
+            button_text1,
+            self.torpedo_roll_button_rect.centerx,
+            self.torpedo_roll_button_rect.centery - 12,
+            self.font_medium,
+            color=(255, 255, 255),
+            center=True
+        )
+        self.draw_text(
+            button_text2,
+            self.torpedo_roll_button_rect.centerx,
+            self.torpedo_roll_button_rect.centery + 12,
+            self.font_medium,
+            color=(255, 255, 255),
+            center=True
+        )
+    
+    def _handle_torpedo_roll(self) -> None:
+        """Handle clicking the torpedo resolution button."""
+        state = self.torpedo_resolution_state
+        if not state:
+            return
+        
+        current_target_idx = state['current_target_idx']
+        targets = state['targets']
+        torpedoes_available = state['torpedoes_available']
+        waiting_for = state['waiting_for']
+        
+        # Check if finished
+        if torpedoes_available <= 0 or current_target_idx >= len(targets):
+            self._finish_torpedo_resolution()
+            return
+        
+        ship, distance, aspect = targets[current_target_idx]
+        current_torpedo_idx = state['current_torpedo_idx']
+        
+        if waiting_for == 'hit':
+            # Roll for hit (1d6)
+            roll = self.game.turn_manager.dice.roll_1d6()
+            
+            # Get hit target from action
+            action = state['action']
+            hit_target = action.get_torpedo_hit_target(distance, aspect)
+            
+            hit = (roll >= hit_target)
+            
+            state['last_hit_roll'] = roll
+            
+            if hit:
+                # Need to roll damage
+                state['waiting_for'] = 'damage'
+                self.add_event(f"Torpedo #{current_torpedo_idx + 1} vs {ship.ship_type} (range {distance}, {aspect}): HIT! (Rolled {roll}, needed {hit_target}+)")
+            else:
+                # Miss - torpedo continues
+                state['results'].append((current_torpedo_idx + 1, ship, distance, False, None))
+                self.add_event(f"Torpedo #{current_torpedo_idx + 1} vs {ship.ship_type} (range {distance}, {aspect}): MISS (Rolled {roll}, needed {hit_target}+)")
+                
+                # Don't consume this torpedo - it continues to next ship
+                state['waiting_for'] = 'continue'
+        
+        elif waiting_for == 'damage':
+            # Roll for damage using ShipDamageResolver
+            from ..damage import ShipDamageResolver
+            damage_resolver = ShipDamageResolver(self.game.turn_manager.dice)
+            
+            damage_result = damage_resolver.apply_damage(ship, "torpedo")
+            
+            state['last_damage_roll'] = {
+                'die': damage_result.roll,
+                'description': damage_result.description
+            }
+            
+            # Store result
+            state['results'].append((current_torpedo_idx + 1, ship, distance, True, damage_result.roll))
+            
+            # Log result
+            if damage_result.is_now_sunk:
+                self.add_event(f"  Damage: {damage_result.description} - {ship.ship_type.upper()} SUNK!")
+                # Remove ship
+                if ship in self.game.ships:
+                    self.game.ships.remove(ship)
+            elif damage_result.effect == "damaged":
+                self.add_event(f"  Damage: DAMAGED (roll: {damage_result.roll})")
+            else:
+                self.add_event(f"  Damage: No effect (roll: {damage_result.roll})")
+            
+            # This torpedo is consumed
+            state['torpedoes_available'] -= 1
+            state['current_torpedo_idx'] += 1
+            
+            state['waiting_for'] = 'continue'
+        
+        elif waiting_for == 'continue':
+            # Move to next target or next torpedo
+            state['last_hit_roll'] = None
+            state['last_damage_roll'] = None
+            
+            # If last action was a miss and we have more targets, continue same torpedo
+            if state['torpedoes_available'] > 0 and current_target_idx + 1 < len(targets):
+                # Continue torpedo to next ship
+                state['current_target_idx'] += 1
+                state['waiting_for'] = 'hit'
+            elif state['torpedoes_available'] > 0:
+                # No more targets, finish
+                self._finish_torpedo_resolution()
+            else:
+                # All torpedoes fired, finish
+                self._finish_torpedo_resolution()
+    
+    def _finish_torpedo_resolution(self) -> None:
+        """Finish torpedo resolution and calculate detection level changes."""
+        state = self.torpedo_resolution_state
+        if not state:
+            return
+        
+        results = state['results']
+        torpedo_count = state['torpedo_count']
+        
+        # Count hits
+        hits = sum(1 for _, _, _, hit, _ in results if hit)
+        
+        # Calculate DL increase
+        dl_increase = 0
+        if torpedo_count == 3:
+            dl_increase += 1  # Noise from firing 3 torpedoes
+        if hits > 0:
+            dl_increase += min(hits, 2)  # +1 DL per hit (max +2 total)
+        
+        # Apply DL increase
+        if dl_increase > 0:
+            self.game.detection_level = min(self.game.detection_level + dl_increase, 5)
+            self.add_event(f"Detection Level +{dl_increase} (now {self.game.detection_level})")
+        
+        # Summary
+        self.add_event(f"=== TORPEDO ATTACK COMPLETE: {hits}/{torpedo_count} hits ===")
+        
+        # Clear resolution state
+        self.torpedo_resolution_state = None
+        self.torpedo_roll_button_rect = None
+        
+        # Execute remaining non-torpedo actions
+        non_torpedo_actions = [a for a in self.game.action_queue.actions if not isinstance(a, FireTorpedoAction)]
+        if non_torpedo_actions:
+            for action in non_torpedo_actions:
+                result = action.execute(self.game)
+                if result.success:
+                    action_name = result.state_changes.get('action_name', type(action).__name__.replace('Action', ''))
+                    self.add_event(f"✓ {action_name}")
+                    self.game.u_boat.action_points -= result.ap_spent
+            
+            # Remove from queue
+            self.game.action_queue.actions = [a for a in self.game.action_queue.actions if isinstance(a, FireTorpedoAction)]
+        
+        # Check if more torpedoes in queue
+        next_torpedo = next((a for a in self.game.action_queue.actions if isinstance(a, FireTorpedoAction)), None)
+        if next_torpedo:
+            # Execute next torpedo action
+            next_idx = self.game.action_queue.actions.index(next_torpedo)
+            result = next_torpedo.execute(self.game)
+            self.game.u_boat.action_points -= result.ap_spent
+            
+            if result.state_changes.get('needs_interactive_resolution'):
+                # Setup next torpedo resolution
+                self.torpedo_resolution_state = {
+                    'action': next_torpedo,
+                    'action_index': next_idx,
+                    'torpedo_count': result.state_changes['torpedo_count'],
+                    'targets': result.state_changes['targets'],
+                    'current_target_idx': 0,
+                    'current_torpedo_idx': 0,
+                    'torpedoes_available': result.state_changes['torpedo_count'],
+                    'waiting_for': 'hit',
+                    'last_hit_roll': None,
+                    'last_damage_roll': None,
+                    'results': []
+                }
+                self.add_event(f"=== FIRING {self.torpedo_resolution_state['torpedo_count']} TORPEDO(ES) ===")
+            else:
+                self.add_event(result.message)
+            
+            # Remove from queue
+            self.game.action_queue.actions.pop(next_idx)
+        else:
+            # All torpedoes resolved - clear queue
+            self.game.action_queue.clear()
+    
+    def _handle_load_torpedo_clicks(self, mouse_pos: Tuple[int, int]) -> None:
+        """Handle clicks on torpedo loading UI elements."""
+        state = self.load_torpedo_selection_state
+        if not state:
+            return
+        
+        # Check tube checkbox clicks
+        for tube_num, rect in self.tube_checkbox_rects.items():
+            if rect.collidepoint(mouse_pos):
+                # Toggle tube selection
+                if tube_num in state['selected_tubes']:
+                    state['selected_tubes'].remove(tube_num)
+                    self.add_event(f"Deselected Tube {tube_num}")
+                else:
+                    # Check if we can add more
+                    if len(state['selected_tubes']) < state['max_tubes']:
+                        # Check if tube is available (not already loaded)
+                        u_boat = state['u_boat']
+                        if not u_boat.torpedo_tubes[tube_num - 1]:  # Convert to 0-based
+                            state['selected_tubes'].append(tube_num)
+                            self.add_event(f"Selected Tube {tube_num}")
+                        else:
+                            self.add_event(f"Tube {tube_num} is already loaded")
+                    else:
+                        max_tubes = state['max_tubes']
+                        self.add_event(f"Can only load {max_tubes} tube(s) per action")
+                return
+        
+        # Check Confirm button click
+        if self.confirm_load_button_rect and self.confirm_load_button_rect.collidepoint(mouse_pos):
+            if len(state['selected_tubes']) > 0:
+                # Queue the load action
+                from ..torpedo_validator import TorpedoValidator
+                tube_indices = state['selected_tubes']
+                cost_lookup = state['cost_lookup']
+                
+                action = LoadTorpedoAction(
+                    tube_indices=tube_indices,
+                    cost_lookup=cost_lookup,
+                    validator=TorpedoValidator()
+                )
+                
+                success, message = self.game.action_queue.add_action(action, self.game)
+                if success:
+                    self.add_event(f"Queued: Load Tubes {', '.join(str(t) for t in tube_indices)}")
+                else:
+                    self.add_event(f"✗ Failed: {message}")
+                
+                # Close selection UI
+                self.load_torpedo_selection_state = None
+            else:
+                self.add_event("Select at least one tube to load")
+            return
+        
+        # Check Cancel button click
+        if self.cancel_load_button_rect and self.cancel_load_button_rect.collidepoint(mouse_pos):
+            self.load_torpedo_selection_state = None
+            self.add_event("Cancelled torpedo loading")
+            return
+    
     def _queue_action(self, action_id: str) -> None:
         """Queue an action based on action ID."""
         from ..models import GamePhase
@@ -2903,36 +3572,37 @@ class UnifiedGameScreen(BaseScreen):
                 action._interactive_targets = valid_targets  # type: ignore[attr-defined]
                 
             elif action_id == "load_torp":
-                # LoadTorpedoAction needs tube_indices and validator, skip for now
-                pass  # action = LoadTorpedoAction(cost_lookup=cost_lookup)
+                # Open interactive tube selection UI
+                max_tubes = 2 if u_boat.weapons_officer_alive else 1
+                self.load_torpedo_selection_state = {
+                    'selected_tubes': [],
+                    'max_tubes': max_tubes,
+                    'u_boat': u_boat,
+                    'cost_lookup': cost_lookup
+                }
+                self.add_event(f"Select up to {max_tubes} tube(s) to load")
+                return  # Don't queue yet - wait for user to select tubes
                 
-            elif action_id == "fire_torp":
-                # Torpedoes fire in facing direction (forward torps) or reverse (rear torp)
-                # No target selection needed - they travel until hitting a ship or map edge
+            elif action_id.startswith("fire_torp_"):
+                # Fire individual torpedo tube
+                tube_num = int(action_id.split("_")[-1])  # Extract tube number (1-5)
+                
                 from ..torpedo_validator import TorpedoValidator
                 from ..los import LOSCalculator
                 from ..combat_resolver import CombatResolver
                 
-                # Determine which tubes to fire (front vs rear based on loaded tubes)
-                front_tubes = [i for i in range(4) if u_boat.torpedo_tubes[i]]  # Tubes 0-3 (front)
-                rear_tube = 4 if u_boat.torpedo_tubes[4] else None  # Tube 4 (rear)
-                
-                # Prefer front tubes, up to 3
-                if front_tubes:
-                    tubes_to_fire = front_tubes[:min(3, len(front_tubes))]
-                    fire_direction = u_boat.facing  # Forward
-                elif rear_tube is not None:
-                    tubes_to_fire = [rear_tube]
-                    # Rear fires backward
-                    fire_direction = Facing((u_boat.facing.value + 3) % 6)  # Opposite direction
+                # Determine fire direction based on tube
+                if tube_num <= 4:
+                    # Front tubes fire forward
+                    fire_direction = u_boat.facing
                 else:
-                    self.add_event("No loaded torpedo tubes")
-                    return
+                    # Rear tube fires backward
+                    fire_direction = Facing((u_boat.facing.value + 3) % 6)
                 
                 los_calc = LOSCalculator(self.game.land_hexes)
                 
                 action = FireTorpedoAction(
-                    tube_indices=tubes_to_fire,
+                    tube_indices=[tube_num],  # Fire single tube (1-based)
                     fire_direction=fire_direction,
                     cost_lookup=cost_lookup,
                     validator=TorpedoValidator(),

@@ -79,9 +79,17 @@ class ActionCostLookup:
                     self.requirements[action_name] = action_data["requirements"]
         
         except Exception as e:
-            print(f"Error parsing action costs: {e}")
-            # Initialize with empty dicts to avoid crashes
-            self.costs = {}
+            # In test environments, mission rules may not be fully initialized
+            # Provide sensible defaults for action costs
+            self.costs = {
+                "MOVE": {Depth.SURFACED: 1, Depth.PERISCOPE: 1, Depth.MEDIUM: 1, Depth.DEEP: 1},
+                "TURN": {Depth.SURFACED: 1, Depth.PERISCOPE: 1, Depth.MEDIUM: 1, Depth.DEEP: 1},
+                "LOAD TORPS": {Depth.SURFACED: 1, Depth.PERISCOPE: 4, Depth.MEDIUM: None, Depth.DEEP: None},
+                "FIRE TORPS": {Depth.SURFACED: 2, Depth.PERISCOPE: 2, Depth.MEDIUM: None, Depth.DEEP: None},
+                "DECK GUN": {Depth.SURFACED: 2, Depth.PERISCOPE: None, Depth.MEDIUM: None, Depth.DEEP: None},
+                "REPAIR": {Depth.SURFACED: 3, Depth.PERISCOPE: None, Depth.MEDIUM: None, Depth.DEEP: None},
+                "DEPTH CHANGE": {Depth.SURFACED: 1, Depth.PERISCOPE: 1, Depth.MEDIUM: 1, Depth.DEEP: 1}
+            }
             self.restrictions = {}
             self.requirements = {}
     

@@ -84,101 +84,177 @@ class FireTorpedoAction(Action):
         
         return can_fire, reason
     
-    def execute(self, game_state: Any) -> ActionResult:
-        """Execute the torpedo attack."""
-        u_boat = game_state.u_boat
+    def trace_torpedo_path(
+        self,
+        u_boat: UBoat,
+        ships: List[Ship],
+        mission_hexes: set[HexCoord],
+        land_hexes: set[HexCoord]
+    ) -> List[Tuple[Ship, int, str]]:
+        """
+        Trace torpedo path and find all ships in line.
         
-        # Trace path in fire_direction until hitting a ship or leaving map
+        Torpedoes stop when they hit land.
+        
+        Args:
+            u_boat: The firing u-boat
+            ships: List of all ships in game
+            mission_hexes: Set of valid mission hexes
+            land_hexes: Set of land hexes (torpedo stops)
+            
+        Returns:
+            List of (ship, distance, aspect) tuples, ordered by distance
+            aspect is 'side' or 'front_rear'
+        """
+        targets: List[Tuple[Ship, int, str]] = []
         current_hex = u_boat.position
-        target_ship = None
-        travel_distance = 0
         
-        # Travel up to reasonable range (e.g., 20 hexes)
-        for i in range(1, 21):
+        # Travel up to max torpedo range (9 hexes per rules)
+        for distance in range(1, 10):
             next_hex = self.fire_direction.forward(current_hex)
-            travel_distance = i
             
             # Check if hex is in mission area
-            if next_hex not in game_state.mission_hexes:
+            if next_hex not in mission_hexes:
                 break  # Torpedo left map
             
-            # Check if any ship is at this hex
-            for ship in game_state.ships:
-                if ship.position == next_hex:
-                    target_ship = ship
-                    break
+            # Check if torpedo hit land
+            if next_hex in land_hexes:
+                break  # Torpedo stops at land
             
-            if target_ship:
-                break  # Hit a ship
+            # Check if any ship is at this hex
+            for ship in ships:
+                if ship.position == next_hex:
+                    # Calculate aspect
+                    aspect = self._calculate_aspect(ship, self.fire_direction)
+                    targets.append((ship, distance, aspect))
+                    # Don't break - continue to find all ships in line
             
             current_hex = next_hex
         
-        # If no target found, all torpedoes miss
-        if not target_ship:
-            # Unload fired tubes
-            for tube_idx in self.tube_indices:
-                u_boat.torpedo_tubes[tube_idx] = False
-            
-            ap_cost = self.get_cost(u_boat)
-            
-            return ActionResult(
-                success=True,
-                message=f"Fired {len(self.tube_indices)} torpedo(es) - No targets hit (travelled {travel_distance} hexes)",
-                ap_spent=ap_cost,
-                state_changes={
-                    "tubes_fired": self.tube_indices,
-                    "hits": 0,
-                    "action_name": "Fire Torpedo"
-                }
-            )
+        # Ships are already ordered by distance (we traced in order)
+        return targets
+    
+    def _calculate_aspect(self, ship: Ship, torpedo_direction: Facing) -> str:
+        """
+        Calculate aspect of torpedo approach.
         
-        # Calculate aspect (simplified - always use side aspect for now)
-        # TODO: Calculate actual aspect based on ship and u-boat facing
-        aspect = "side"
+        Side aspect: Torpedo approaches broadside (perpendicular to ship)
+        Front/Rear aspect: Torpedo approaches bow or stern (parallel to ship)
         
-        # Resolve attack
-        result = self.combat_resolver.resolve_torpedo_attack(
-            travel_distance,
-            aspect,
-            len(self.tube_indices)
+        Args:
+            ship: The target ship
+            torpedo_direction: Direction torpedo is traveling
+            
+        Returns:
+            'side' or 'front_rear'
+        """
+        # Calculate angle difference between torpedo direction and ship facing
+        # Ship facing 0 (North) and torpedo from East (1) = side hit
+        # Ship facing 0 (North) and torpedo from South (3) = front/rear hit
+        
+        angle_diff = abs((torpedo_direction.value - ship.facing.value) % 6)
+        
+        # Side aspect if torpedo approaches from ±60° or ±120° (perpendicular)
+        # Hex directions: 0=N, 1=NE, 2=SE, 3=S, 4=SW, 5=NW
+        # Perpendicular would be 1, 2, 4, 5 (60°, 120°, 240°, 300°)
+        if angle_diff in [1, 2, 4, 5]:
+            return 'side'
+        else:
+            # Front or rear (0° or 180°)
+            return 'front_rear'
+    
+    def get_torpedo_hit_target(self, distance: int, aspect: str) -> int:
+        """
+        Get the target number needed on 1d6 to hit.
+        
+        Torpedo To-Hit Table:
+        Range | Side Aspect | Front/Rear Aspect
+        1-2   | 5+          | 6+
+        3-4   | 6+          | 7+ (impossible)
+        5-6   | 7+ (imp.)   | 8+ (impossible)
+        7-8   | 8+ (imp.)   | 9+ (impossible)
+        9     | 9+ (imp.)   | 10+ (impossible)
+        
+        Args:
+            distance: Range to target in hexes (1-9)
+            aspect: 'side' or 'front_rear'
+            
+        Returns:
+            Target number (5-10)
+        """
+        if aspect == 'side':
+            if distance <= 2:
+                return 5
+            elif distance <= 4:
+                return 6
+            elif distance <= 6:
+                return 7
+            elif distance <= 8:
+                return 8
+            else:  # distance == 9
+                return 9
+        else:  # front_rear
+            if distance <= 2:
+                return 6
+            elif distance <= 4:
+                return 7
+            elif distance <= 6:
+                return 8
+            elif distance <= 8:
+                return 9
+            else:  # distance == 9
+                return 10
+    
+    def execute(self, game_state: Any) -> ActionResult:
+        """
+        Execute the torpedo attack.
+        
+        NOTE: This method only prepares the torpedo state.
+        Actual resolution happens interactively in the UI.
+        """
+        u_boat = game_state.u_boat
+        
+        # Trace path and find all ships in line
+        targets = self.trace_torpedo_path(
+            u_boat, 
+            game_state.ships, 
+            game_state.mission_hexes,
+            game_state.land_hexes
         )
         
-        # Unload fired tubes
-        for tube_idx in self.tube_indices:
-            u_boat.torpedo_tubes[tube_idx] = False
-        
-        # Calculate DL increase
-        dl_increase = 0
-        if len(self.tube_indices) == 3:
-            dl_increase += 1  # Noise from firing 3 torpedoes
-        
-        hits = result.get("hits", 0)
-        if hits > 0:
-            dl_increase += min(hits, 2)  # +1 DL per hit (max +2)
-        
-        # Build message
-        if hits > 0:
-            message = f"Fired {len(self.tube_indices)} torpedo(es) at {target_ship.ship_type} (range {travel_distance}): {hits} HIT(s)!"
-            if dl_increase > 0:
-                message += f" (DL +{dl_increase})"
-            # TODO: Apply damage to ship
-        else:
-            message = f"Fired {len(self.tube_indices)} torpedo(es) at {target_ship.ship_type} (range {travel_distance}): MISS"
-            if dl_increase > 0:
-                message += f" (DL +{dl_increase})"
+        # Unload fired tubes immediately (convert 1-based to 0-based)
+        for tube_num in self.tube_indices:
+            u_boat.torpedo_tubes[tube_num - 1] = False
         
         ap_cost = self.get_cost(u_boat)
         
+        # If no targets found, return immediately
+        if not targets:
+            return ActionResult(
+                success=True,
+                message=f"Fired {len(self.tube_indices)} torpedo(es) - No targets in path",
+                ap_spent=ap_cost,
+                state_changes={
+                    "tubes_fired": self.tube_indices,
+                    "torpedo_count": len(self.tube_indices),
+                    "targets": [],
+                    "action_name": "Fire Torpedo",
+                    "needs_interactive_resolution": False
+                }
+            )
+        
+        # Return state for interactive resolution
+        # UI will handle rolling for each torpedo against each ship
         return ActionResult(
             success=True,
-            message=message,
+            message=f"Firing {len(self.tube_indices)} torpedo(es)...",
             ap_spent=ap_cost,
             state_changes={
                 "tubes_fired": self.tube_indices,
-                "target": target_ship,
-                "hits": hits,
-                "dl_increase": dl_increase,
-                "action_name": "Fire Torpedo"
+                "torpedo_count": len(self.tube_indices),
+                "targets": targets,  # List of (ship, distance, aspect)
+                "action_name": "Fire Torpedo",
+                "needs_interactive_resolution": True
             }
         )
     

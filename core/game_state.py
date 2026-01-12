@@ -140,7 +140,7 @@ class Game:
         self.show_grid = False  # Game defaults to grid off
         self.show_map = True
         self.show_terrain = False  # Terrain off during normal gameplay
-        self.show_status_boxes = True  # Status boxes and torpedoes visible by default
+        self.show_status_boxes = False  # Status boxes only in F2 edit mode
         self.detection_level = 0
         
         # Status box markers
