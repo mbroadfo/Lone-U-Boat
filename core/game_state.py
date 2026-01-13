@@ -21,6 +21,7 @@ from .merchant_ai import MerchantAI
 from .detection_ai import DetectionAI
 from .escort_ai import EscortAI
 from .b24_ai import B24AI
+from .event_system import EventSystem
 from missions.mission_rules_loader import MissionRules, load_mission_rules
 
 
@@ -82,6 +83,13 @@ class Game:
         self.b24_ai = B24AI(
             dice_roller=self.turn_manager.dice,
             hex_grid=None  # Will be set after hex_grid initialization
+        )
+        
+        # Initialize Event System
+        self.event_system = EventSystem(
+            mission_rules=self.mission_rules,
+            dice_roller=self.turn_manager.dice,
+            game_state=self  # Pass self for condition checking
         )
         
         # Next screen for transitions (back to menu, etc.)
@@ -332,6 +340,8 @@ class Game:
             self._execute_escort_phase()
         elif current_phase == GamePhase.B24_PHASE:
             self._execute_b24_phase()
+        elif current_phase == GamePhase.END_TURN_EVENTS:
+            self._execute_end_turn_events()
         elif current_phase == GamePhase.END_TURN_PHASE:
             self._execute_end_turn_phase()
         
@@ -455,6 +465,62 @@ class Game:
             self.detection_level = new_dl
             self.turn_manager.add_phase_log("B24 Phase", 
                 f"Detection Level increased to {new_dl}")
+    
+    def _execute_end_turn_events(self):
+        """Execute end-of-turn events (Phase 6)."""
+        result = self.event_system.execute_end_turn_events(
+            self.turn_manager.turn_number
+        )
+        
+        # Add spawned ships
+        for ship in result.spawned_ships:
+            self.ships.append(ship)
+        
+        # Add spawned aircraft
+        for aircraft in result.spawned_aircraft:
+            self.aircraft.append(aircraft)
+        
+        # Handle special effects
+        for effect in result.special_effects:
+            self._apply_special_effect(effect)
+        
+        # Log messages
+        if result.messages:
+            for msg in result.messages:
+                self.turn_manager.add_phase_log("End Turn Events", msg)
+        else:
+            self.turn_manager.add_phase_log("End Turn Events", "No events this turn")
+    
+    def _apply_special_effect(self, effect: str):
+        """Apply special event effects to game state.
+        
+        Args:
+            effect: Effect identifier string
+        """
+        if effect == "rerun_detection_phase":
+            # Re-run detection phase
+            self.turn_manager.add_phase_log("End Turn Events", "  Re-running Detection Phase...")
+            self._execute_detection_phase()
+        
+        elif effect == "set_detection_level_1":
+            # Set DL to 1
+            if self.detection_level == 0:
+                self.detection_level = 1
+                self.turn_manager.add_phase_log("End Turn Events", "  Detection Level set to 1")
+        
+        elif effect == "hull_damage_1_force_medium":
+            # Add 1 hull damage and force to medium depth
+            self.u_boat.damage.hull_damage += 1
+            self.turn_manager.add_phase_log("End Turn Events", f"  +1 Hull Damage (now {self.u_boat.damage.hull_damage})")
+            if self.u_boat.depth == Depth.DEEP:
+                self.u_boat.depth = Depth.MEDIUM
+                self.turn_manager.add_phase_log("End Turn Events", "  U-Boat forced to Medium depth")
+        
+        elif effect == "reduce_detection_level_1":
+            # Reduce DL by 1
+            if self.detection_level > 0:
+                self.detection_level -= 1
+                self.turn_manager.add_phase_log("End Turn Events", f"  Detection Level reduced to {self.detection_level}")
     
     def _execute_end_turn_phase(self):
         """Clean up turn and prepare for next."""

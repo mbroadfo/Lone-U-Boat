@@ -57,8 +57,110 @@
       "phase": 6,
       "type": "event_table",
       "label": "End-of-Turn Events",
-      "enabled": false,
-      "note": "Mission 1 has no end-of-turn event table"
+      "enabled": true,
+      "events": {
+        "2": {
+          "type": "aircraft_spawn",
+          "name": "B24 Arrives",
+          "description": "If DL = 2-3: place B24 facing U-Boat, on edge hex of map which is furthest from and on same hex-line as U-Boat",
+          "condition": "detection_level >= 2",
+          "aircraft": [
+            {
+              "type": "B24",
+              "position": "edge_furthest_from_uboat",
+              "facing": "towards_uboat"
+            }
+          ]
+        },
+        "3": {
+          "type": "aircraft_spawn",
+          "name": "B24 Arrives",
+          "description": "If DL = 2-3: place B24 facing U-Boat, on edge hex of map which is furthest from and on same hex-line as U-Boat",
+          "condition": "detection_level >= 2",
+          "aircraft": [
+            {
+              "type": "B24",
+              "position": "edge_furthest_from_uboat",
+              "facing": "towards_uboat"
+            }
+          ]
+        },
+        "4": {
+          "type": "aircraft_spawn",
+          "name": "B24 Arrives",
+          "description": "If DL = 2-3: place B24 facing U-Boat, on edge hex of map which is furthest from and on same hex-line as U-Boat",
+          "condition": "detection_level >= 2",
+          "aircraft": [
+            {
+              "type": "B24",
+              "position": "edge_furthest_from_uboat",
+              "facing": "towards_uboat"
+            }
+          ]
+        },
+        "5": {
+          "type": "aircraft_spawn",
+          "name": "B24 Arrives",
+          "description": "If DL = 2-3: place B24 facing U-Boat, on edge hex of map which is furthest from and on same hex-line as U-Boat",
+          "condition": "detection_level >= 2",
+          "aircraft": [
+            {
+              "type": "B24",
+              "position": "edge_furthest_from_uboat",
+              "facing": "towards_uboat"
+            }
+          ]
+        },
+        "6": {
+          "type": "special",
+          "name": "Escort Detection",
+          "description": "If DL is not already at 3, perform Phase 3 (Detection Phase) again now",
+          "condition": "detection_level < 3",
+          "effect": "rerun_detection_phase"
+        },
+        "7": {
+          "type": "special",
+          "name": "Radio Intercepted",
+          "description": "If U-Boat is Surfaced or at Periscope depth, radio intercepted by Allies: If DL = 0 then set DL to 1",
+          "condition": "depth <= 1 and detection_level == 0",
+          "effect": "set_detection_level_1"
+        },
+        "8": {
+          "type": "special",
+          "name": "Hull Pressure",
+          "description": "If Deep, Hull groans under the pressure: +1 Hull Damage (U-Boat must ascend to Medium depth)",
+          "condition": "depth == 3",
+          "effect": "hull_damage_1_force_medium"
+        },
+        "9": {
+          "type": "special",
+          "name": "Silent Running",
+          "description": "If U-Boat not Surfaced and Engine is not damaged, U-Boat runs silently for a while: -1 DL",
+          "condition": "depth > 0 and engine_not_damaged",
+          "effect": "reduce_detection_level_1"
+        },
+        "10": {
+          "type": "special",
+          "name": "Silent Running",
+          "description": "If U-Boat not Surfaced and Engine is not damaged, U-Boat runs silently for a while: -1 DL",
+          "condition": "depth > 0 and engine_not_damaged",
+          "effect": "reduce_detection_level_1"
+        },
+        "11": {
+          "type": "special",
+          "name": "Silent Running",
+          "description": "If U-Boat not Surfaced and Engine is not damaged, U-Boat runs silently for a while: -1 DL",
+          "condition": "depth > 0 and engine_not_damaged",
+          "effect": "reduce_detection_level_1"
+        },
+        "12": {
+          "type": "special",
+          "name": "Silent Running",
+          "description": "If U-Boat not Surfaced and Engine is not damaged, U-Boat runs silently for a while: -1 DL",
+          "condition": "depth > 0 and engine_not_damaged",
+          "effect": "reduce_detection_level_1"
+        }
+      }
     },
     {
       "id": "victory_conditions",

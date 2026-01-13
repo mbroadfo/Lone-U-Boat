@@ -2907,9 +2907,13 @@ class UnifiedGameScreen(BaseScreen):
             
             # Build message from results and apply damage
             result_msgs: list[str] = []
-            ships_to_remove: list[Ship] = []
             
+            # Process each target sequentially, removing sunk ships immediately
             for ship, distance, hit, _ in results:
+                # Skip if ship was already sunk by a previous attack in this volley
+                if ship not in self.game.ships:
+                    continue
+                
                 if hit:
                     # Apply proper damage using ShipDamageResolver
                     damage_result = damage_resolver.apply_damage(ship, "deck_gun")
@@ -2919,7 +2923,10 @@ class UnifiedGameScreen(BaseScreen):
                         result_msgs.append(
                             f"HIT {ship.ship_type} at range {distance} - {damage_result.description} - SUNK!"
                         )
-                        ships_to_remove.append(ship)
+                        # Remove ship immediately
+                        if ship in self.game.ships:
+                            self.game.ships.remove(ship)
+                            self.add_event(f"💀 {ship.ship_type.title()} SUNK and removed from map")
                     elif damage_result.effect == "damaged":
                         result_msgs.append(
                             f"HIT {ship.ship_type} at range {distance} - DAMAGED (roll: {damage_result.roll})"
@@ -2930,12 +2937,6 @@ class UnifiedGameScreen(BaseScreen):
                         )
                 else:
                     result_msgs.append(f"MISS {ship.ship_type} at range {distance}")
-            
-            # Remove sunk ships from game
-            for ship in ships_to_remove:
-                if ship in self.game.ships:
-                    self.game.ships.remove(ship)
-                    self.add_event(f"💀 {ship.ship_type.title()} SUNK and removed from map")
             
             message = f"Deck gun fired at {len(results)} ship(s): {hits} hit(s). " + "; ".join(result_msgs)
             

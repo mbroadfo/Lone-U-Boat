@@ -104,6 +104,7 @@ class TurnManager:
         GamePhase.DETECTION_PHASE,
         GamePhase.ESCORT_PHASE,
         GamePhase.B24_PHASE,
+        GamePhase.END_TURN_EVENTS,
         GamePhase.END_TURN_PHASE,
     ]
     

@@ -18,8 +18,9 @@ class GamePhase(Enum):
     DETECTION_PHASE = 5
     ESCORT_PHASE = 6
     B24_PHASE = 7
-    END_TURN_PHASE = 8
-    GAME_OVER = 9
+    END_TURN_EVENTS = 8  # Phase 6 in rules: End-of-Turn Events
+    END_TURN_PHASE = 9   # Final cleanup
+    GAME_OVER = 10
 
 
 class Terrain(Enum):
