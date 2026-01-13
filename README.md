@@ -1,20 +1,31 @@
 # Lone U-Boat
 
-A digital implementation of the solitaire board game "Lone U-Boat" where you
-command a German submarine during World War II, navigating through dangerous
-waters while evading enemy ships and completing mission objectives.
+A digital implementation of the solitaire board game "Lone U-Boat" where you command a German submarine during World War II, navigating through dangerous waters while evading enemy ships and completing mission objectives.
 
 ## Overview
 
-Lone U-Boat is a hex-based tactical game where you control a U-boat navigating
-through mission-specific maps. The game features:
+Lone U-Boat is a hex-based tactical game where you control a U-boat navigating through mission-specific maps. The game features:
 
 - **Hex-based movement system** with axial coordinates
-- **Depth management** (Surfaced, Periscope, Medium, Deep)
+- **Depth management** (Surfaced, Periscope, Medium, Deep)  
 - **Facing and direction** tracking for realistic submarine navigation
 - **Detection mechanics** based on depth and enemy proximity
 - **Mission-based gameplay** with unique objectives and map layouts
-- **Status tracking** for torpedoes, hull damage, crew, and detection
+- **JSON-driven rules engine** with zero hardcoded game rules
+- **Action queue system** for planning and executing turns
+- **Comprehensive damage system** for ships and U-boats
+
+## Quick Start
+
+```powershell
+# Clone and setup
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install pygame
+
+# Play the game
+python main.py
+```
 
 ## Development Status
 
@@ -24,13 +35,15 @@ through mission-specific maps. The game features:
 ### Completed Phases
 
 - ✅ **Phase 1**: Turn system with 6-phase cycle and AP rolling
-- ✅ **Phase 2**: Validators (LOS, range, movement, torpedoes, repairs, combat, depth)
+- ✅ **Phase 2**: Validators (LOS, range, movement, torpedoes, repairs, combat, depth)  
 - ✅ **Phase 3**: All 7 U-boat actions (Move, Rotate, DepthChange, Repair, DeckGun, LoadTorpedo, FireTorpedo)
-- ⚙️ **Phase 4**: Merchant AI (complete), Detection Phase automation (complete), Escort AI (pending)
+- ✅ **Phase 3.6**: Complete damage resolution system
+- ✅ **Refactoring**: All game rules moved to JSON (zero redundancy)
+- ⚙️ **Phase 4**: Merchant AI (complete), Detection AI (complete), Escort AI (in progress)
 
-**Test Coverage**: 183+ tests across 16 test files, all passing
+**Test Coverage**: 225+ tests across 17 test files, all passing
 
-See [PHASE_1_AUDIT.md](PHASE_1_AUDIT.md) for comprehensive Phase 3 completion audit.
+See [docs/PHASE_1_AUDIT.md](docs/PHASE_1_AUDIT.md) for comprehensive Phase 3 completion audit.
 
 ## Installation
 
@@ -97,15 +110,6 @@ python main.py --mission 1
 
 Press **F2** during gameplay to enter Alignment Mode for calibrating the hex grid and status box positions. This is useful if elements appear misaligned or when setting up new missions.
 
-**Alignment Controls:**
-- **F2**: Toggle alignment mode on/off
-- **Tab**: Switch between hex grid and status box adjustment
-- **Arrow Keys**: Adjust position (1 map pixel, 10 with Shift)
-- **+/-**: Scale hex grid or status boxes (1% normal, 5% with Shift)
-- **Click**: Select status box (when in status box mode)
-- **P**: Print current calibration to console
-- **L**: Save calibration to `missions/mission_N_layout.json`
-
 **Quick Calibration Workflow:**
 1. Press **F2** to enter alignment mode
 2. Use **Arrow Keys** to adjust hex grid until it aligns with the map
@@ -117,7 +121,7 @@ Press **F2** during gameplay to enter Alignment Mode for calibrating the hex gri
 
 All status boxes move and scale together as a group, maintaining their relative positions. Calibrations are stored in `missions/mission_N_layout.json` and work at any screen resolution.
 
-For detailed documentation, see [ARCHITECTURE_BOARD_LAYOUT.md](ARCHITECTURE_BOARD_LAYOUT.md).
+For detailed controls, see [docs/ALIGNMENT_MODE_CONTROLS.md](docs/ALIGNMENT_MODE_CONTROLS.md).
 
 ## Project Structure
 
@@ -128,216 +132,199 @@ LoneUBoat/
 ├── extract_maps.py        # Utility to extract map images from PDFs
 ├── README.md             # This file
 ├── RULES.md              # Game rules documentation
-├── DEVELOPMENT_PLAN.md   # Overall development plan
-├── PHASE_2_REFINED.md    # Phase 2 subsystems (COMPLETE)
+├──Architecture Overview
+
+The codebase follows a clean, modular architecture with a **complete separation between code and configuration**. All game rules live in JSON files, with Python code acting as a generic rules engine.
+
+### Code Structure
+
+```text
+LoneUBoat/
+├── main.py                    # Game entry point
+├── README.md                  # This file
+├── RULES.md                   # Player-facing game rules reference
 │
-├── tests/                # Test suite (Phases 2-3: 100% complete)
-│   ├── README.md         # Test documentation
-│   ├── test_action_system.py       # Action queue & base classes
-│   ├── test_movement_actions.py    # Move, rotate, depth actions
-│   ├── test_combat_actions.py      # Repair, deck gun, torpedoes
-│   ├── test_damage_resolution.py   # Ship & U-boat damage
-│   ├── test_combat_resolver.py     # Combat resolution
-│   ├── test_torpedo_validator.py   # Torpedo validation
-│   ├── test_repair_validator.py    # Repair validation
-│   ├── test_depth_validator.py     # Depth validation
-│   ├── test_movement_validator.py  # Movement validation
-│   ├── test_range_los.py           # Range & LOS
-│   └── test_phase2_subsystems.py   # Phase 2 integration
-│
-├── config/
-│   ├── __init__.py
-│   ├── board_config.py      # Board dimensions, hex layout
-│   └── board_layout_config.py  # Status box configurations
-│
-├── core/                 # Core game engine modules
-│   ├── models.py         # Data classes (HexCoord, UBoat, Ship, etc.)
-│   ├── hex_grid.py       # Hex geometry and coordinate math
-│   ├── assets.py         # Asset loading (images, fonts)
-│   ├── conditions.py     # Status box condition factory
-│   ├── renderer.py       # All pygame rendering operations
-│   ├── game_state.py     # Game logic and state management
-│   ├── screen_manager.py # Screen transitions and state
+├── core/                      # Game engine (100% generic, no hardcoded rules)
+│   ├── models.py              # Data classes (UBoat, Ship, HexCoord, etc.)
+│   ├── hex_grid.py            # Hex geometry calculations
+│   ├── dice.py                # Dice roller with seeding
+│   ├── assets.py              # Image/font loading
+│   ├── renderer.py            # Pygame rendering
+│   ├── board_layout.py        # Resolution-independent positioning
+│   ├── turn_manager.py        # Phase cycle and AP rolling
 │   │
-│   ├── screens/          # Game screens
+│   ├── screens/               # UI screens
 │   │   ├── base_screen.py
 │   │   ├── main_menu.py
-│   │   └── unified_game.py
+│   │   └── unified_game.py    # Main gameplay screen
 │   │
-│   ├── # Phase 2 Subsystems (JSON-driven validators)
-│   │   ├── dice.py                 # DiceRoller with seeded random
-│   │   ├── action_cost_lookup.py  # AP costs from JSON
-│   │   ├── range_los.py           # Range calculation & LOS
-│   │   ├── movement_validator.py  # Movement validation
-│   │   ├── depth_validator.py     # Depth change validation
-│   │   ├── repair_validator.py    # Repair validation
-│   │   ├── combat_resolver.py     # Combat resolution
-│   │   └── torpedo_validator.py   # Torpedo loading/firing
+│   ├── actions/               # Player action system
+│   │   ├── base_action.py     # Action interface
+│   │   ├── action_queue.py    # Queue with AP tracking
+│   │   ├── move_action.py     # Movement
+│   │   ├── rotate_action.py   # Rotation
+│   │   ├── depth_change_action.py
+│   │   ├── repair_action.py
+│   │   ├── deck_gun_action.py
+│   │   ├── load_torpedo_action.py
+│   │   └── fire_torpedo_action.py
 │   │
-│   ├── actions/          # Phase 3 Action System
-│   │   ├── base_action.py         # Action base class & result
-│   │   ├── action_queue.py        # Action queue with AP tracking
-│   │   ├── move_action.py         # Movement to adjacent hex
-│   │   ├── rotate_action.py       # 60° rotation
-│   │   ├── depth_change_action.py # Depth changes
-│   │   ├── repair_action.py       # System repairs
-│   │   ├── deck_gun_action.py     # Surface combat
-│   │   ├── load_torpedo_action.py # Torpedo loading
-│   │   └── fire_torpedo_action.py # Torpedo firing
+│   ├── damage/                # Damage resolution
+│   │   ├── ship_damage.py     # Allied ship damage
+│   │   └── uboat_damage.py    # U-boat damage
 │   │
-│   └── damage/           # Phase 3.6 Damage Resolution
-│       ├── ship_damage.py         # Ship damage charts
-│       └── uboat_damage.py        # U-boat damage charts
+│   └── # AI Controllers (load rules from JSON)
+│       ├── merchant_ai.py     # Merchant movement
+│       ├── detection_ai.py    # Detection phase
+│       ├── escort_ai.py       # Escort actions
+│       ├── combat_resolver.py # Combat hit tables
+│       ├── movement_validator.py
+│       ├── depth_validator.py
+│       ├── repair_validator.py
+│       ├── torpedo_validator.py
+│       └── action_costs.py    # AP cost lookups
 │
-├── missions/
-│   ├── mission_1_config.py        # Mission 1 Python configuration
-│   ├── mission_1_layout.json      # Mission 1 hex grid calibration
-│   ├── mission_1_briefing.json    # Mission 1 briefing text
-│   ├── mission_1_rules.json       # Mission 1 specific rules
-│   ├── u_boat_ruleset_default.json  # Default U-boat action rules
-│   ├── core_system_rules.json     # Core game system rules
-│   └── ...                        # Additional missions
+├── config/                    # Board/UI configuration
+│   ├── board_config.py        # Screen dimensions, colors
+│   └── board_layout_config.py # Status box layouts
+│
+├── missions/                  # Mission data (JSON-driven)
+│   ├── mission_1_config.py    # Mission 1 setup
+│   ├── mission_1_layout.json  # Hex grid calibration
+│   ├── mission_1_briefing.json
+│   ├── mission_1_rules.json   # Mission-specific rules
+│   │
+│   ├── # Shared Rule Files (loaded by core systems)
+│   ├── u_boat_ruleset_default.json  # All U-boat actions & AP rules
+│   ├── escort_ai_baseline.json      # Escort behavior & detection
+│   ├── damage_tables.json           # All damage resolution tables
+│   ├── core_system_rules.json       # Victory conditions, etc.
+│   │
+│   ├── mission_rules_loader.py      # JSON parser
+│   ├── mission_schema.md            # JSON format documentation
+│   └── README_METADATA.md           # Mission system guide
 │
 ├── assets/
-│   ├── maps/             # Mission map images
-│   │   └── m1.png
-│   └── manual/           # Game manual pages (if needed)
+│   ├── maps/                  # Mission map images
+│   └── manual/                # Game manual scans
 │
-└── references/           # Original game materials
-    └── RULES.txt         # Original rules reference
+├── tests/                     # Comprehensive test suite (225+ tests)
+│   ├── README.md
+│   ├── test_*.py              # Unit tests for all systems
+│   └── scenarios/             # Integration test scenarios
+│       ├── test_deck_gun_scenario.py
+│       └── test_torpedo_scenario.py
+│
+├── utils/                     # Development utilities
+│   ├── editor.py              # Legacy board editor (deprecated)
+│   └── extract_maps.py        # PDF map extraction
+│
+├── docs/                      # Development documentation
+│   ├── ALIGNMENT_MODE_CONTROLS.md
+│   ├── ARCHITECTURE_BOARD_LAYOUT.md
+│   ├── PHASE_1_AUDIT.md       # Phase 3 completion audit
+│   ├── PHASE_5_PLAN.md        # Future work planning
+│   └── REFACTOR_PLAN_RULES_REDUNDANCY.md
+│
+└── references/                # Original game materials
+    └── RULES.txt              # Original rules text
 ```
 
-## Development Status
+### Configuration Flow
 
-### ✅ Phase 1: Complete (Turn System)
+**JSON Rules → Python Engine → Gameplay**
 
-- Turn-based gameplay system
-- Action point management
-- Game loop and state transitions
+```text
+missions/u_boat_ruleset_default.json
+    ↓
+core/action_costs.py (loads AP costs)
+core/combat_resolver.py (loads hit tables)
+core/turn_manager.py (loads dice rules)
+    ↓
+core/actions/*.py (execute using loaded rules)
+    ↓
+Player sees results in game
+```
 
-### ✅ Phase 2: Complete (Validators - 23/23 hours)
-
-All subsystems implemented with comprehensive tests:
-- 2.1 DiceRoller (seeded random for testing)
-- 2.2 Range & Line-of-Sight calculation
-- 2.3 ActionCostLookup (JSON-driven AP costs)
-- 2.4 MovementValidator (hex grid navigation)
-- 2.5 DepthValidator (ballast tank damage rules)
-- 2.6 RepairValidator (crew status & critical damage)
-- 2.7 CombatResolver (deck gun & torpedoes)
-- 2.8 TorpedoValidator (loading & firing rules)
-
-### ✅ Phase 3: Complete (Action System - 35-40 hours)
-
-All action classes and damage resolution implemented:
-- 3.1 Action System Architecture (base classes, queue)
-- 3.2 Movement Actions (move, rotate, depth change)
-- 3.3 Repair Actions (system repairs)
-- 3.4 Deck Gun Combat (surface combat)
-- 3.5 Torpedo Combat (loading & firing)
-- 3.6 Damage Resolution (ship/U-boat damage, casualties)
-
-**Tests**: 38/38 passing (8 action system + 10 movement + 9 combat + 11 damage)
-
-### 🚧 Phase 4: Next - Enemy AI & Automation
-
-- Merchant ship movement AI
-- Escort ship combat AI
-- Patrol boat behavior
-- Event phase automation
-- Allied search mechanics
-
-### 🔮 Phase 5+: Future
-
-- UI integration (action selection, preview, queue display)
-- GameState implementation (replace Any type hints)
-- Save/load game state
-- Mission objectives and victory conditions
-- Sound effects and music
-
+**Key Design Principle:** Python code never contains hardcoded game rules. All rules, thresholds, modifiers, and tables exist in JSON files, making the engine generic and missions fully customizable.
 ## Testing
 
-All Phase 2 subsystems have comprehensive test coverage. Run tests from the project root:
+The project has comprehensive test coverage with 225+ tests across all systems.
+
+### Running Tests
 
 ```powershell
-# Run individual test files
-python tests/test_combat_resolver.py
-python tests/test_torpedo_validator.py
-# ... etc
+# Run all tests
+python -m pytest tests/ -v
 
-# Or run all tests
-python -m pytest tests/
+# Run specific test file
+python tests/test_combat_resolver.py
+
+# Run with coverage report
+python -m pytest tests/ --cov=core --cov-report=html
 ```
+
+### Test Organization
+
+- **Unit Tests**: Test individual components in isolation
+  - `test_action_system.py` - Action queue and base classes
+  - `test_movement_actions.py` - Move, rotate, depth actions
+  - `test_combat_actions.py` - Combat and repair actions
+  - `test_damage_resolution.py` - Damage systems
+  - `test_*_validator.py` - All validation systems
+  - `test_combat_resolver.py` - Combat resolution
+  - `test_range_los.py` - Range and LOS calculations
+
+- **Integration Tests**: Test system interactions
+  - `test_phase2_subsystems.py` - Phase 2 validator integration
+  - `test_detection_integration.py` - Detection phase flow
+  - `test_merchant_integration.py` - Merchant AI integration
+
+- **AI Tests**: Test autonomous systems
+  - `test_merchant_ai.py` - Merchant ship movement
+  - `test_detection_ai.py` - Detection mechanics
+  - `test_escort_ai.py` - Escort ship behavior
+  - `test_b24_ai.py` - Aircraft mechanics
+
+- **Scenario Tests**: Full gameplay scenarios
+  - `tests/scenarios/test_deck_gun_scenario.py` - Deck gun combat flow
+  - `tests/scenarios/test_torpedo_scenario.py` - Torpedo attack flow
 
 See [tests/README.md](tests/README.md) for detailed test documentation.
 
-## Architecture
+## Development Utilities
 
-The codebase follows a clean modular architecture:
+### Map Extraction
 
-### Core Modules
+Extract mission maps from game PDF:
 
-- **`core/models.py`**: Pure data classes
-  - `HexCoord`: Axial coordinate system (q, r)
-  - `Facing`: Six directions (N, NE, SE, S, SW, NW)
-  - `Depth`: Four depth levels (Surfaced, Periscope, Medium, Deep)
-  - `UBoat`: Submarine state (position, facing, depth, crew, torpedoes)
-  - `Ship`: Enemy ship state (position, facing, type)
+```powershell
+python utils/extract_maps.py
+```
 
-- **`core/hex_grid.py`**: Hex geometry calculations
-  - Pixel-to-hex and hex-to-pixel conversions
-  - Hex corner calculations for rendering
-  - Validation and boundary checking
+This converts each page of the mission maps PDF to PNG format in `assets/maps/`.
 
-- **`core/assets.py`**: Asset management
-  - Loads and scales all images (U-boat, ships, markers)
-  - Manages fonts
-  - Handles missing asset gracefully
+### Legacy Editor (Deprecated)
 
-- **`core/conditions.py`**: Status box logic
-  - Factory pattern for creating condition checkers
-  - Lambda generation for dynamic status evaluation
+The standalone board editor (`utils/editor.py`) is deprecated in favor of the in-game alignment mode (F2). The editor is kept for reference but should not be used for new work.
 
-- **`core/renderer.py`**: All rendering operations
-  - Map and hex grid rendering
-  - U-boat and ship rendering
-  - Status box markers
-  - Text overlays and debug info
-
-- **`core/game_state.py`**: Game logic
-  - Event handling
-  - Update loop (ready for NPC AI)
-  - State management
-
-### Configuration
-
-- **`config/board_config.py`**: Shared board configuration
-  - Screen dimensions
-  - Hex size and spacing
-  - Status box positions and conditions
-  - Color definitions
-
-- **`missions/mission_X_config.py`**: Mission-specific data
-  - Valid hex coordinates
-  - Terrain (shallow water, land)
-  - Starting positions
-  - Mission objectives
-  - Enemy ships (position, type, behavior rules)
+**Use F2 alignment mode instead:**
+- Press F2 during gameplay to enter alignment mode
+- All calibration features available in-game
+- Live preview and instant feedback
+- Saves to the same JSON format
 
 ## Adding New Missions
 
 To create a new mission:
 
-1. **Extract the map image** from the game PDF:
-
+1. **Extract the map image:**
    ```powershell
-   python extract_maps.py
+   python utils/extract_maps.py
    ```
-
    Place the extracted image in `assets/maps/`
 
-2. **Create mission configuration** file:
-
+2. **Create mission configuration file:**
    ```python
    # missions/mission_2_config.py
    
@@ -348,19 +335,9 @@ To create a new mission:
        'description': 'Mission briefing...'
    }
    
-   # Define valid hexes (use editor to determine coordinates)
-   VALID_HEXES = [
-       (0, 0), (1, 0), (2, 0),  # Row 0
-       # ... more hexes
-   ]
-   
-   SHALLOW_HEXES = [
-       # Shallow water hexes
-   ]
-   
-   LAND_HEXES = [
-       # Land hexes (impassable)
-   ]
+   VALID_HEXES = [(0, 0), (1, 0), ...]  # Define valid hexes
+   SHALLOW_HEXES = [...]                 # Shallow water hexes
+   LAND_HEXES = [...]                    # Land hexes (impassable)
    
    U_BOAT_START = {
        'position': (5, 10),
@@ -368,134 +345,40 @@ To create a new mission:
        'depth': 'PERISCOPE'
    }
    
-   ENEMY_SHIPS = [
-       {
-           'type': 'DESTROYER',
-           'position': (10, 15),
-           'facing': 'S'
-       },
-       # ... more ships
-   ]
+   SHIPS_START = [...]                   # Enemy ships
    ```
 
-3. **Use the editor** to align the hex grid:
+3. **Align the hex grid:**
+   - Run `python main.py --mission 2`
+   - Press F2 to enter alignment mode
+   - Use arrow keys to align hex grid with map
+   - Press L to save calibration to `missions/mission_2_layout.json`
 
-   ```powershell
-   python editor.py --mission 2 --edit
-   ```
+4. **Create mission briefing and rules (optional):**
+   - `missions/mission_2_briefing.json` - Story and objectives
+   - `missions/mission_2_rules.json` - Mission-specific rule overrides
 
-   - Drag the grid to align with the map
-   - Use arrow keys for fine adjustment
-   - Press **O** to print the final offset values
-   - Update `board_config.py` with mission-specific offset if needed
-
-4. **Test in game mode**:
-
+5. **Test:**
    ```powershell
    python main.py --mission 2
    ```
 
-## Development Status
+## Documentation
 
-### Completed ✅
+- **User Documentation:**
+  - [README.md](README.md) - This file (getting started, architecture)
+  - [RULES.md](RULES.md) - Player-facing game rules
+  - [docs/ALIGNMENT_MODE_CONTROLS.md](docs/ALIGNMENT_MODE_CONTROLS.md) - Calibration controls
 
-- Hex grid rendering and coordinate system
-- Map image overlay and alignment
-- U-boat rendering with facing indicators
-- Depth tracking and visualization
-- Status box system with conditional markers
-- Mission configuration system
-- Board editor with alignment tools
-- Clean modular architecture
-- Type annotations throughout codebase
+- **Developer Documentation:**
+  - [tests/README.md](tests/README.md) - Test suite documentation
+  - [missions/mission_schema.md](missions/mission_schema.md) - JSON format reference
+  - [missions/README_METADATA.md](missions/README_METADATA.md) - Mission system guide
+  - [docs/ARCHITECTURE_BOARD_LAYOUT.md](docs/ARCHITECTURE_BOARD_LAYOUT.md) - Layout engine design
+  - [docs/PHASE_1_AUDIT.md](docs/PHASE_1_AUDIT.md) - Phase 3 completion audit
+  - [docs/REFACTOR_PLAN_RULES_REDUNDANCY.md](docs/REFACTOR_PLAN_RULES_REDUNDANCY.md) - JSON refactoring plan
 
-### In Progress 🚧
-
-- Game rules implementation
-- Player action validation
-- NPC ship AI and behavior
-- Detection system
-- Combat resolution
-
-### Planned 📋
-
-- Turn-based game loop
-- Mission objectives tracking
-- Win/loss conditions
-- Sound effects
-- Multiple mission support
-- Save/load game state
-
-## Game Mechanics
-
-### Hex Coordinate System
-
-The game uses **axial coordinates** for hex positioning:
-- **q**: Column (left/right)
-- **r**: Row (diagonal)
-
-Hex directions are flat-top oriented:
-- **N** (North): up
-- **NE** (Northeast): up-right
-- **SE** (Southeast): down-right
-- **S** (South): down
-- **SW** (Southwest): down-left
-- **NW** (Northwest): up-left
-
-### Depth Levels
-
-1. **Surfaced**: Maximum speed, highly visible, vulnerable
-2. **Periscope**: Balanced visibility and stealth
-3. **Medium**: Reduced visibility, slower
-4. **Deep**: Safest, slowest, limited operations
-
-### Status Tracking
-
-The game tracks multiple status indicators:
-- **Torpedo tubes**: 5 tubes (4 bow, 1 stern)
-- **Hull damage**: 3 hit points
-- **Detection level**: 0-3 (Silent, Aware, Traced, Locked)
-- **Crew status**: Captain, Engineer, Sonar Operator, Weapons Officer,
-  Lookout, Medic
-- **Action points**: Available actions per turn
-
-## Contributing
-
-This is a personal project implementing the Lone U-Boat board game.
-The game rules and original design belong to the original publisher.
-
-## Technical Notes
-
-### Type Hints
-
-The codebase uses Python type hints extensively:
-
-```python
-def hex_to_pixel(hex_coord: HexCoord) -> Tuple[float, float]:
-    """Convert hex coordinate to pixel position."""
-    ...
-```
-
-Type checking can be performed with:
-
-```powershell
-pip install mypy
-mypy .
-```
-
-### Performance
-
-- Rendering is capped at 60 FPS
-- Hex calculations are optimized for flat-top orientation
-- Assets are loaded once at startup
-
-### Debugging
-
-Enable debug mode in the editor to see:
-- Hex coordinates on hover
-- Grid alignment info
-- Status box positions
-- Collision boundaries
+## Technical Details
 
 ## Credits
 
@@ -513,3 +396,49 @@ All game rules and artwork belong to the original publisher.
 
 **Last Updated**: January 1, 2026  
 **Version**: 0.1.0 (Refactored Architecture)
+# Type Hints
+
+The codebase uses Python type hints extensively for better code quality and IDE support:
+
+```python
+def hex_to_pixel(hex_coord: HexCoord) -> Tuple[float, float]:
+    """Convert hex coordinate to pixel position."""
+    ...
+```
+
+Type checking:
+```powershell
+pip install mypy
+mypy core/
+```
+
+### Hex Coordinate System
+
+The game uses **axial coordinates** for hex positioning:
+- **q**: Column (left/right)
+- **r**: Row (diagonal)
+
+Hex directions are flat-top oriented (N/NE/SE/S/SW/NW).
+
+### Performance
+
+- Rendering capped at 60 FPS
+- Hex calculations optimized for flat-top orientation
+- Assets loaded once at startup
+- JSON rules parsed once per game initialization
+
+## Credits
+
+- **Original Game**: Lone U-Boat board game by Forsage Games
+- **Implementation**: Digital adaptation for personal/educational use
+- **Engine**: Pygame
+- **Language**: Python 3.11+
+
+## License
+
+This is a personal implementation of the board game for educational purposes. All game rules and artwork belong to the original publisher.
+
+---
+
+**Last Updated**: January 13, 2026  
+**Version**: 0.4.0 (JSON Rules Engine Complet
