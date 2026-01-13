@@ -4,7 +4,7 @@ U-Boat damage resolution - U-Boat Damage Chart.
 Handles damage to U-boat from depth charges, ramming, and other sources.
 """
 
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Any, Dict
 from dataclasses import dataclass
 from ..models import UBoat
 from ..dice import DiceRoller
@@ -32,7 +32,7 @@ class UBoatDamageResolver:
     """
     Resolve damage to U-boat using damage charts.
     
-    U-Boat Damage Chart (from rules):
+    U-Boat Damage Chart (from damage_tables.json):
     
     Critical Hit (roll 2d6):
       2-3: Hull Breach +2 (cannot repair)
@@ -53,14 +53,97 @@ class UBoatDamageResolver:
       Medic save: 5+ on 1d6 (if Medic alive)
     """
     
-    def __init__(self, dice: DiceRoller):
+    def __init__(self, dice: DiceRoller, mission_rules: Optional[Any] = None):
         """
         Initialize U-boat damage resolver.
         
         Args:
             dice: Dice roller for damage rolls
+            mission_rules: Optional mission rules for loading damage tables from JSON
         """
         self.dice = dice
+        self.mission_rules = mission_rules
+        
+        # Default damage tables (used if mission_rules not provided or parsing fails)
+        self.critical_damage_table: Dict[str, Dict[str, Any]] = {
+            "2-3": {"roll_range": [2, 3], "type": "hull_breach", "hull_damage": 2, "repairable": False},
+            "4-5": {"roll_range": [4, 5], "type": "hull_breach", "hull_damage": 1, "repairable": True},
+            "6-7": {"roll_range": [6, 7], "type": "system_damage", "effect": "random_system"},
+            "8-9": {"roll_range": [8, 9], "type": "crew_casualty", "effect": "random_crew"},
+            "10-12": {"roll_range": [10, 12], "type": "no_damage"}
+        }
+        
+        self.general_damage_table: Dict[int, Dict[str, Any]] = {
+            1: {"type": "hull_damage", "hull_damage": 1},
+            2: {"type": "system_damage", "system": "engine"},
+            3: {"type": "system_damage", "system": "deck_gun"},
+            4: {"type": "system_damage", "system": "flak_gun"},
+            5: {"type": "system_damage", "system": "random_torpedo_tube"},
+            6: {"type": "system_damage", "system": "random_torpedo_tube"}
+        }
+        
+        self.crew_selection_table: Dict[int, str] = {
+            1: "engineer",
+            2: "weapons_officer",
+            3: "medic",
+            4: "radio_operator"
+        }
+        
+        self.medic_save_threshold: int = 5
+        self.max_hull_damage: int = 4
+        
+        # Load from JSON if mission rules provided
+        if mission_rules:
+            self._load_damage_tables()
+        # Load from JSON if mission rules provided
+        if mission_rules:
+            self._load_damage_tables()
+    
+    def _load_damage_tables(self) -> None:
+        """Load U-Boat damage tables from mission_rules JSON."""
+        try:
+            # Load critical damage table
+            critical_damage = self.mission_rules.get_section_by_id("uboat_critical_damage")
+            if critical_damage and "damage_table" in critical_damage:
+                self.critical_damage_table = critical_damage["damage_table"]
+            
+            # Load general damage table
+            general_damage = self.mission_rules.get_section_by_id("uboat_general_damage")
+            if general_damage and "damage_table" in general_damage:
+                # Convert string keys to integers for general damage
+                new_table = {}
+                for key, value in general_damage["damage_table"].items():
+                    if "roll_range" in value:
+                        # Handle ranges like "5-6"
+                        for roll_val in range(value["roll_range"][0], value["roll_range"][1] + 1):
+                            new_table[roll_val] = value
+                    elif "roll" in value:
+                        new_table[value["roll"]] = value
+                if new_table:
+                    self.general_damage_table = new_table
+            
+            # Load crew casualties
+            crew_casualties = self.mission_rules.get_section_by_id("uboat_crew_casualties")
+            if crew_casualties:
+                if "selection_table" in crew_casualties:
+                    new_crew_table = {}
+                    for key, value in crew_casualties["selection_table"].items():
+                        if "roll" in value and "crew_member" in value:
+                            new_crew_table[value["roll"]] = value["crew_member"]
+                    if new_crew_table:
+                        self.crew_selection_table = new_crew_table
+                
+                if "medic_save" in crew_casualties:
+                    self.medic_save_threshold = crew_casualties["medic_save"].get("threshold", 5)
+            
+            # Load destruction thresholds
+            destruction = self.mission_rules.get_section_by_id("destruction_thresholds")
+            if destruction and "uboat_hull_damage" in destruction:
+                self.max_hull_damage = destruction["uboat_hull_damage"].get("max_hull_damage", 4)
+        
+        except Exception:
+            # Keep defaults if parsing fails
+            pass
     
     def apply_critical_damage(self, u_boat: UBoat) -> UBoatDamageResult:
         """
@@ -78,51 +161,52 @@ class UBoatDamageResolver:
         crew_casualties: List[str] = []
         medic_saves: List[Tuple[str, bool]] = []
         
-        if roll <= 3:
-            # Hull Breach +2
-            hull_damage = 2
-            u_boat.hull_damage = min(4, u_boat.hull_damage + hull_damage)
-            effect = f"Hull Breach +2 (total: {u_boat.hull_damage})"
-            description = f"Critical Hit! Roll {roll}: {effect}"
-        
-        elif roll <= 5:
-            # Hull Breach +1
-            hull_damage = 1
-            u_boat.hull_damage = min(4, u_boat.hull_damage + hull_damage)
-            effect = f"Hull Breach +1 (total: {u_boat.hull_damage})"
-            description = f"Critical Hit! Roll {roll}: {effect}"
-        
-        elif roll <= 7:
-            # Random system damaged
-            system = self._random_system_damage(u_boat)
-            systems_damaged.append(system)
-            effect = f"{system} damaged"
-            description = f"Critical Hit! Roll {roll}: {effect}"
-        
-        elif roll <= 9:
-            # Random crew casualty
-            casualty, saved, save_roll = self._random_crew_casualty(u_boat)
-            if casualty:
-                if not saved:
-                    crew_casualties.append(casualty)
-                medic_saves.append((casualty, saved))
-                if saved:
-                    effect = f"{casualty} wounded but saved by Medic! (Roll: {save_roll})"
-                else:
-                    effect = f"{casualty} KIA!"
-                    if not u_boat.medic_alive:
-                        effect += " (No medic available)"
-            else:
-                effect = "No crew available to casualty"
-            description = f"Critical Hit! Roll {roll}: {effect}"
-        
-        else:  # roll >= 10
-            # Lucky - no damage
-            effect = "No critical damage (lucky!)"
+        # Find matching entry in damage table
+        for key, entry in self.critical_damage_table.items():
+            roll_range = entry.get("roll_range", [])
+            if len(roll_range) == 2 and roll_range[0] <= roll <= roll_range[1]:
+                damage_type = entry.get("type", "no_damage")
+                
+                if damage_type == "hull_breach":
+                    hull_damage = entry.get("hull_damage", 0)
+                    u_boat.hull_damage = min(self.max_hull_damage, u_boat.hull_damage + hull_damage)
+                    effect = f"Hull Breach +{hull_damage} (total: {u_boat.hull_damage})"
+                    description = f"Critical Hit! Roll {roll}: {effect}"
+                
+                elif damage_type == "system_damage":
+                    system = self._random_system_damage(u_boat)
+                    systems_damaged.append(system)
+                    effect = f"{system} damaged"
+                    description = f"Critical Hit! Roll {roll}: {effect}"
+                
+                elif damage_type == "crew_casualty":
+                    casualty, saved, save_roll = self._random_crew_casualty(u_boat)
+                    if casualty:
+                        if not saved:
+                            crew_casualties.append(casualty)
+                        medic_saves.append((casualty, saved))
+                        if saved:
+                            effect = f"{casualty} wounded but saved by Medic! (Roll: {save_roll})"
+                        else:
+                            effect = f"{casualty} KIA!"
+                            if not u_boat.medic_alive:
+                                effect += " (No medic available)"
+                    else:
+                        effect = "No crew available to casualty"
+                    description = f"Critical Hit! Roll {roll}: {effect}"
+                
+                else:  # no_damage
+                    effect = "No critical damage (lucky!)"
+                    description = f"Critical Hit! Roll {roll}: {effect}"
+                
+                break
+        else:
+            # Fallback if no match found (shouldn't happen with valid tables)
+            effect = "Unknown damage effect"
             description = f"Critical Hit! Roll {roll}: {effect}"
         
         # Check if U-boat is destroyed
-        is_destroyed = u_boat.hull_damage >= 4
+        is_destroyed = u_boat.hull_damage >= self.max_hull_damage
         if is_destroyed:
             description += " - U-BOAT DESTROYED!"
         
@@ -152,52 +236,58 @@ class UBoatDamageResolver:
         hull_damage = 0
         systems_damaged: List[str] = []
         
-        if roll == 1:
-            # Hull +1
-            hull_damage = 1
-            u_boat.hull_damage = min(4, u_boat.hull_damage + hull_damage)
-            effect = f"Hull damage +1 (total: {u_boat.hull_damage})"
+        # Look up damage effect in table
+        entry = self.general_damage_table.get(roll, {})
+        damage_type = entry.get("type", "hull_damage")
         
-        elif roll == 2:
-            # Engine damaged
-            if not u_boat.engine_damaged:
-                u_boat.engine_damaged = True
-                systems_damaged.append("Engine")
-                effect = "Engine damaged"
-            else:
-                effect = "Engine already damaged - no additional effect"
+        if damage_type == "hull_damage":
+            hull_damage = entry.get("hull_damage", 1)
+            u_boat.hull_damage = min(self.max_hull_damage, u_boat.hull_damage + hull_damage)
+            effect = f"Hull damage +{hull_damage} (total: {u_boat.hull_damage})"
         
-        elif roll == 3:
-            # Deck gun damaged
-            if not u_boat.deck_gun_damaged:
-                u_boat.deck_gun_damaged = True
-                systems_damaged.append("Deck Gun")
-                effect = "Deck Gun damaged"
+        elif damage_type == "system_damage":
+            system_name = entry.get("system", "")
+            
+            if system_name == "engine":
+                if not u_boat.engine_damaged:
+                    u_boat.engine_damaged = True
+                    systems_damaged.append("Engine")
+                    effect = "Engine damaged"
+                else:
+                    effect = "Engine already damaged - no additional effect"
+            
+            elif system_name == "deck_gun":
+                if not u_boat.deck_gun_damaged:
+                    u_boat.deck_gun_damaged = True
+                    systems_damaged.append("Deck Gun")
+                    effect = "Deck Gun damaged"
+                else:
+                    effect = "Deck Gun already damaged - no additional effect"
+            
+            elif system_name == "flak_gun":
+                if not u_boat.flak_gun_damaged:
+                    u_boat.flak_gun_damaged = True
+                    systems_damaged.append("Flak Gun")
+                    effect = "Flak Gun damaged"
+                else:
+                    effect = "Flak Gun already damaged - no additional effect"
+            
+            elif system_name == "random_torpedo_tube":
+                tube = self._random_torpedo_tube_damage(u_boat)
+                if tube is not None:
+                    systems_damaged.append(f"Torpedo Tube {tube + 1}")
+                    effect = f"Torpedo Tube {tube + 1} damaged"
+                else:
+                    effect = "All torpedo tubes already damaged"
             else:
-                effect = "Deck Gun already damaged - no additional effect"
-        
-        elif roll == 4:
-            # Flak gun damaged
-            if not u_boat.flak_gun_damaged:
-                u_boat.flak_gun_damaged = True
-                systems_damaged.append("Flak Gun")
-                effect = "Flak Gun damaged"
-            else:
-                effect = "Flak Gun already damaged - no additional effect"
-        
-        else:  # roll >= 5
-            # Random torpedo tube damaged
-            tube = self._random_torpedo_tube_damage(u_boat)
-            if tube is not None:
-                systems_damaged.append(f"Torpedo Tube {tube + 1}")
-                effect = f"Torpedo Tube {tube + 1} damaged"
-            else:
-                effect = "All torpedo tubes already damaged"
+                effect = "Unknown system damage"
+        else:
+            effect = "Unknown damage type"
         
         description = f"General Damage! Roll {roll}: {effect}"
         
         # Check if U-boat is destroyed
-        is_destroyed = u_boat.hull_damage >= 4
+        is_destroyed = u_boat.hull_damage >= self.max_hull_damage
         if is_destroyed:
             description += " - U-BOAT DESTROYED!"
         
@@ -282,32 +372,42 @@ class UBoatDamageResolver:
         Returns:
             (crew_member, saved_by_medic, save_roll)
         """
-        # Roll for which crew member (reroll 5-6)
-        while True:
+        # Roll for which crew member (reroll 5-6 if in table)
+        max_attempts = 10  # Prevent infinite loop
+        roll = None
+        for _ in range(max_attempts):
             roll = self.dice.roll_1d6()
-            if roll <= 4:
+            if roll in self.crew_selection_table:
                 break
         
-        crew_members = {
-            1: ("Engineer", "engineer_alive"),
-            2: ("Weapons Officer", "weapons_officer_alive"),
-            3: ("Medic", "medic_alive"),
-            4: ("Radio Operator", "radio_operator_alive")
+        if roll is None or roll not in self.crew_selection_table:
+            return None, False, None
+        
+        # Map crew member names to U-boat attributes
+        crew_attr_map = {
+            "engineer": ("Engineer", "engineer_alive"),
+            "weapons_officer": ("Weapons Officer", "weapons_officer_alive"),
+            "medic": ("Medic", "medic_alive"),
+            "radio_operator": ("Radio Operator", "radio_operator_alive")
         }
         
-        crew_name, crew_attr = crew_members[roll]
+        crew_member_key = self.crew_selection_table[roll]
+        if crew_member_key not in crew_attr_map:
+            return None, False, None
+        
+        crew_name, crew_attr = crew_attr_map[crew_member_key]
         
         # Check if crew member is already dead
         if not getattr(u_boat, crew_attr):
             return None, False, None
         
-        # Medic save (5+ on 1d6) - if medic is alive
+        # Medic save (threshold from JSON) - if medic is alive
         saved = False
         save_roll = None
         
         if u_boat.medic_alive and crew_name != "Medic":
             save_roll = self.dice.roll_1d6()
-            saved = save_roll >= 5
+            saved = save_roll >= self.medic_save_threshold
         
         # Apply casualty if not saved
         if not saved:
@@ -325,8 +425,8 @@ class UBoatDamageResolver:
         Returns:
             (is_destroyed, reason)
         """
-        if u_boat.hull_damage >= 4:
-            return True, f"Hull damage critical ({u_boat.hull_damage}/4)"
+        if u_boat.hull_damage >= self.max_hull_damage:
+            return True, f"Hull damage critical ({u_boat.hull_damage}/{self.max_hull_damage})"
         
         return False, ""
     

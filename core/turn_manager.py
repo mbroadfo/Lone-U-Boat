@@ -129,6 +129,57 @@ class TurnManager:
         
         # Store last AP roll details for UI display
         self.last_ap_roll: Optional[Dict[str, Any]] = None
+        
+        # Load AP rolling rules from JSON
+        self.normal_dice_count: int = 3
+        self.damaged_dice_count: int = 2
+        self.captain_bonus: int = 1
+        self._load_ap_rules()
+        # Store last AP roll details for UI display
+        self.last_ap_roll: Optional[Dict[str, Any]] = None
+        
+        # Load AP rolling rules from JSON
+        self.normal_dice_count: int = 3
+        self.damaged_dice_count: int = 2
+        self.captain_bonus: int = 1
+        self._load_ap_rules()
+    
+    def _load_ap_rules(self) -> None:
+        """Load AP rolling rules from mission_rules JSON."""
+        try:
+            # Get u_boat_ap_rules section
+            ap_rules = self.mission_rules.get_section_by_id("u_boat_ap_rules")
+            
+            if not ap_rules:
+                return
+            
+            # Parse dice counts
+            if "dice" in ap_rules:
+                dice_config = ap_rules["dice"]
+                # Parse "3d6" to extract dice count
+                if "normal" in dice_config:
+                    normal_str = dice_config["normal"]
+                    if "d6" in normal_str:
+                        self.normal_dice_count = int(normal_str.split("d")[0])
+                
+                if "damaged" in dice_config:
+                    damaged_str = dice_config["damaged"]
+                    if "d6" in damaged_str:
+                        self.damaged_dice_count = int(damaged_str.split("d")[0])
+            
+            # Parse captain bonus from modifiers
+            if "modifiers" in ap_rules:
+                for modifier in ap_rules["modifiers"]:
+                    if modifier.get("condition") == "captain_alive":
+                        effect_str = modifier.get("effect", "+1 AP")
+                        # Extract number from "+1 AP" format
+                        if "+" in effect_str:
+                            bonus_str = effect_str.split("+")[1].split()[0]
+                            self.captain_bonus = int(bonus_str)
+        
+        except Exception:
+            # Keep defaults if parsing fails
+            pass
     
     def start_new_turn(self, u_boat: UBoat) -> int:
         """
@@ -178,16 +229,16 @@ class TurnManager:
         Returns:
             Total action points
         """
-        # Determine number of dice
-        num_dice = 2 if u_boat.engine_damaged else 3
+        # Determine number of dice (loaded from JSON)
+        num_dice = self.damaged_dice_count if u_boat.engine_damaged else self.normal_dice_count
         
         # Roll dice using DiceRoller
         context = "Action Points (Engine damaged)" if u_boat.engine_damaged else "Action Points"
         highest, rolls = self.dice.roll_highest(num_dice, sides=6, context=context)
         
-        # Calculate AP
+        # Calculate AP (captain bonus loaded from JSON)
         base_ap = highest
-        captain_bonus = 1 if u_boat.captain_alive else 0
+        captain_bonus = self.captain_bonus if u_boat.captain_alive else 0
         ap = base_ap + captain_bonus
         
         # Store detailed roll info for UI display

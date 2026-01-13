@@ -1,0 +1,194 @@
+{
+  "_comment": "Damage Tables - Allied Ship and U-Boat damage resolution",
+  "_version": "1.0",
+  "_override_policy": "RARELY - Only override for mission-specific ship variants",
+  
+  "allied_ship_damage": {
+    "id": "allied_ship_damage",
+    "type": "damage_table",
+    "label": "Allied Ship Damage Chart",
+    "description": "Damage resolution for merchant and escort ships hit by deck gun or torpedoes",
+    
+    "modifiers": {
+      "escort_vs_deck_gun": {
+        "modifier": -2,
+        "min_roll": 1,
+        "description": "Escorts are tougher: -2 to damage roll vs deck gun (minimum 1)"
+      },
+      "escort_vs_torpedo": {
+        "modifier": 0,
+        "description": "Torpedoes bypass armor: no modifier"
+      }
+    },
+    
+    "damage_table": {
+      "1-2": {
+        "roll_range": [1, 2],
+        "effect": "no_effect",
+        "description": "No Effect",
+        "if_already_damaged": {
+          "effect": "sunk",
+          "description": "Already Damaged → SUNK!"
+        }
+      },
+      "3-4": {
+        "roll_range": [3, 4],
+        "effect": "damaged",
+        "description": "DAMAGED",
+        "if_already_damaged": {
+          "effect": "sunk",
+          "description": "Already Damaged → Catastrophic → SUNK!"
+        }
+      },
+      "5-6": {
+        "roll_range": [5, 6],
+        "effect": "catastrophic",
+        "description": "Catastrophic → SUNK!",
+        "if_already_damaged": {
+          "effect": "sunk",
+          "description": "Catastrophic → SUNK!"
+        }
+      }
+    }
+  },
+  
+  "uboat_critical_damage": {
+    "id": "uboat_critical_damage",
+    "type": "damage_table",
+    "label": "U-Boat Critical Damage Chart",
+    "description": "Critical hit damage from depth charges and ramming (roll 2d6)",
+    "dice": "2d6",
+    
+    "damage_table": {
+      "2-3": {
+        "roll_range": [2, 3],
+        "type": "hull_breach",
+        "hull_damage": 2,
+        "repairable": false,
+        "description": "Hull Breach +2 (cannot repair)"
+      },
+      "4-5": {
+        "roll_range": [4, 5],
+        "type": "hull_breach",
+        "hull_damage": 1,
+        "repairable": true,
+        "description": "Hull Breach +1"
+      },
+      "6-7": {
+        "roll_range": [6, 7],
+        "type": "system_damage",
+        "effect": "random_system",
+        "description": "Random system damaged"
+      },
+      "8-9": {
+        "roll_range": [8, 9],
+        "type": "crew_casualty",
+        "effect": "random_crew",
+        "medic_save": "5+",
+        "description": "Random crew casualty (medic save 5+ on 1d6)"
+      },
+      "10-12": {
+        "roll_range": [10, 12],
+        "type": "no_damage",
+        "description": "Lucky - no critical damage"
+      }
+    }
+  },
+  
+  "uboat_general_damage": {
+    "id": "uboat_general_damage",
+    "type": "damage_table",
+    "label": "U-Boat General Damage Chart",
+    "description": "General damage from depth charges and attacks (roll 1d6)",
+    "dice": "1d6",
+    
+    "damage_table": {
+      "1": {
+        "roll": 1,
+        "type": "hull_damage",
+        "hull_damage": 1,
+        "description": "Hull damage +1"
+      },
+      "2": {
+        "roll": 2,
+        "type": "system_damage",
+        "system": "engine",
+        "description": "Engine damaged"
+      },
+      "3": {
+        "roll": 3,
+        "type": "system_damage",
+        "system": "deck_gun",
+        "description": "Deck Gun damaged"
+      },
+      "4": {
+        "roll": 4,
+        "type": "system_damage",
+        "system": "flak_gun",
+        "description": "Flak Gun damaged"
+      },
+      "5-6": {
+        "roll_range": [5, 6],
+        "type": "system_damage",
+        "system": "random_torpedo_tube",
+        "description": "Random Torpedo Tube damaged"
+      }
+    }
+  },
+  
+  "uboat_crew_casualties": {
+    "id": "uboat_crew_casualties",
+    "type": "crew_table",
+    "label": "Crew Casualty Selection",
+    "description": "Random crew selection for casualties (roll 1d6)",
+    "dice": "1d6",
+    
+    "selection_table": {
+      "1": {
+        "roll": 1,
+        "crew_member": "engineer",
+        "description": "Engineer"
+      },
+      "2": {
+        "roll": 2,
+        "crew_member": "weapons_officer",
+        "description": "Weapons Officer"
+      },
+      "3": {
+        "roll": 3,
+        "crew_member": "medic",
+        "description": "Medic"
+      },
+      "4": {
+        "roll": 4,
+        "crew_member": "radio_operator",
+        "description": "Radio Operator"
+      },
+      "5-6": {
+        "roll_range": [5, 6],
+        "effect": "reroll",
+        "description": "Reroll"
+      }
+    },
+    
+    "medic_save": {
+      "dice": "1d6",
+      "threshold": 5,
+      "description": "5+ on 1d6 to save wounded crew (only if Medic alive)"
+    }
+  },
+  
+  "destruction_thresholds": {
+    "uboat_hull_damage": {
+      "max_hull_damage": 4,
+      "description": "U-Boat destroyed at 4 hull damage"
+    },
+    "ship_sinking": {
+      "conditions": [
+        "catastrophic_damage",
+        "damaged_then_hit_again"
+      ],
+      "description": "Ships sink from catastrophic damage or second hit while damaged"
+    }
+  }
+}

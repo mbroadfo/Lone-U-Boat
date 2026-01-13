@@ -82,7 +82,8 @@ class Game:
         # Initialize B-24 AI
         self.b24_ai = B24AI(
             dice_roller=self.turn_manager.dice,
-            hex_grid=None  # Will be set after hex_grid initialization
+            hex_grid=None,  # Will be set after hex_grid initialization
+            mission_rules=self.mission_rules
         )
         
         # Initialize Event System

@@ -8,7 +8,7 @@ Manages automated B-24 Liberator behavior during the B-24 Phase:
 - Flak defense: U-boat can shoot down B-24
 """
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 from .models import Aircraft, UBoat, HexCoord, Facing
 from .hex_grid import HexGrid
 from .dice import DiceRoller
@@ -18,16 +18,17 @@ from .damage.uboat_damage import UBoatDamageResolver
 class B24AI:
     """Automated B-24 aircraft behavior."""
     
-    def __init__(self, dice_roller: DiceRoller, hex_grid: HexGrid):
+    def __init__(self, dice_roller: DiceRoller, hex_grid: HexGrid, mission_rules: Optional[Any] = None):
         """Initialize B-24 AI system.
         
         Args:
             dice_roller: Dice rolling system
             hex_grid: Hex grid for range/validation
+            mission_rules: Optional mission rules for damage tables
         """
         self.dice = dice_roller
         self.hex_grid = hex_grid
-        self.damage_resolver = UBoatDamageResolver(dice_roller)
+        self.damage_resolver = UBoatDamageResolver(dice_roller, mission_rules)
     
     def execute_b24_phase(self, aircraft_list: List[Aircraft], u_boat: UBoat, 
                           detection_level: int) -> Tuple[List[str], int]:

@@ -35,7 +35,7 @@ class EscortAI:
         self.anchor_hex = anchor_hex
         
         # Initialize damage resolver for combat
-        self.damage_resolver = UBoatDamageResolver(dice_roller)
+        self.damage_resolver = UBoatDamageResolver(dice_roller, mission_rules)
         
         # Load escort action rules from mission_rules
         # Base dice counts (default values, will be loaded from JSON)

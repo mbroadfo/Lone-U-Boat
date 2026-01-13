@@ -2903,7 +2903,7 @@ class UnifiedGameScreen(BaseScreen):
         if action:
             # Import ship damage resolver
             from ..damage import ShipDamageResolver
-            damage_resolver = ShipDamageResolver(self.game.turn_manager.dice)
+            damage_resolver = ShipDamageResolver(self.game.turn_manager.dice, self.game.mission_rules)
             
             # Build message from results and apply damage
             result_msgs: list[str] = []
@@ -3279,7 +3279,7 @@ class UnifiedGameScreen(BaseScreen):
         elif waiting_for == 'damage':
             # Roll for damage using ShipDamageResolver
             from ..damage import ShipDamageResolver
-            damage_resolver = ShipDamageResolver(self.game.turn_manager.dice)
+            damage_resolver = ShipDamageResolver(self.game.turn_manager.dice, self.game.mission_rules)
             
             damage_result = damage_resolver.apply_damage(ship, "torpedo")
             
