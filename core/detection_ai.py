@@ -22,18 +22,62 @@ class DetectionAI:
         self.mission_rules: Any = mission_rules
         self.dice = dice_roller
         
-        # Load detection rules from mission_rules
-        # These come from escort_ai_baseline.json -> detection_system
-        self.detection_range = 3
-        self.requires_los = True
+        # Load detection rules from mission_rules (escort_ai_baseline.json -> detection_system)
+        self.detection_range: int = 3
+        self.requires_los: bool = True
+        self.base_thresholds: dict[Depth, int] = {}
+        self.modifier_sonar_operator: int = 1
+        self.modifier_engine_damaged: int = -1
         
-        # Base detection thresholds by depth
-        self.base_thresholds = {
-            Depth.SURFACED: 1,    # 1+ (automatic)
-            Depth.PERISCOPE: 2,   # 2+
-            Depth.MEDIUM: 4,      # 4+
-            Depth.DEEP: 5,        # 5+
-        }
+        self._load_detection_rules()
+    
+    def _load_detection_rules(self) -> None:
+        """Load detection rules from mission_rules JSON."""
+        try:
+            # Get detection rules from escort_ai_baseline.json
+            detection_rules = self.mission_rules.get_section_by_id("detection_rules")
+            
+            if detection_rules:
+                # Parse range and LOS requirements
+                self.detection_range = detection_rules.get("range", 3)
+                self.requires_los = detection_rules.get("requires_los", True)
+                
+                # Parse base detection thresholds by depth
+                base_thresholds_data = detection_rules.get("base_detection_thresholds", [])
+                for threshold_entry in base_thresholds_data:
+                    depth_str = threshold_entry.get("depth", "")
+                    roll_required = threshold_entry.get("roll_required", 4)
+                    
+                    try:
+                        depth_enum = Depth[depth_str]
+                        self.base_thresholds[depth_enum] = roll_required
+                    except KeyError:
+                        # Unknown depth, skip
+                        pass
+                
+                # Parse modifiers
+                modifiers_data = detection_rules.get("modifiers", [])
+                for modifier in modifiers_data:
+                    condition = modifier.get("condition", "")
+                    effect = modifier.get("effect", 0)
+                    
+                    if condition == "sonar_operator_alive":
+                        self.modifier_sonar_operator = effect
+                    elif condition == "engine_damaged":
+                        self.modifier_engine_damaged = effect
+        
+        except Exception:
+            # Fallback to hardcoded defaults if JSON parsing fails
+            self.detection_range = 3
+            self.requires_los = True
+            self.base_thresholds = {
+                Depth.SURFACED: 1,
+                Depth.PERISCOPE: 2,
+                Depth.MEDIUM: 4,
+                Depth.DEEP: 5,
+            }
+            self.modifier_sonar_operator = 1
+            self.modifier_engine_damaged = -1
     
     def calculate_detection_threshold(
         self,
@@ -51,13 +95,13 @@ class DetectionAI:
         # Start with base threshold for current depth
         threshold = self.base_thresholds.get(u_boat.depth, 4)
         
-        # Modifier 1: Sonar Operator alive increases threshold by 1 (harder to detect)
+        # Modifier 1: Sonar Operator alive increases threshold (harder to detect)
         if u_boat.sonar_operator_alive:
-            threshold += 1
+            threshold += self.modifier_sonar_operator
         
-        # Modifier 2: Engine damaged decreases threshold by 1 (easier to detect - noisy)
+        # Modifier 2: Engine damaged decreases threshold (easier to detect - noisy)
         if u_boat.engine_damaged:
-            threshold -= 1
+            threshold += self.modifier_engine_damaged  # Note: modifier is negative
         
         # Threshold can never be less than 1 (automatic) or more than 6 (impossible)
         threshold = max(1, min(6, threshold))

@@ -6,8 +6,9 @@ Resolves deck gun and torpedo attacks using JSON-defined hit tables and DiceRoll
 Rules from u_boat_ruleset_default.json -> FIRE DECK GUN and FIRE TORPS actions
 """
 
-from typing import Tuple, List, Optional, TypedDict
+from typing import Tuple, List, Optional, TypedDict, Any, Dict
 from .dice import DiceRoller
+import re
 
 
 class TorpedoAttackResult(TypedDict):
@@ -25,29 +26,87 @@ class CombatResolver:
     Uses DiceRoller for all combat rolls.
     """
     
-    def __init__(self, dice_roller: DiceRoller):
+    def __init__(self, dice_roller: DiceRoller, mission_rules: Optional[Any] = None):
         """
         Initialize combat resolver.
         
         Args:
             dice_roller: DiceRoller instance for combat rolls
+            mission_rules: Optional mission rules for loading hit tables from JSON
         """
         self.dice = dice_roller
+        self.mission_rules = mission_rules
         
-        # Deck gun hit table from JSON (2d6)
-        self.deck_gun_hit_table = {
-            "range_1_2": 7,  # Need 7+ on 2d6
-            "range_3": 8     # Need 8+ on 2d6
+        # Default hit tables (used if mission_rules not provided or parsing fails)
+        self.deck_gun_hit_table: Dict[str, int] = {
+            "range_1_2": 7,
+            "range_3": 8
         }
         
-        # Torpedo hit table from JSON (1d6 per torpedo)
-        # Format: {range_key: {aspect: target_number}}
-        self.torpedo_hit_table = {
+        self.torpedo_hit_table: Dict[str, Dict[str, int]] = {
             "range_1_2": {"side": 3, "front_rear": 4},
             "range_3_4": {"side": 4, "front_rear": 5},
             "range_5_6": {"side": 5, "front_rear": 6},
             "range_7_9": {"side": 6, "front_rear": 6}
         }
+        
+        # Load from JSON if mission rules provided
+        if mission_rules:
+            self._load_combat_tables()
+    
+    def _parse_dice_requirement(self, requirement_str: str) -> int:
+        """
+        Parse dice requirement string to extract target number.
+        
+        Examples:
+            "7+ on 2d6" -> 7
+            "3+ on 1d6 per torpedo" -> 3
+            "4+" -> 4
+        
+        Args:
+            requirement_str: String like "7+ on 2d6"
+            
+        Returns:
+            Target number needed to succeed
+        """
+        # Extract number before '+'
+        match = re.search(r'(\d+)\+', requirement_str)
+        if match:
+            return int(match.group(1))
+        return 0
+    
+    def _load_combat_tables(self) -> None:
+        """Load combat hit tables from mission_rules JSON."""
+        try:
+            # Get action costs section
+            action_costs = self.mission_rules.get_section_by_id("u_boat_action_costs")
+            
+            if not action_costs or "actions" not in action_costs:
+                return
+            
+            # Find FIRE DECK GUN action
+            for action_data in action_costs["actions"]:
+                if action_data.get("action") == "FIRE DECK GUN":
+                    to_hit = action_data.get("to_hit", {})
+                    for range_key, requirement_str in to_hit.items():
+                        target_num = self._parse_dice_requirement(requirement_str)
+                        if target_num > 0:
+                            self.deck_gun_hit_table[range_key] = target_num
+                
+                elif action_data.get("action") == "FIRE TORPS":
+                    to_hit_table = action_data.get("to_hit_table", {})
+                    for range_key, aspects in to_hit_table.items():
+                        if range_key not in self.torpedo_hit_table:
+                            self.torpedo_hit_table[range_key] = {}
+                        
+                        for aspect, requirement_str in aspects.items():
+                            target_num = self._parse_dice_requirement(requirement_str)
+                            if target_num > 0:
+                                self.torpedo_hit_table[range_key][aspect] = target_num
+        
+        except Exception:
+            # Keep defaults if parsing fails
+            pass
     
     # ========== DECK GUN COMBAT ==========
     

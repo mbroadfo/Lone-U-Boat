@@ -2818,7 +2818,7 @@ class UnifiedGameScreen(BaseScreen):
         if waiting_for == 'hit':
             # Roll for hit
             from ..combat_resolver import CombatResolver
-            resolver = CombatResolver(self.game.turn_manager.dice)
+            resolver = CombatResolver(self.game.turn_manager.dice, self.game.mission_rules)
             
             hit, roll_total, description = resolver.resolve_deck_gun_attack(distance)
             
@@ -2847,7 +2847,7 @@ class UnifiedGameScreen(BaseScreen):
         elif waiting_for == 'damage':
             # Roll for damage
             from ..combat_resolver import CombatResolver
-            resolver = CombatResolver(self.game.turn_manager.dice)
+            resolver = CombatResolver(self.game.turn_manager.dice, self.game.mission_rules)
             
             # Roll 1d6 for damage
             damage_die = resolver.dice.roll_1d6()
@@ -2928,9 +2928,15 @@ class UnifiedGameScreen(BaseScreen):
                             self.game.ships.remove(ship)
                             self.add_event(f"💀 {ship.ship_type.title()} SUNK and removed from map")
                     elif damage_result.effect == "damaged":
+                        # Apply damage marker immediately
+                        ship.damaged = True
                         result_msgs.append(
                             f"HIT {ship.ship_type} at range {distance} - DAMAGED (roll: {damage_result.roll})"
                         )
+                        self.add_event(f"💥 {ship.ship_type.title()} DAMAGED")
+                        # Render immediately to show damage marker
+                        self.render()
+                        pygame.display.flip()
                     else:  # no_effect
                         result_msgs.append(
                             f"HIT {ship.ship_type} at range {distance} - No effect (roll: {damage_result.roll})"
@@ -3567,7 +3573,7 @@ class UnifiedGameScreen(BaseScreen):
                     targets=valid_targets,
                     cost_lookup=cost_lookup,
                     los_calculator=los_calc,
-                    combat_resolver=CombatResolver(self.game.turn_manager.dice)
+                    combat_resolver=CombatResolver(self.game.turn_manager.dice, self.game.mission_rules)
                 )
                 # Store targets for interactive resolution during commit
                 action._interactive_targets = valid_targets  # type: ignore[attr-defined]
@@ -3608,7 +3614,7 @@ class UnifiedGameScreen(BaseScreen):
                     cost_lookup=cost_lookup,
                     validator=TorpedoValidator(),
                     los_calculator=los_calc,
-                    combat_resolver=CombatResolver(self.game.turn_manager.dice)
+                    combat_resolver=CombatResolver(self.game.turn_manager.dice, self.game.mission_rules)
                 )
             
             # Add action to queue

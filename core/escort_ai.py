@@ -38,20 +38,72 @@ class EscortAI:
         self.damage_resolver = UBoatDamageResolver(dice_roller)
         
         # Load escort action rules from mission_rules
-        # Base dice counts
-        self.destroyer_base_dice = 3
-        self.corvette_base_dice = 2
+        # Base dice counts (default values, will be loaded from JSON)
+        self.destroyer_base_dice: int = 3
+        self.corvette_base_dice: int = 2
         
         # Action table mapping (die result -> action)
-        # Based on RULES.md Phase 4 table
-        self.action_table = {
-            1: [EscortAction.FIRE],  # Or DEPTH_CHARGE if conditions met
-            2: [EscortAction.MOVE, EscortAction.TURN],  # MOVE, if blocked TURN, then DEPTH_CHARGE
-            3: [EscortAction.MOVE],  # Then DEPTH_CHARGE
-            4: [EscortAction.MOVE, EscortAction.TURN],  # MOVE, if blocked TURN, then DEPTH_CHARGE
-            5: [EscortAction.TURN],  # Then DEPTH_CHARGE
-            6: [EscortAction.MOVE, EscortAction.TURN],  # MOVE, if blocked TURN (then DEPTH_CHARGE)
+        # Default table based on RULES.md Phase 4
+        self.action_table: Dict[int, List[EscortAction]] = {
+            1: [EscortAction.FIRE],
+            2: [EscortAction.MOVE, EscortAction.TURN],
+            3: [EscortAction.MOVE],
+            4: [EscortAction.MOVE, EscortAction.TURN],
+            5: [EscortAction.TURN],
+            6: [EscortAction.MOVE, EscortAction.TURN],
         }
+        
+        # Load rules from JSON if available
+        self._load_escort_rules()
+    
+    def _load_escort_rules(self) -> None:
+        """Load escort rules from mission_rules JSON."""
+        try:
+            # Load dice counts
+            activation_rules = self.mission_rules.get_section_by_id("escort_activation_order")
+            if activation_rules and "dice_calculation" in activation_rules:
+                dice_calc = activation_rules["dice_calculation"]
+                
+                if "destroyer" in dice_calc:
+                    self.destroyer_base_dice = dice_calc["destroyer"].get("base", 3)
+                
+                if "corvette" in dice_calc:
+                    self.corvette_base_dice = dice_calc["corvette"].get("base", 2)
+            
+            # Load action table (basic mapping - conditions handled in code)
+            action_table_data = self.mission_rules.get_section_by_id("destroyer_actions")
+            if action_table_data and "results" in action_table_data:
+                for result in action_table_data["results"]:
+                    roll = result.get("roll")
+                    if roll is None:
+                        continue
+                    
+                    # Extract primary actions from sequence
+                    actions = []
+                    sequence = result.get("sequence", [])
+                    for step in sequence:
+                        action_str = step.get("action", "")
+                        # Map string to EscortAction enum
+                        if action_str == "MOVE":
+                            actions.append(EscortAction.MOVE)
+                        elif action_str == "TURN":
+                            if step.get("always") or step.get("condition"):
+                                if EscortAction.TURN not in actions:
+                                    actions.append(EscortAction.TURN)
+                        elif action_str == "FIRE":
+                            if EscortAction.FIRE not in actions:
+                                actions.append(EscortAction.FIRE)
+                        elif action_str == "DEPTH_CHARGE":
+                            # Depth charge is secondary action, add to end
+                            if EscortAction.DEPTH_CHARGE not in actions:
+                                actions.append(EscortAction.DEPTH_CHARGE)
+                    
+                    if actions:
+                        self.action_table[roll] = actions
+        
+        except Exception:
+            # Keep defaults if parsing fails
+            pass
     
     def calculate_dice_count(self, escort: Ship, detection_level: int) -> int:
         """

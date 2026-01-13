@@ -104,6 +104,39 @@ class MerchantAI:
                     waypoints=path_data['waypoints'],
                     exit_hex=path_data.get('exit_hex')
                 )
+        
+        # Load movement rules from JSON
+        self.movement_rules: Dict[str, Dict[str, Any]] = {}
+        self._load_movement_rules()
+    
+    def _load_movement_rules(self) -> None:
+        """Load merchant movement rules from mission_rules JSON."""
+        try:
+            # Get merchant movement rules from mission JSON
+            merchant_rules = self.mission_rules.get_section_by_id("merchant_movement")
+            
+            if merchant_rules and "rules" in merchant_rules:
+                for rule in merchant_rules["rules"]:
+                    condition = rule.get("condition", "UNDAMAGED")
+                    self.movement_rules[condition] = rule
+        
+        except Exception:
+            # Fallback to hardcoded defaults if JSON parsing fails
+            self.movement_rules = {
+                "UNDAMAGED": {
+                    "condition": "UNDAMAGED",
+                    "action": "MOVE",
+                    "distance": 1
+                },
+                "DAMAGED": {
+                    "condition": "DAMAGED",
+                    "action": "ROLL_TO_MOVE",
+                    "dice": "1d6",
+                    "success": "4+",
+                    "on_success": {"action": "MOVE", "distance": 1},
+                    "on_fail": {"action": "NO_MOVE"}
+                }
+            }
     
     def get_merchant_movement(
         self,
@@ -141,17 +174,34 @@ class MerchantAI:
         # Calculate facing for next waypoint
         new_facing = path.get_facing_for_next_waypoint(ship.position, next_waypoint)
         
-        # Check movement rules based on damage status
-        if not ship.damaged:
-            # UNDAMAGED: Always move 1 hex
+        # Determine movement rules based on damage status
+        condition = "DAMAGED" if ship.damaged else "UNDAMAGED"
+        rule = self.movement_rules.get(condition)
+        
+        if not rule:
+            # Fallback if no rule found
             return next_waypoint, new_facing, f"Merchant moves to {next_waypoint.q},{next_waypoint.r}"
-        else:
-            # DAMAGED: Roll 1d6, move on 4+
+        
+        action = rule.get("action", "MOVE")
+        
+        if action == "MOVE":
+            # Undamaged: Always move
+            return next_waypoint, new_facing, f"Merchant moves to {next_waypoint.q},{next_waypoint.r}"
+        
+        elif action == "ROLL_TO_MOVE":
+            # Damaged: Roll to see if can move
+            success_str = rule.get("success", "4+")
+            success_threshold = int(success_str.replace("+", ""))
+            
             roll = self.dice.roll_1d6()
-            if roll >= 4:
+            if roll >= success_threshold:
                 return next_waypoint, new_facing, f"Merchant (damaged) rolled {roll}, moves to {next_waypoint.q},{next_waypoint.r}"
             else:
                 return None, new_facing, f"Merchant (damaged) rolled {roll}, cannot move but faces {new_facing.name}"
+        
+        else:
+            # Unknown action, default to move
+            return next_waypoint, new_facing, f"Merchant moves to {next_waypoint.q},{next_waypoint.r}"
     
     def execute_merchant_phase(self, ships: List[Ship]) -> List[str]:
         """
