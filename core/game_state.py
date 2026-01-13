@@ -9,7 +9,7 @@ from typing import Optional, List, Any, Dict
 
 from config import board_config as cfg
 from config.board_layout_config import load_mission_layout, MissionLayoutConfig
-from .models import HexCoord, Facing, Depth, UBoat, Ship, GamePhase
+from .models import HexCoord, Facing, Depth, UBoat, Ship, Aircraft, GamePhase
 from .hex_grid import HexGrid
 from .assets import AssetManager
 from .conditions import ConditionFactory
@@ -19,6 +19,8 @@ from .turn_manager import TurnManager
 from .actions import ActionQueue
 from .merchant_ai import MerchantAI
 from .detection_ai import DetectionAI
+from .escort_ai import EscortAI
+from .b24_ai import B24AI
 from missions.mission_rules_loader import MissionRules, load_mission_rules
 
 
@@ -63,6 +65,23 @@ class Game:
         self.detection_ai = DetectionAI(
             mission_rules=self.mission_rules,
             dice_roller=self.turn_manager.dice
+        )
+        
+        # Initialize escort AI
+        anchor_hex_tuple = (self.mission_config.ANCHOR_POSITIONS[0] 
+                           if hasattr(self.mission_config, 'ANCHOR_POSITIONS') 
+                           and self.mission_config.ANCHOR_POSITIONS
+                           else (10, 10))  # Default anchor
+        self.escort_ai = EscortAI(
+            mission_rules=self.mission_rules,
+            dice_roller=self.turn_manager.dice,
+            anchor_hex=HexCoord(*anchor_hex_tuple)
+        )
+        
+        # Initialize B-24 AI
+        self.b24_ai = B24AI(
+            dice_roller=self.turn_manager.dice,
+            hex_grid=None  # Will be set after hex_grid initialization
         )
         
         # Next screen for transitions (back to menu, etc.)
@@ -125,6 +144,10 @@ class Game:
             global_offset_y=0
         )
         
+        # Set hex_grid for AI systems that need it
+        self.b24_ai.hex_grid = self.hex_grid
+        self.escort_ai.hex_grid = self.hex_grid
+        
         # Game entities - load from mission config
         u_boat_start = self.mission_config.U_BOAT_START
         
@@ -149,6 +172,9 @@ class Game:
                 damaged=ship_data['damaged']
             )
             self.ships.append(ship)
+        
+        # Aircraft (B-24s spawned via End Turn Events)
+        self.aircraft: List[Aircraft] = []
         
         # Gameplay UI state
         self.selected_hex: Optional[HexCoord] = None
@@ -391,17 +417,44 @@ class Game:
         """Execute escort ship behaviors."""
         self.turn_manager.add_phase_log("Escort Phase", "Escorts acting...")
         
-        # TODO Phase 4: Implement escort AI
-        for ship in self.ships:
-            if ship.ship_type in ['corvette', 'destroyer']:
-                self.turn_manager.add_phase_log("Escort Phase",
-                    f"{ship.ship_type.capitalize()} at {ship.position.q},{ship.position.r} (no AI yet)")
+        # Execute escort AI
+        new_detection_level, messages = self.escort_ai.execute_escort_phase(
+            ships=self.ships,
+            u_boat=self.u_boat,
+            detection_level=self.detection_level,
+            land_hexes=self.land_hexes,
+            hex_grid=self.hex_grid
+        )
+        
+        # Log all escort action messages
+        for message in messages:
+            self.turn_manager.add_phase_log("Escort Phase", message)
+        
+        # Update detection level (can be increased by FIRE action or forced dive)
+        self.detection_level = new_detection_level
     
     def _execute_b24_phase(self):
-        """Execute B24 aircraft if present."""
-        # TODO Phase 4: Check for B24 aircraft in mission
-        # For now, skip this phase
-        self.turn_manager.add_phase_log("B24 Phase", "No aircraft in mission")
+        """Execute B24 aircraft phase."""
+        if not self.aircraft:
+            self.turn_manager.add_phase_log("B24 Phase", "No aircraft on map")
+            return
+        
+        # Execute B-24 phase
+        messages, new_dl = self.b24_ai.execute_b24_phase(
+            aircraft_list=self.aircraft,  # Modified in place (aircraft removed if off map)
+            u_boat=self.u_boat,
+            detection_level=self.detection_level
+        )
+        
+        # Log all messages
+        for msg in messages:
+            self.turn_manager.add_phase_log("B24 Phase", msg)
+        
+        # Update detection level
+        if new_dl > self.detection_level:
+            self.detection_level = new_dl
+            self.turn_manager.add_phase_log("B24 Phase", 
+                f"Detection Level increased to {new_dl}")
     
     def _execute_end_turn_phase(self):
         """Clean up turn and prepare for next."""

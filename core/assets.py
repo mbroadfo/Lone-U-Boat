@@ -89,9 +89,23 @@ class AssetManager:
                         images[key] = image
                     else:
                         # Create placeholder
-                        surface = pygame.Surface((40, 40), pygame.SRCALPHA)
-                        pygame.draw.rect(surface, self.config.COLORS['ship'], (0, 0, 40, 40))
+                        surface = pygame.Surface((target_size, target_size), pygame.SRCALPHA)
+                        pygame.draw.circle(surface, self.config.COLORS['ship'], 
+                                         (target_size//2, target_size//2), target_size//3)
                         images[key] = surface
+        
+        # Load B-24 aircraft image
+        b24_path = Path(self.config.ASSETS.get('b24', 'assets/B24.png'))
+        if b24_path.exists():
+            image = pygame.image.load(b24_path).convert_alpha()
+            image = pygame.transform.smoothscale(image, (target_size, target_size))
+            images['b24'] = image
+        else:
+            # Create placeholder
+            surface = pygame.Surface((target_size, target_size), pygame.SRCALPHA)
+            pygame.draw.circle(surface, (100, 100, 255), 
+                             (target_size//2, target_size//2), target_size//3)
+            images['b24'] = surface
         
         return images
     
@@ -101,6 +115,7 @@ class AssetManager:
         marker_files: Dict[str, str] = {
             'detection': self.config.ASSETS['detection_marker'],
             'damaged': self.config.ASSETS['damaged_marker'],
+            'kia': self.config.ASSETS['kia_marker'],
             'torpedo': self.config.ASSETS['torpedo_marker']
         }
         

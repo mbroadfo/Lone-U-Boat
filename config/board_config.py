@@ -234,32 +234,32 @@ STATUS_BOXES: dict[str, StatusBoxConfig] = {
     # Crew
     'captain_damaged': {
         'rect': (515, 576, 27, 25),
-        'marker': 'damaged',
+        'marker': 'kia',
         'condition': 'captain_dead'
     },
     'sonar_operator_damaged': {
         'rect': (514, 615, 29, 26),
-        'marker': 'damaged',
+        'marker': 'kia',
         'condition': 'sonar_operator_dead'
     },
     'engineer_damaged': {
         'rect': (515, 655, 27, 26),
-        'marker': 'damaged',
+        'marker': 'kia',
         'condition': 'engineer_dead'
     },
     'weapons_officer_damaged': {
         'rect': (592, 614, 30, 27),
-        'marker': 'damaged',
+        'marker': 'kia',
         'condition': 'weapons_officer_dead'
     },
     'lookout_damaged': {
         'rect': (594, 656, 26, 24),
-        'marker': 'damaged',
+        'marker': 'kia',
         'condition': 'lookout_dead'
     },
     'medic_damaged': {
         'rect': (662, 655, 27, 28),
-        'marker': 'damaged',
+        'marker': 'kia',
         'condition': 'medic_dead'
     },
     
@@ -289,6 +289,7 @@ STATUS_BOXES: dict[str, StatusBoxConfig] = {
 ASSETS: dict[str, str] = {
     'detection_marker': 'assets/Detection.png',
     'damaged_marker': 'assets/Damaged.png',
+    'kia_marker': 'assets/kia.png',
     'torpedo_marker': 'assets/Torpedo.png',
     'u_boat_surfaced': 'assets/UB-Surfaced.png',
     'u_boat_periscope': 'assets/UB-Periscope.png',
@@ -300,6 +301,7 @@ ASSETS: dict[str, str] = {
     'corvette_damaged': 'assets/Corvette-Damaged.png',
     'destroyer': 'assets/Destroyer.png',
     'destroyer_damaged': 'assets/Destroyer-Damaged.png',
+    'b24': 'assets/B24.png',
 }
 
 

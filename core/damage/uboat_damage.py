@@ -284,7 +284,7 @@ class UBoatDamageResolver:
         """
         # Roll for which crew member (reroll 5-6)
         while True:
-            roll = self.dice.roll(1)
+            roll = self.dice.roll_1d6()
             if roll <= 4:
                 break
         
@@ -306,7 +306,7 @@ class UBoatDamageResolver:
         save_roll = None
         
         if u_boat.medic_alive and crew_name != "Medic":
-            save_roll = self.dice.roll(1)
+            save_roll = self.dice.roll_1d6()
             saved = save_roll >= 5
         
         # Apply casualty if not saved
@@ -329,3 +329,222 @@ class UBoatDamageResolver:
             return True, f"Hull damage critical ({u_boat.hull_damage}/4)"
         
         return False, ""
+    
+    def apply_escort_attack_damage(
+        self,
+        u_boat: UBoat,
+        attack_type: str = "depth_charge",
+        ship_type: str = "corvette"
+    ) -> UBoatDamageResult:
+        """
+        Apply damage from escort attack using exact RULES.md damage chart.
+        
+        U-Boat Damage Chart (Depth Charge, Ship Gun Fire, B24):
+        1   Critical Hit! Roll d6:
+            1 U-Boat Destroyed
+            2 +2 Hull Damage
+            3-4 Torp tubes 3d6
+            5-6 Damage x 2 (roll twice at 3-4 below)
+        
+        2   Hull Damage: +1 Hull Damage
+        
+        3-4 Damage: Roll 1d6:
+            1 +1 Hull Damage
+            2 Flak gun
+            3 Torp tubes 2d6
+            4-5 Engine
+            6 Deck gun
+        
+        5-6 Crew KIA: Roll d6 for crew member (medic save 5+)
+        
+        Args:
+            u_boat: U-boat taking damage
+            attack_type: "depth_charge", "gunfire", or "b24"
+            ship_type: "corvette" or "destroyer" (destroyer rolls 2d6, takes lowest)
+            
+        Returns:
+            UBoatDamageResult with damage effects
+        """
+        # Roll on damage chart
+        if attack_type == "gunfire":
+            # Gunfire is automatic critical hit (roll 1 on chart)
+            chart_roll = 1
+        elif ship_type == "destroyer" and attack_type == "depth_charge":
+            # Destroyer rolls 2d6, takes lowest
+            roll1 = self.dice.roll_1d6()
+            roll2 = self.dice.roll_1d6()
+            chart_roll = min(roll1, roll2)
+        else:
+            # Corvette or other: roll 1d6
+            chart_roll = self.dice.roll_1d6()
+        
+        hull_damage = 0
+        systems_damaged: List[str] = []
+        crew_casualties: List[str] = []
+        medic_saves: List[Tuple[str, bool]] = []
+        is_destroyed = False
+        
+        # Apply damage based on chart roll
+        if chart_roll == 1:
+            # Critical Hit!
+            crit_roll = self.dice.roll_1d6()
+            
+            if crit_roll == 1:
+                # U-Boat Destroyed
+                is_destroyed = True
+                u_boat.hull_damage = 4
+                effect = "U-BOAT DESTROYED!"
+                description = f"Critical Hit! Roll {crit_roll}: {effect}"
+            
+            elif crit_roll == 2:
+                # +2 Hull Damage
+                hull_damage = 2
+                u_boat.hull_damage = min(4, u_boat.hull_damage + hull_damage)
+                effect = f"+2 Hull Damage (total: {u_boat.hull_damage})"
+                description = f"Critical Hit! Roll {crit_roll}: {effect}"
+                if u_boat.hull_damage >= 4:
+                    is_destroyed = True
+                    description += " - U-BOAT DESTROYED!"
+            
+            elif crit_roll in [3, 4]:
+                # Torp tubes 3d6
+                damaged_tubes = self._damage_torpedo_tubes(u_boat, 3)
+                systems_damaged.extend([f"Torpedo Tube {t+1}" for t in damaged_tubes])
+                effect = f"Torpedo tubes damaged: {[t+1 for t in damaged_tubes]}"
+                description = f"Critical Hit! Roll {crit_roll}: {effect}"
+            
+            else:  # crit_roll in [5, 6]
+                # Damage x2 (roll twice on 3-4 below)
+                result1 = self._apply_general_damage_roll(u_boat)
+                result2 = self._apply_general_damage_roll(u_boat)
+                systems_damaged.extend(result1[0])
+                systems_damaged.extend(result2[0])
+                hull_damage = result1[1] + result2[1]
+                effect = f"Double damage: {result1[2]} AND {result2[2]}"
+                description = f"Critical Hit! Roll {crit_roll}: {effect}"
+                if u_boat.hull_damage >= 4:
+                    is_destroyed = True
+                    description += " - U-BOAT DESTROYED!"
+        
+        elif chart_roll == 2:
+            # Hull Damage +1
+            hull_damage = 1
+            u_boat.hull_damage = min(4, u_boat.hull_damage + hull_damage)
+            effect = f"+1 Hull Damage (total: {u_boat.hull_damage})"
+            description = f"Hull Damage! {effect}"
+            if u_boat.hull_damage >= 4:
+                is_destroyed = True
+                description += " - U-BOAT DESTROYED!"
+        
+        elif chart_roll in [3, 4]:
+            # General Damage - roll 1d6
+            systems, hull, effect = self._apply_general_damage_roll(u_boat)
+            systems_damaged.extend(systems)
+            hull_damage = hull
+            description = f"Damage! {effect}"
+            if u_boat.hull_damage >= 4:
+                is_destroyed = True
+                description += " - U-BOAT DESTROYED!"
+        
+        else:  # chart_roll in [5, 6]
+            # Crew KIA
+            crew_result = self._random_crew_casualty(u_boat)
+            if crew_result[0] is not None:
+                crew_name, saved, save_roll = crew_result
+                if saved:
+                    medic_saves.append((crew_name, True))
+                    effect = f"{crew_name} targeted but saved by Medic (rolled {save_roll})"
+                else:
+                    crew_casualties.append(crew_name)
+                    effect = f"{crew_name} KIA"
+                    if save_roll is not None:
+                        effect += f" (Medic save failed: {save_roll})"
+            else:
+                effect = "Crew member already KIA - no effect"
+            description = f"Crew Casualty! {effect}"
+        
+        return UBoatDamageResult(
+            damage_type="escort_attack",
+            roll=chart_roll,
+            effect=effect,
+            description=description,
+            hull_damage_taken=hull_damage,
+            systems_damaged=systems_damaged,
+            crew_casualties=crew_casualties,
+            medic_saves=medic_saves,
+            is_destroyed=is_destroyed
+        )
+    
+    def _apply_general_damage_roll(self, u_boat: UBoat) -> Tuple[List[str], int, str]:
+        """
+        Apply general damage (3-4 on main chart).
+        
+        Returns:
+            (systems_damaged, hull_damage, effect_description)
+        """
+        roll = self.dice.roll_1d6()
+        systems: List[str] = []
+        hull = 0
+        
+        if roll == 1:
+            # +1 Hull Damage
+            hull = 1
+            u_boat.hull_damage = min(4, u_boat.hull_damage + hull)
+            effect = f"+1 Hull Damage (total: {u_boat.hull_damage})"
+        
+        elif roll == 2:
+            # Flak gun
+            if not u_boat.flak_gun_damaged:
+                u_boat.flak_gun_damaged = True
+                systems.append("Flak Gun")
+                effect = "Flak Gun damaged"
+            else:
+                effect = "Flak Gun already damaged"
+        
+        elif roll == 3:
+            # Torp tubes 2d6
+            damaged_tubes = self._damage_torpedo_tubes(u_boat, 2)
+            systems.extend([f"Torpedo Tube {t+1}" for t in damaged_tubes])
+            effect = f"Torpedo tubes damaged: {[t+1 for t in damaged_tubes]}" if damaged_tubes else "No tubes damaged"
+        
+        elif roll in [4, 5]:
+            # Engine
+            if not u_boat.engine_damaged:
+                u_boat.engine_damaged = True
+                systems.append("Engine")
+                effect = "Engine damaged"
+            else:
+                effect = "Engine already damaged"
+        
+        else:  # roll == 6
+            # Deck gun
+            if not u_boat.deck_gun_damaged:
+                u_boat.deck_gun_damaged = True
+                systems.append("Deck Gun")
+                effect = "Deck Gun damaged"
+            else:
+                effect = "Deck Gun already damaged"
+        
+        return (systems, hull, effect)
+    
+    def _damage_torpedo_tubes(self, u_boat: UBoat, num_dice: int) -> List[int]:
+        """
+        Damage torpedo tubes by rolling dice.
+        
+        Args:
+            u_boat: U-boat to damage
+            num_dice: Number of d6 to roll
+            
+        Returns:
+            List of tube indices that were damaged
+        """
+        damaged = []
+        for _ in range(num_dice):
+            roll = self.dice.roll_1d6()
+            if roll <= 5:  # Valid tube number (1-5)
+                tube_index = roll - 1
+                # Only damage if not already damaged
+                if u_boat.torpedo_tubes[tube_index]:
+                    u_boat.torpedo_tubes[tube_index] = False
+                    damaged.append(tube_index)
+        return damaged

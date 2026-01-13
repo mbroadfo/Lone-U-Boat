@@ -130,3 +130,11 @@ class Ship:
     facing: Facing
     ship_type: str  # 'merchant', 'corvette', 'destroyer'
     damaged: bool = False
+
+
+@dataclass
+class Aircraft:
+    """An allied aircraft (B-24 Liberator)."""
+    position: HexCoord
+    facing: Facing
+    aircraft_type: str = 'b24'  # Future-proof for other aircraft types

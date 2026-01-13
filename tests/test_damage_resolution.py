@@ -34,6 +34,14 @@ class MockDice:
             return result
         return 1  # Default
     
+    def roll_1d6(self) -> int:
+        """Return next fixed roll (1d6)."""
+        return self.roll(1)
+    
+    def roll_2d6(self) -> int:
+        """Return next fixed roll (2d6)."""
+        return self.roll(2)
+    
     def random_choice(self, choices: List[int]) -> int:
         """Return first choice."""
         return choices[0] if choices else 0

@@ -77,6 +77,11 @@ class GameRenderer:
         for ship in game_state.ships:
             self.render_ship(ship)
         
+        # Draw aircraft
+        if hasattr(game_state, 'aircraft'):
+            for aircraft in game_state.aircraft:
+                self.render_aircraft(aircraft)
+        
         # Draw U-boat
         self.render_u_boat(game_state.u_boat)
         
@@ -283,6 +288,38 @@ class GameRenderer:
         
         # Rotate image based on facing (aligned with hex edges)
         angle_deg = -60 * ship.facing.value
+        rotated_image = pygame.transform.rotate(image, angle_deg)
+        
+        # Center the rotated image
+        rect = rotated_image.get_rect(center=(int(center[0]), int(center[1])))
+        self.screen.blit(rotated_image, rect)
+    
+    def render_aircraft(self, aircraft: 'Aircraft') -> None:
+        """Render aircraft (B-24) using PNG image.
+        
+        Args:
+            aircraft: Aircraft instance to render
+        """
+        from .models import Aircraft
+        
+        center = self.hex_grid.hex_to_pixel(aircraft.position)
+        
+        # Get B-24 image
+        image = self.ship_images.get('b24')
+        
+        if image is None:
+            # Fallback to colored triangle
+            size = 20
+            points = [
+                (center[0], center[1] - size),
+                (center[0] - size, center[1] + size),
+                (center[0] + size, center[1] + size)
+            ]
+            pygame.draw.polygon(self.screen, (100, 100, 255), points)
+            return
+        
+        # Rotate image based on facing
+        angle_deg = -60 * aircraft.facing.value
         rotated_image = pygame.transform.rotate(image, angle_deg)
         
         # Center the rotated image
