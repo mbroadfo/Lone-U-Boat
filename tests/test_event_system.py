@@ -4,6 +4,10 @@ Tests for End Turn Events System (Phase 6).
 Tests event rolling, condition checking, spawning mechanics, and special effects.
 """
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import pytest
 from unittest.mock import MagicMock, patch
 
