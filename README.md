@@ -18,16 +18,17 @@ through mission-specific maps. The game features:
 
 ## Development Status
 
-**Current Phase**: Phase 3 Complete ✅  
-**Next Phase**: Phase 4 - Enemy AI & Automation
+**Current Phase**: Phase 4 - Enemy AI & Automation (In Progress)  
+**Next Phase**: Complete Escort AI and Depth Charges
 
 ### Completed Phases
 
 - ✅ **Phase 1**: Turn system with 6-phase cycle and AP rolling
 - ✅ **Phase 2**: Validators (LOS, range, movement, torpedoes, repairs, combat, depth)
 - ✅ **Phase 3**: All 7 U-boat actions (Move, Rotate, DepthChange, Repair, DeckGun, LoadTorpedo, FireTorpedo)
+- ⚙️ **Phase 4**: Merchant AI (complete), Detection Phase automation (complete), Escort AI (pending)
 
-**Test Coverage**: 161 tests across 13 test files, all passing
+**Test Coverage**: 183+ tests across 16 test files, all passing
 
 See [PHASE_1_AUDIT.md](PHASE_1_AUDIT.md) for comprehensive Phase 3 completion audit.
 

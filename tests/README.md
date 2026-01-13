@@ -44,6 +44,9 @@ python -m pytest tests/
 ### Phase 4 Enemy AI (In Progress)
 
 - **test_merchant_ai.py** (14 tests) - Merchant movement along predefined paths, damage rules
+- **test_merchant_integration.py** (3 tests) - Merchant phase integration with game loop
+- **test_detection_ai.py** (16 tests) - Escort detection rolls, range/LOS checks, depth modifiers
+- **test_detection_integration.py** (5 tests) - Detection phase integration with game loop
 
 All tests validate against JSON rule definitions from `missions/u_boat_ruleset_default.json`.
 

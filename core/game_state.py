@@ -18,6 +18,7 @@ from .board_layout import BoardLayoutRuntime
 from .turn_manager import TurnManager
 from .actions import ActionQueue
 from .merchant_ai import MerchantAI
+from .detection_ai import DetectionAI
 from missions.mission_rules_loader import MissionRules, load_mission_rules
 
 
@@ -54,6 +55,12 @@ class Game:
         # Initialize merchant AI
         self.merchant_ai = MerchantAI(
             mission_config=self.mission_config,
+            mission_rules=self.mission_rules,
+            dice_roller=self.turn_manager.dice
+        )
+        
+        # Initialize detection AI
+        self.detection_ai = DetectionAI(
             mission_rules=self.mission_rules,
             dice_roller=self.turn_manager.dice
         )
@@ -364,12 +371,21 @@ class Game:
         """Calculate detection level changes."""
         self.turn_manager.add_phase_log("Detection Phase", "Calculating detection...")
         
-        # TODO Phase 4: Implement detection calculation
-        # For now, just log current DL
-        dl_names = ["Silent", "Aware", "Traced", "Locked"]
-        dl_name = dl_names[self.detection_level] if self.detection_level < 4 else "MAX"
-        self.turn_manager.add_phase_log("Detection Phase",
-            f"Detection Level: {self.detection_level} ({dl_name})")
+        # Execute detection AI
+        new_detection_level, messages = self.detection_ai.execute_detection_phase(
+            ships=self.ships,
+            u_boat=self.u_boat,
+            current_detection_level=self.detection_level,
+            land_hexes=self.land_hexes,
+            hex_grid=self.hex_grid
+        )
+        
+        # Log all detection messages
+        for message in messages:
+            self.turn_manager.add_phase_log("Detection Phase", message)
+        
+        # Update detection level
+        self.detection_level = new_detection_level
     
     def _execute_escort_phase(self):
         """Execute escort ship behaviors."""
