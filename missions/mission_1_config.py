@@ -75,6 +75,33 @@ SHIPS_START: list[dict[str, Any]] = [
 
 
 # ====================
+# MERCHANT PATHS
+# ====================
+
+# Predefined paths for merchant ships (waypoints they follow)
+MERCHANT_PATHS: list[dict[str, Any]] = [
+    {
+        'ship_index': 0,  # First merchant in SHIPS_START
+        'waypoints': [
+            (1, 4),  # Start
+            (1, 5),
+            (1, 6),
+            (1, 7),
+            (2, 7),  # Turn east
+            (3, 7),
+            (4, 7),
+            (5, 7),
+            (6, 7),
+            (6, 8),  # Turn south
+            (6, 9),
+            (6, 10), # Exit
+        ],
+        'exit_hex': (6, 10),
+    },
+]
+
+
+# ====================
 # MISSION OBJECTIVES
 # ====================
 

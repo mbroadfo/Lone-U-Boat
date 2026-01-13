@@ -17,6 +17,7 @@ from .renderer import GameRenderer
 from .board_layout import BoardLayoutRuntime
 from .turn_manager import TurnManager
 from .actions import ActionQueue
+from .merchant_ai import MerchantAI
 from missions.mission_rules_loader import MissionRules, load_mission_rules
 
 
@@ -49,6 +50,13 @@ class Game:
         
         # Initialize turn manager
         self.turn_manager = TurnManager(self.mission_rules)
+        
+        # Initialize merchant AI
+        self.merchant_ai = MerchantAI(
+            mission_config=self.mission_config,
+            mission_rules=self.mission_rules,
+            dice_roller=self.turn_manager.dice
+        )
         
         # Next screen for transitions (back to menu, etc.)
         self.next_screen: Optional[str] = None
@@ -338,11 +346,19 @@ class Game:
         """Execute merchant ship movements."""
         self.turn_manager.add_phase_log("Merchant Phase", "Merchant ships acting...")
         
-        # TODO Phase 4: Implement merchant AI
-        for ship in self.ships:
-            if ship.ship_type == 'merchant':
+        # Execute merchant AI
+        messages = self.merchant_ai.execute_merchant_phase(self.ships)
+        
+        # Log all merchant movements
+        for message in messages:
+            self.turn_manager.add_phase_log("Merchant Phase", message)
+        
+        # Check if any merchants have exited
+        exited = self.merchant_ai.check_merchant_exit(self.ships)
+        if exited:
+            for ship_index, ship in exited:
                 self.turn_manager.add_phase_log("Merchant Phase",
-                    f"Merchant at {ship.position.q},{ship.position.r} (no AI yet)")
+                    f"⚠ Merchant escaped! Mission failure condition triggered.")
     
     def _execute_detection_phase(self):
         """Calculate detection level changes."""

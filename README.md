@@ -16,6 +16,21 @@ through mission-specific maps. The game features:
 - **Mission-based gameplay** with unique objectives and map layouts
 - **Status tracking** for torpedoes, hull damage, crew, and detection
 
+## Development Status
+
+**Current Phase**: Phase 3 Complete ✅  
+**Next Phase**: Phase 4 - Enemy AI & Automation
+
+### Completed Phases
+
+- ✅ **Phase 1**: Turn system with 6-phase cycle and AP rolling
+- ✅ **Phase 2**: Validators (LOS, range, movement, torpedoes, repairs, combat, depth)
+- ✅ **Phase 3**: All 7 U-boat actions (Move, Rotate, DepthChange, Repair, DeckGun, LoadTorpedo, FireTorpedo)
+
+**Test Coverage**: 161 tests across 13 test files, all passing
+
+See [PHASE_1_AUDIT.md](PHASE_1_AUDIT.md) for comprehensive Phase 3 completion audit.
+
 ## Installation
 
 ### Prerequisites

@@ -34,6 +34,17 @@ python -m pytest tests/
 - **test_combat_resolver.py** - Combat resolution with deck gun and torpedoes
 - **test_torpedo_validator.py** - Torpedo loading and firing validation
 
+### Phase 3 Actions (100% Complete)
+
+- **test_movement_actions.py** - MoveAction, RotateAction tests
+- **test_combat_actions.py** - RepairAction, DeckGunAction tests
+- **test_action_system.py** - ActionQueue integration tests
+- **test_damage_resolution.py** - Damage application tests
+
+### Phase 4 Enemy AI (In Progress)
+
+- **test_merchant_ai.py** (14 tests) - Merchant movement along predefined paths, damage rules
+
 All tests validate against JSON rule definitions from `missions/u_boat_ruleset_default.json`.
 
 ## Test Organization
