@@ -176,7 +176,7 @@ class EscortAI:
         target: HexCoord,
         land_hexes: Set[HexCoord],
         ships: List[Ship],
-        hex_grid: HexGrid
+        mission_hexes: Optional[Set[HexCoord]] = None
     ) -> Optional[Facing]:
         """
         Calculate which direction to turn (left or right).
@@ -186,7 +186,7 @@ class EscortAI:
             target: Target hex (anchor or U-boat)
             land_hexes: Set of land hexes
             ships: List of all ships (for blocking check)
-            hex_grid: Hex grid for distance calculations
+            mission_hexes: Set of valid mission hexes
             
         Returns:
             New facing direction or None if no turn needed
@@ -194,7 +194,7 @@ class EscortAI:
         # Check if escort is on same hex as target
         if escort.position == target:
             # Only turn if blocked
-            if self._is_hex_blocked(escort.facing.forward(escort.position), land_hexes, ships, hex_grid):
+            if self._is_hex_blocked(escort.facing.forward(escort.position), land_hexes, ships, mission_hexes):
                 return self._random_turn(escort.facing)
             return None
         
@@ -203,7 +203,7 @@ class EscortAI:
         
         # If facing target (angle = 0), only turn if blocked
         if angle == 0:
-            if self._is_hex_blocked(escort.facing.forward(escort.position), land_hexes, ships, hex_grid):
+            if self._is_hex_blocked(escort.facing.forward(escort.position), land_hexes, ships, mission_hexes):
                 return self._random_turn(escort.facing)
             return None
         
@@ -276,7 +276,7 @@ class EscortAI:
         hex_coord: HexCoord,
         land_hexes: Set[HexCoord],
         ships: List[Ship],
-        hex_grid: HexGrid
+        mission_hexes: Optional[Set[HexCoord]] = None
     ) -> bool:
         """
         Check if a hex is blocked (land, ship, or off-map).
@@ -285,7 +285,7 @@ class EscortAI:
             hex_coord: Hex to check
             land_hexes: Set of land hexes
             ships: List of all ships
-            hex_grid: Hex grid for validation
+            mission_hexes: Set of valid mission hexes (for off-map check)
             
         Returns:
             True if hex is blocked
@@ -299,10 +299,10 @@ class EscortAI:
             if ship.position == hex_coord:
                 return True
         
-        # Check if off-map (not in valid mission hexes would be ideal, but we approximate)
-        # For now, just use basic bounds check
-        if not (0 <= hex_coord.q < hex_grid.cols and 0 <= hex_coord.r < hex_grid.rows):
-            return True
+        # Check if off-map (not in valid mission hexes)
+        if mission_hexes is not None:
+            if hex_coord not in mission_hexes:
+                return True
         
         return False
     
@@ -312,7 +312,7 @@ class EscortAI:
         target: HexCoord,
         land_hexes: Set[HexCoord],
         ships: List[Ship],
-        hex_grid: HexGrid
+        mission_hexes: Optional[Set[HexCoord]] = None
     ) -> Optional[HexCoord]:
         """
         Get the next hex to move toward target.
@@ -322,7 +322,7 @@ class EscortAI:
             target: Target position (U-boat)
             land_hexes: Set of land hexes
             ships: List of all ships
-            hex_grid: Hex grid
+            mission_hexes: Set of valid mission hexes
             
         Returns:
             Next hex to move to, or None if can't move
@@ -331,7 +331,7 @@ class EscortAI:
         next_hex = escort.facing.forward(escort.position)
         
         # Check if blocked
-        if self._is_hex_blocked(next_hex, land_hexes, ships, hex_grid):
+        if self._is_hex_blocked(next_hex, land_hexes, ships, mission_hexes):
             return None
         
         return next_hex
@@ -484,7 +484,8 @@ class EscortAI:
         u_boat: UBoat,
         detection_level: int,
         land_hexes: Set[HexCoord],
-        hex_grid: HexGrid
+        hex_grid: HexGrid,
+        mission_hexes: Optional[Set[HexCoord]] = None
     ) -> Tuple[int, List[str]]:
         """
         Execute the escort phase for all escort ships.
@@ -495,6 +496,7 @@ class EscortAI:
             detection_level: Current detection level (0-3)
             land_hexes: Set of land hexes
             hex_grid: Hex grid
+            mission_hexes: Set of valid mission hexes (for off-map check)
             
         Returns:
             Tuple of (new_detection_level, messages)
@@ -532,7 +534,7 @@ class EscortAI:
                     if action == EscortAction.MOVE:
                         # Try to move in facing direction
                         next_hex = self.get_next_hex_toward_target(
-                            escort, u_boat.position, land_hexes, ships, hex_grid
+                            escort, u_boat.position, land_hexes, ships, mission_hexes
                         )
                         
                         if next_hex:
@@ -553,7 +555,7 @@ class EscortAI:
                             if die_result in [2, 4, 6]:
                                 target = self.get_turn_target(escort, u_boat, current_dl)
                                 new_facing = self.calculate_turn_direction(
-                                    escort, target, land_hexes, ships, hex_grid
+                                    escort, target, land_hexes, ships, mission_hexes
                                 )
                                 if new_facing and new_facing != escort.facing:
                                     old_facing = escort.facing
@@ -564,7 +566,7 @@ class EscortAI:
                         # Turn toward anchor or U-boat based on DL
                         target = self.get_turn_target(escort, u_boat, current_dl)
                         new_facing = self.calculate_turn_direction(
-                            escort, target, land_hexes, ships, hex_grid
+                            escort, target, land_hexes, ships, mission_hexes
                         )
                         
                         if new_facing and new_facing != escort.facing:

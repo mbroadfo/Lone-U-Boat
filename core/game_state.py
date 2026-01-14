@@ -362,6 +362,7 @@ class Game:
             self.turn_manager.add_phase_log("U-Boat Phase", 
                 f"Committing {len(self.action_queue.actions)} queued action(s)...")
             
+            # commit_all now clears the queue and deducts AP internally
             results = self.action_queue.commit_all(self)
             
             # Log each action result
@@ -373,9 +374,6 @@ class Game:
                 else:
                     self.turn_manager.add_phase_log("U-Boat Phase", 
                         f"✗ Action failed: {result.message}")
-            
-            # Clear the queue after committing
-            self.action_queue.clear()
         else:
             self.turn_manager.add_phase_log("U-Boat Phase", 
                 "Actions already executed")
@@ -434,7 +432,8 @@ class Game:
             u_boat=self.u_boat,
             detection_level=self.detection_level,
             land_hexes=self.land_hexes,
-            hex_grid=self.hex_grid
+            hex_grid=self.hex_grid,
+            mission_hexes=self.mission_hexes
         )
         
         # Log all escort action messages
@@ -531,14 +530,14 @@ class Game:
         # TODO Phase 6: Check victory/defeat conditions
     
     def _start_new_turn(self):
-        """Start a new turn."""
+        """Start a new turn - reset state and wait for player to roll AP."""
         # Apply depth detection modifier before rolling AP
         self.detection_level = self.turn_manager.apply_depth_detection_modifier(
             self.detection_level,
             self.u_boat.depth
         )
         
-        # Increment turn and reset to U-Boat phase, but don't roll dice yet
+        # Increment turn and reset to U-Boat phase, waiting for AP roll
         self.turn_manager.turn_number += 1
         self.turn_manager.current_phase = GamePhase.UBOAT_PHASE
         self.turn_manager.ap_tracker = None  # Player must click to roll
@@ -548,8 +547,11 @@ class Game:
         # Reset AP to 0 until player rolls
         self.u_boat.action_points = 0
         
-        # Initialize new action queue with 0 AP until dice are rolled
-        self.action_queue = ActionQueue(max_ap=0)
+        # Reset action queue for new turn (0 AP until dice are rolled)
+        if hasattr(self, 'action_queue'):
+            self.action_queue.reset_for_new_turn(0)
+        else:
+            self.action_queue = ActionQueue(max_ap=0)
         self.selected_target = None
     
     def update(self):

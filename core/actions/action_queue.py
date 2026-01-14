@@ -28,6 +28,7 @@ class ActionQueue:
         """
         self.actions: List[Action] = []
         self.max_ap = max_ap
+        self.spent_ap: int = 0  # Track total AP spent this turn
         self._committed = False
     
     def add_action(self, action: Action, game_state: Any) -> Tuple[bool, str]:
@@ -112,6 +113,17 @@ class ActionQueue:
         self.actions.clear()
         self._committed = False
     
+    def reset_for_new_turn(self, new_max_ap: int):
+        """Reset queue for a new turn with new AP allocation.
+        
+        Args:
+            new_max_ap: Action points for the new turn
+        """
+        self.actions.clear()
+        self.max_ap = new_max_ap
+        self.spent_ap = 0
+        self._committed = False
+    
     def commit_all(self, game_state: Any) -> List[ActionResult]:
         """
         Execute all queued actions in order.
@@ -139,6 +151,7 @@ class ActionQueue:
             )]
         
         results: List[ActionResult] = []
+        total_cost = self.get_total_cost(game_state)
         
         for action in self.actions:
             result = action.execute(game_state)
@@ -148,7 +161,14 @@ class ActionQueue:
             if not result.success:
                 break
         
+        # Deduct AP from available pool
+        self.spent_ap += total_cost
+        self.max_ap -= total_cost
+        
+        # Mark as committed and clear the queue
         self._committed = True
+        self.actions.clear()
+        
         return results
     
     def get_action_summary(self, game_state: Any) -> List[str]:

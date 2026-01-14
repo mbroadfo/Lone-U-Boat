@@ -181,9 +181,39 @@ class TurnManager:
             # Keep defaults if parsing fails
             pass
     
+    def roll_action_points_only(self, u_boat: UBoat) -> int:
+        """
+        Roll for action points without advancing turn number.
+        Used for initial turn setup when player clicks "Roll for AP".
+        
+        Args:
+            u_boat: The player's U-boat
+            
+        Returns:
+            Total action points for this turn
+        """
+        # Roll for Action Points
+        ap = self._roll_action_points(u_boat)
+        
+        # Apply forced dive penalty if applicable
+        if self.forced_dive_penalty > 0:
+            ap = max(0, ap - self.forced_dive_penalty)
+            self.add_phase_log("U-Boat Phase", 
+                             f"Forced dive penalty: -{self.forced_dive_penalty} AP")
+            self.forced_dive_penalty = 0
+        
+        # Initialize AP tracker
+        self.ap_tracker = ActionPointTracker(ap)
+        
+        self.add_phase_log("U-Boat Phase", 
+                         f"Turn {self.turn_number} started with {ap} AP")
+        
+        return ap
+    
     def start_new_turn(self, u_boat: UBoat) -> int:
         """
         Start a new turn, rolling AP and applying modifiers.
+        This increments the turn number and should only be called when wrapping from END_TURN_PHASE.
         
         Args:
             u_boat: The player's U-boat

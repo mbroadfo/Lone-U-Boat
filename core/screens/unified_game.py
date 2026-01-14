@@ -172,25 +172,18 @@ class UnifiedGameScreen(BaseScreen):
             else:
                 # Game is active - handle game keys
                 if event.key == pygame.K_SPACE:
-                    # Forward phase advancement to game
-                    self.game._advance_to_next_phase()  # type: ignore[attr-defined]
-                    # Add visual feedback
-                    phase_name = self.game.turn_manager.get_current_phase_name()
-                    self.add_event(f"→ {phase_name}")
-                    
-                    # If we just started U-Boat phase (new turn), show AP roll details
+                    # Check if in U-Boat phase with uncommitted actions
                     from ..models import GamePhase
                     if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
-                        if self.game.turn_manager.last_ap_roll:
-                            roll_info = self.game.turn_manager.last_ap_roll
-                            rolls_str = "][".join([str(r) for r in roll_info['rolls']])
-                            
-                            event_msg = f"Turn {self.game.turn_manager.turn_number}: Rolled [{rolls_str}] → {roll_info['highest']}"
-                            if roll_info['captain_bonus'] > 0:
-                                event_msg += f" +{roll_info['captain_bonus']} (Captain)"
-                            event_msg += f" = {roll_info['total_ap']} AP"
-                            
-                            self.add_event(event_msg)
+                        # If actions are queued but not committed, warn player
+                        if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
+                            self.add_event("⚠ Commit your actions first (press C or click Commit button)")
+                        else:
+                            # No uncommitted actions, can advance
+                            self._advance_phase_and_update_ui()
+                    else:
+                        # Not in U-Boat phase, can always advance
+                        self._advance_phase_and_update_ui()
                 
                 elif event.key == pygame.K_u:
                     # Undo last action from queue
@@ -209,7 +202,7 @@ class UnifiedGameScreen(BaseScreen):
                     from ..models import GamePhase
                     if current_phase == GamePhase.UBOAT_PHASE:
                         if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
-                            # Execute all actions immediately
+                            # Execute all actions immediately (commit_all clears queue and deducts AP)
                             results = self.game.action_queue.commit_all(self.game)
                             for result in results:
                                 if result.success:
@@ -217,7 +210,6 @@ class UnifiedGameScreen(BaseScreen):
                                     self.add_event(f"✓ {action_name}")
                                 else:
                                     self.add_event(f"✗ Failed: {result.message}")
-                            self.game.action_queue.clear()
                             remaining = self.game.action_queue.get_remaining_ap(self.game)
                             self.add_event(f"Committed (AP: {remaining}/{self.game.action_queue.max_ap})")
                         else:
@@ -277,10 +269,11 @@ class UnifiedGameScreen(BaseScreen):
                         self.dice_roll_button_rect.collidepoint(mouse_pos)):
                         from ..models import GamePhase
                         if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
-                            # Roll dice and initialize AP tracker
-                            ap = self.game.turn_manager.start_new_turn(self.game.u_boat)
+                            # Roll dice and initialize AP tracker (without incrementing turn)
+                            ap = self.game.turn_manager.roll_action_points_only(self.game.u_boat)
                             self.game.u_boat.action_points = ap
-                            self.game.action_queue.max_ap = ap
+                            # Reset action queue for new turn
+                            self.game.action_queue.reset_for_new_turn(ap)
                             
                             # Clear dice button rect so it doesn't interfere with action button clicks
                             self.dice_roll_button_rect = None
@@ -396,7 +389,7 @@ class UnifiedGameScreen(BaseScreen):
                                             break
                                 
                                 else:
-                                    # No interactive actions - execute all immediately
+                                    # No interactive actions - execute all immediately (commit_all clears queue and deducts AP)
                                     results = self.game.action_queue.commit_all(self.game)
                                     for result in results:
                                         if result.success:
@@ -404,7 +397,6 @@ class UnifiedGameScreen(BaseScreen):
                                             self.add_event(f"✓ {action_name}")
                                         else:
                                             self.add_event(f"✗ Failed: {result.message}")
-                                    self.game.action_queue.clear()
                                     remaining = self.game.action_queue.get_remaining_ap(self.game)
                                     self.add_event(f"Committed (AP: {remaining}/{self.game.action_queue.max_ap})")
                             else:
@@ -450,6 +442,7 @@ class UnifiedGameScreen(BaseScreen):
             self.awaiting_initial_setup = False
             self.add_event(f"U-Boat positioned at {self.selected_depth.name}, facing {self.selected_facing.name}")
             self.add_event("Turn 1 - U-Boat Phase")
+            self.add_event("Click 'Roll for AP' to begin your turn")
         
         # Depth selection
         elif event.key == pygame.K_1:
@@ -474,6 +467,37 @@ class UnifiedGameScreen(BaseScreen):
             self.selected_facing = Facing.NORTHWEST
         elif event.key == pygame.K_d:
             self.selected_facing = Facing.NORTHEAST
+    
+    def _advance_phase_and_update_ui(self):
+        """Advance to next phase and update UI with phase information."""
+        # Forward phase advancement to game
+        self.game._advance_to_next_phase()  # type: ignore[attr-defined]
+        
+        # Add visual feedback
+        phase_name = self.game.turn_manager.get_current_phase_name()
+        self.add_event(f"→ {phase_name}")
+        
+        # Show phase log messages in event log
+        phase_logs = self.game.turn_manager.get_phase_log(phase_name)
+        for log_msg in phase_logs:
+            self.add_event(f"  {log_msg}")
+        
+        # If we just started U-Boat phase (new turn), prompt for AP roll
+        from ..models import GamePhase
+        if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
+            if self.game.turn_manager.ap_tracker is None:
+                self.add_event("Click 'Roll for AP' to begin your turn")
+            elif self.game.turn_manager.last_ap_roll:
+                # This shouldn't happen with new flow, but keep for safety
+                roll_info = self.game.turn_manager.last_ap_roll
+                rolls_str = "][".join([str(r) for r in roll_info['rolls']])
+                
+                event_msg = f"Turn {self.game.turn_manager.turn_number}: Rolled [{rolls_str}] → {roll_info['highest']}"
+                if roll_info['captain_bonus'] > 0:
+                    event_msg += f" +{roll_info['captain_bonus']} (Captain)"
+                event_msg += f" = {roll_info['total_ap']} AP"
+                
+                self.add_event(event_msg)
     
     def _handle_alignment_input(self, event: pygame.event.Event) -> None:
         """Handle input during alignment mode (editor)."""
@@ -2352,6 +2376,40 @@ class UnifiedGameScreen(BaseScreen):
                 self.font_small,
                 color=(180, 180, 180)
             )
+        
+        # Add SPACE bar hint at bottom of action panel
+        from ..models import GamePhase
+        phase_hint_y = y + height - 60
+        
+        # Draw separator line
+        pygame.draw.line(
+            self.screen,
+            (80, 80, 80),
+            (x + 10, phase_hint_y - 10),
+            (x + width - 10, phase_hint_y - 10),
+            1
+        )
+        
+        # Show current phase and SPACE hint
+        current_phase_name = self.game.turn_manager.get_current_phase_name()
+        self.draw_text(
+            f"Current: {current_phase_name}",
+            x + width // 2,
+            phase_hint_y,
+            self.font_small,
+            color=(200, 200, 150),
+            center=True
+        )
+        
+        # SPACE bar hint
+        self.draw_text(
+            "Press SPACE to advance phase",
+            x + width // 2,
+            phase_hint_y + 20,
+            self.font_small,
+            color=(100, 255, 100),
+            center=True
+        )
     
     def _get_action_description(self, action: Any) -> str:
         """Get descriptive name for an action."""
