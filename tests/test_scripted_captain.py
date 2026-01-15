@@ -3,6 +3,10 @@ Test script with scripted captain - follows predetermined instructions.
 This eliminates randomness to debug specific scenarios consistently.
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pygame
 from core.game_state import Game
 from core.scripted_captain import ScriptedCaptain

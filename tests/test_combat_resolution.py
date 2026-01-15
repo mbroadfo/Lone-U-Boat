@@ -1,5 +1,9 @@
 """Test combat resolution with captain AI."""
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pygame
 from core.game_state import Game
 from core.uboat_ai import UBoatAI

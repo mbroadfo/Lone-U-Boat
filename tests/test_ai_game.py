@@ -3,6 +3,10 @@ Test script to run the game with AI U-boat captain.
 Tests full turn cycle through all phases automatically.
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pygame
 import sys
 from io import StringIO

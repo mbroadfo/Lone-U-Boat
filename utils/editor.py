@@ -552,17 +552,7 @@ class BoardEditor:
         self.renderer.global_offset_x = self.original_global_offset_x + adjustment_x + self.user_status_adjustment_x
         self.renderer.global_offset_y = self.original_global_offset_y + adjustment_y + self.user_status_adjustment_y
         
-        # Debug: Print rendering info once on startup
-        if not hasattr(self, '_debug_printed'):
-            self._debug_printed = True
-            print(f"\n=== Render Debug Info ===")
-            print(f"Window size: {screen_width}x{screen_height}")
-            print(f"Board area: {board_width}x{board_height} at ({board_x}, {board_y})")
-            print(f"Map scale: {self.scale:.3f}")
-            print(f"Adjustment: ({adjustment_x}, {adjustment_y})")
-            print(f"Hex grid offset: ({int(self.hex_grid.offset_x)}, {int(self.hex_grid.offset_y)})")
-            print(f"Status offset: ({int(self.renderer.global_offset_x)}, {int(self.renderer.global_offset_y)})")
-            print(f"Show: grid={self.show_grid}, map={self.show_map}, markers={self.show_all_markers}")
+        # (Debug prints removed for production)
             print(f"========================\n")
         
         # Render map
