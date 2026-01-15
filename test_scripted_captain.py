@@ -126,7 +126,7 @@ def run_scripted_test(num_turns: int = 10):
                     old_escort_pos = escorts[0].position
                 
                 # Advance phase (executes current phase logic)
-                game._advance_to_next_phase()
+                game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
                 phase_count += 1
                 stats['phases_executed'] += 1
                 

@@ -81,7 +81,7 @@ def test_action_result():
     
     result_str = str(result)
     print(f"Success result: {result_str}")
-    assert "✓" in result_str, "Should show success checkmark"
+    assert "[OK]" in result_str or "success" in result_str.lower(), "Should show success indicator"
     
     # Failed result
     failed = ActionResult(
@@ -93,9 +93,9 @@ def test_action_result():
     
     failed_str = str(failed)
     print(f"Failed result: {failed_str}")
-    assert "✗" in failed_str, "Should show failure marker"
+    assert "[FAIL]" in failed_str or "fail" in failed_str.lower(), "Should show failure marker"
     
-    print("✅ ActionResult tests passed!\n")
+    print("[PASS] ActionResult tests passed!\n")
 
 
 def test_mock_action():
@@ -132,7 +132,7 @@ def test_mock_action():
     print(f"Failed validation: {can_perform}, reason: '{reason}'")
     assert not can_perform, "Should fail validation"
     
-    print("✅ Mock action tests passed!\n")
+    print("[PASS] Mock action tests passed!\n")
 
 
 def test_action_queue_basic():
@@ -169,7 +169,7 @@ def test_action_queue_basic():
     print(f"Queue summary: {summary}")
     assert len(summary) == 2, "Should have 2 action summaries"
     
-    print("✅ Action queue basic tests passed!\n")
+    print("[PASS] Action queue basic tests passed!\n")
 
 
 def test_action_queue_undo():
@@ -204,7 +204,7 @@ def test_action_queue_undo():
     print(f"Remove from empty: {removed}")
     assert removed is None, "Should return None"
     
-    print("✅ Action queue undo tests passed!\n")
+    print("[PASS] Action queue undo tests passed!\n")
 
 
 def test_action_queue_ap_limit():
@@ -231,7 +231,7 @@ def test_action_queue_ap_limit():
     # Can afford check
     assert queue.can_afford(game_state), "Should be affordable"
     
-    print("✅ Action queue AP limit tests passed!\n")
+    print("[PASS] Action queue AP limit tests passed!\n")
 
 
 def test_action_queue_validation():
@@ -254,7 +254,7 @@ def test_action_queue_validation():
     success, msg = queue.add_action(valid_action, game_state)
     assert success, "Should add valid action"
     
-    print("✅ Action queue validation tests passed!\n")
+    print("[PASS] Action queue validation tests passed!\n")
 
 
 def test_action_queue_commit():
@@ -289,7 +289,7 @@ def test_action_queue_commit():
     print(f"Second commit attempt: {results2[0].message}")
     assert not results2[0].success, "Should reject second commit"
     
-    print("✅ Action queue commit tests passed!\n")
+    print("[PASS] Action queue commit tests passed!\n")
 
 
 def test_action_queue_clear():
@@ -314,7 +314,7 @@ def test_action_queue_clear():
     success, _ = queue.add_action(MockAction(cost=2), game_state)
     assert success, "Should allow new actions after clear"
     
-    print("✅ Action queue clear tests passed!\n")
+    print("[PASS] Action queue clear tests passed!\n")
 
 
 if __name__ == "__main__":
@@ -333,16 +333,16 @@ if __name__ == "__main__":
         test_action_queue_clear()
         
         print("=" * 60)
-        print("✅ ALL ACTION SYSTEM TESTS PASSED!")
+        print("[PASS] ALL ACTION SYSTEM TESTS PASSED!")
         print("=" * 60)
         
     except AssertionError as e:
-        print(f"\n❌ TEST FAILED: {e}")
+        print(f"\n[FAIL] TEST FAILED: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ ERROR: {e}")
+        print(f"\n[FAIL] ERROR: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

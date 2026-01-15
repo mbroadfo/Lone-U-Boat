@@ -20,8 +20,8 @@ class ActionResult:
     
     def __str__(self) -> str:
         """String representation for logging."""
-        status = "✓" if self.success else "✗"
-        return f"[{status}] {self.message} (AP: {self.ap_spent})"
+        status = "[OK]" if self.success else "[FAIL]"
+        return f"{status} {self.message} (AP: {self.ap_spent})"
 
 
 class Action(ABC):

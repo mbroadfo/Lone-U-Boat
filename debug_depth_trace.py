@@ -15,7 +15,7 @@ for turn in range(1, 5):
         sys.exit(1)
     # Advance through all phases
     for _ in range(6):
-        game._advance_to_next_phase()
+        game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
 
 print(f"=== START OF TURN 5 ===")
 print(f"Initial depth: {game.u_boat.depth.name}")
@@ -34,20 +34,20 @@ print(f"  Queued actions: {len(game.action_queue.actions)}")
 
 # Phase 1: U-Boat cleanup (commits actions)
 print(f"\n=== PHASE 1: U-BOAT CLEANUP ===")
-game._advance_to_next_phase()
+game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
 print(f"After U-Boat cleanup:")
 print(f"  Depth: {game.u_boat.depth.name}")
 print(f"  Position: {game.u_boat.position}")
 
 # Phase 2: Merchant
 print(f"\n=== PHASE 2: MERCHANT ===")
-game._advance_to_next_phase()
+game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
 print(f"After Merchant:")
 print(f"  U-Boat depth: {game.u_boat.depth.name}")
 
 # Phase 3: Detection
 print(f"\n=== PHASE 3: DETECTION ===")
-game._advance_to_next_phase()
+game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
 print(f"After Detection:")
 print(f"  U-Boat depth: {game.u_boat.depth.name}")
 
@@ -55,19 +55,19 @@ print(f"  U-Boat depth: {game.u_boat.depth.name}")
 print(f"\n=== PHASE 4: ESCORT ===")
 print(f"Before Escort phase:")
 print(f"  U-Boat depth: {game.u_boat.depth.name}")
-game._advance_to_next_phase()
+game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
 print(f"After Escort phase:")
 print(f"  U-Boat depth: {game.u_boat.depth.name}")
 print(f"  Hull damage: {game.u_boat.hull_damage}")
 
 # Phase 5: B-24
 print(f"\n=== PHASE 5: B-24 ===")
-game._advance_to_next_phase()
+game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
 print(f"After B-24:")
 print(f"  U-Boat depth: {game.u_boat.depth.name}")
 
 # Phase 6: End Turn Events
 print(f"\n=== PHASE 6: END TURN EVENTS ===")
-game._advance_to_next_phase()
+game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
 print(f"After End Turn Events:")
 print(f"  U-Boat depth: {game.u_boat.depth.name}")
