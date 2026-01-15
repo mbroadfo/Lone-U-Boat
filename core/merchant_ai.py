@@ -35,9 +35,12 @@ class MerchantPath:
             current_index = self.waypoints.index(current_position)
             if current_index < len(self.waypoints) - 1:
                 return self.waypoints[current_index + 1]
+            else:
+                return None  # At end of path
         except ValueError:
-            # Current position not in waypoints, find closest waypoint ahead
-            pass
+            # Current position not in waypoints, return first waypoint
+            if self.waypoints:
+                return self.waypoints[0]
         return None
     
     def get_facing_for_next_waypoint(self, current_position: HexCoord, next_waypoint: HexCoord) -> Facing:

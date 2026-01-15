@@ -316,6 +316,7 @@ class TurnManager:
         new_dl = max(0, detection_level + modifier)
         
         if modifier < 0:
+            print(f"[DL] Depth modifier at turn start: {depth.name} depth, DL {detection_level} -> {new_dl} ({modifier:+d})")
             self.add_phase_log("U-Boat Phase",
                              f"Depth modifier: {modifier} DL (now DL {new_dl})")
         

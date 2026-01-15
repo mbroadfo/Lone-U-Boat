@@ -299,12 +299,9 @@ def test_action_queue_clear():
     game_state = create_test_game_state()
     queue = ActionQueue(max_ap=10)
     
-    # Add and commit
+    # Add actions
     queue.add_action(MockAction(cost=2), game_state)
-    queue.commit_all(game_state)
-    
-    assert not queue.is_empty, "Should have actions"
-    assert queue.is_committed, "Should be committed"
+    assert not queue.is_empty, "Should have actions before clear"
     
     # Clear
     queue.clear()

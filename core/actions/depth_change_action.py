@@ -56,13 +56,14 @@ class DepthChangeAction(Action):
         if self.new_depth == u_boat.depth:
             return False, "Must change depth (can't stay at current depth)"
         
-        # Use DepthValidator
+        # Use DepthValidator with turn manager's depth_changed flag
+        depth_changed_this_turn = game_state.turn_manager.depth_changed_this_turn
         can_change, reason = self.validator.can_change_depth(
             u_boat,
             self.new_depth,
             u_boat.position,
             game_state.ships,
-            False  # TODO: Pass game_state.has_changed_depth_this_turn when GameState tracks it
+            depth_changed_this_turn
         )
         
         return can_change, reason
@@ -71,7 +72,7 @@ class DepthChangeAction(Action):
         """Execute the depth change."""
         old_depth = game_state.u_boat.depth
         game_state.u_boat.depth = self.new_depth
-        # TODO: Set game_state.has_changed_depth_this_turn = True when GameState tracks it
+        game_state.turn_manager.depth_changed_this_turn = True
         
         ap_cost = self.get_cost(game_state.u_boat)
         

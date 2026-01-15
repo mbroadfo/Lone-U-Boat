@@ -388,7 +388,10 @@ class UBoatDamageResolver:
             "engineer": ("Engineer", "engineer_alive"),
             "weapons_officer": ("Weapons Officer", "weapons_officer_alive"),
             "medic": ("Medic", "medic_alive"),
-            "radio_operator": ("Radio Operator", "radio_operator_alive")
+            "radio_operator": ("Sonar Operator", "sonar_operator_alive"),  # JSON uses radio_operator, map to sonar_operator
+            "sonar_operator": ("Sonar Operator", "sonar_operator_alive"),
+            "captain": ("Captain", "captain_alive"),
+            "lookout": ("Lookout", "lookout_alive")
         }
         
         crew_member_key = self.crew_selection_table[roll]
@@ -469,14 +472,17 @@ class UBoatDamageResolver:
         if attack_type == "gunfire":
             # Gunfire is automatic critical hit (roll 1 on chart)
             chart_roll = 1
+            print(f"[DAMAGE] Gunfire attack: automatic critical hit (chart roll = 1)")
         elif ship_type == "destroyer" and attack_type == "depth_charge":
             # Destroyer rolls 2d6, takes lowest
             roll1 = self.dice.roll_1d6()
             roll2 = self.dice.roll_1d6()
             chart_roll = min(roll1, roll2)
+            print(f"[DAMAGE] Destroyer depth charge: rolled {roll1}, {roll2} -> chart roll = {chart_roll}")
         else:
             # Corvette or other: roll 1d6
             chart_roll = self.dice.roll_1d6()
+            print(f"[DAMAGE] {ship_type.capitalize()} {attack_type}: chart roll = {chart_roll}")
         
         hull_damage = 0
         systems_damaged: List[str] = []
@@ -529,7 +535,9 @@ class UBoatDamageResolver:
         elif chart_roll == 2:
             # Hull Damage +1
             hull_damage = 1
+            old_hull = u_boat.hull_damage
             u_boat.hull_damage = min(4, u_boat.hull_damage + hull_damage)
+            print(f"[DAMAGE] Hull damage: {old_hull} -> {u_boat.hull_damage}")
             effect = f"+1 Hull Damage (total: {u_boat.hull_damage})"
             description = f"Hull Damage! {effect}"
             if u_boat.hull_damage >= 4:

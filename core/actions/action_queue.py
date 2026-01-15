@@ -30,6 +30,7 @@ class ActionQueue:
         self.max_ap = max_ap
         self.spent_ap: int = 0  # Track total AP spent this turn
         self._committed = False
+        self.action_history: List[Action] = []  # Track executed actions for statistics
     
     def add_action(self, action: Action, game_state: Any) -> Tuple[bool, str]:
         """
@@ -120,6 +121,7 @@ class ActionQueue:
             new_max_ap: Action points for the new turn
         """
         self.actions.clear()
+        self.action_history.clear()  # Clear history for new turn
         self.max_ap = new_max_ap
         self.spent_ap = 0
         self._committed = False
@@ -156,6 +158,10 @@ class ActionQueue:
         for action in self.actions:
             result = action.execute(game_state)
             results.append(result)
+            
+            # Track executed action in history
+            if result.success:
+                self.action_history.append(action)
             
             # Stop executing if an action fails
             if not result.success:

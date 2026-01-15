@@ -278,9 +278,10 @@ class DetectionAI:
         
         if detection_successes > 0:
             dl_change = new_detection_level - current_detection_level
+            print(f"[DL] Detection phase: {detection_successes} success(es), DL {current_detection_level} -> {new_detection_level}")
             messages.append(
                 f"Detection Level increased by {dl_change}: "
-                f"{current_detection_level} → {new_detection_level}"
+                f"{current_detection_level} -> {new_detection_level}"
             )
         else:
             messages.append("No successful detections this phase")

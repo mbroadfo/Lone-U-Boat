@@ -276,7 +276,7 @@ class EscortAI:
         hex_coord: HexCoord,
         land_hexes: Set[HexCoord],
         ships: List[Ship],
-        mission_hexes: Optional[Set[HexCoord]] = None
+        mission_hexes: Optional[Any] = None  # Can be Set[HexCoord] or HexGrid
     ) -> bool:
         """
         Check if a hex is blocked (land, ship, or off-map).
@@ -285,7 +285,7 @@ class EscortAI:
             hex_coord: Hex to check
             land_hexes: Set of land hexes
             ships: List of all ships
-            mission_hexes: Set of valid mission hexes (for off-map check)
+            mission_hexes: Set of valid mission hexes or HexGrid (for off-map check)
             
         Returns:
             True if hex is blocked
@@ -299,10 +299,17 @@ class EscortAI:
             if ship.position == hex_coord:
                 return True
         
-        # Check if off-map (not in valid mission hexes)
+        # Check if off-map (using HexGrid's is_valid_hex if available)
         if mission_hexes is not None:
-            if hex_coord not in mission_hexes:
-                return True
+            # Handle both HexGrid and Set[HexCoord]
+            if hasattr(mission_hexes, 'is_valid_hex'):
+                # It's a HexGrid
+                if not mission_hexes.is_valid_hex(hex_coord):
+                    return True
+            else:
+                # It's a set
+                if hex_coord not in mission_hexes:
+                    return True
         
         return False
     
@@ -540,7 +547,7 @@ class EscortAI:
                         if next_hex:
                             old_pos = escort.position
                             escort.position = next_hex
-                            messages.append(f"    MOVE: {old_pos.q},{old_pos.r} → {next_hex.q},{next_hex.r}")
+                            messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r}")
                             
                             # Check for forced dive
                             forced, msg = self.check_forced_dive(escort, u_boat, next_hex)
@@ -560,7 +567,7 @@ class EscortAI:
                                 if new_facing and new_facing != escort.facing:
                                     old_facing = escort.facing
                                     escort.facing = new_facing
-                                    messages.append(f"    TURN: {old_facing.name} → {new_facing.name}")
+                                    messages.append(f"    TURN: {old_facing.name} -> {new_facing.name}")
                     
                     elif action == EscortAction.TURN:
                         # Turn toward anchor or U-boat based on DL
@@ -572,12 +579,12 @@ class EscortAI:
                         if new_facing and new_facing != escort.facing:
                             old_facing = escort.facing
                             escort.facing = new_facing
-                            messages.append(f"    TURN: {old_facing.name} → {new_facing.name}")
+                            messages.append(f"    TURN: {old_facing.name} -> {new_facing.name}")
                     
                     elif action == EscortAction.FIRE:
                         # Try FIRE, otherwise try DEPTH_CHARGE
                         if self.can_use_fire(escort, u_boat, current_dl, land_hexes, hex_grid):
-                            messages.append(f"    FIRE: Critical Hit on U-boat! (DL → 3)")
+                            messages.append(f"    FIRE: Critical Hit on U-boat! (DL -> 3)")
                             current_dl = 3
                             
                             # Apply gunfire damage (automatic critical hit)

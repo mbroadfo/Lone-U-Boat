@@ -272,5 +272,7 @@ class FireTorpedoAction(Action):
     
     def get_description(self) -> str:
         """Get action description."""
-        direction = "Forward" if self.fire_direction == game_state.u_boat.facing else "Rear"
-        return f"Fire {len(self.tube_indices)} torpedo(es) {direction}"
+        # Determine direction based on tube indices: tubes 0-3 are front, tube 4 is rear
+        direction = "Rear" if 4 in self.tube_indices else "Forward"
+        tube_nums = [t + 1 for t in self.tube_indices]  # Convert to 1-based
+        return f"Fire {len(self.tube_indices)} torpedo(es) {direction} (tubes {tube_nums})"
