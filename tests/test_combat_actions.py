@@ -150,6 +150,8 @@ def test_deck_gun_action():
     los_calculator = LOSCalculator(land_hexes=set())
     dice_roller = DiceRoller()
     combat_resolver = CombatResolver(dice_roller)
+    from core.damage.ship_damage import ShipDamageResolver
+    ship_damage = ShipDamageResolver(dice_roller, MISSION_RULES)
     
     u_boat = UBoat(
         position=HexCoord(5, 5),
@@ -168,7 +170,7 @@ def test_deck_gun_action():
     game_state = MockGameState(u_boat, [target_ship])
     
     # DeckGunAction expects list of (ship, distance) tuples
-    action = DeckGunAction([(target_ship, 2)], cost_lookup, los_calculator, combat_resolver)
+    action = DeckGunAction([(target_ship, 2)], cost_lookup, los_calculator, combat_resolver, ship_damage)
     
     cost = action.get_cost(u_boat)
     print(f"Deck gun cost: {cost}")
@@ -200,6 +202,8 @@ def test_deck_gun_requires_surface():
     los_calculator = LOSCalculator(land_hexes=set())
     dice_roller = DiceRoller()
     combat_resolver = CombatResolver(dice_roller)
+    from core.damage.ship_damage import ShipDamageResolver
+    ship_damage = ShipDamageResolver(dice_roller, MISSION_RULES)
     
     u_boat = UBoat(
         position=HexCoord(5, 5),
@@ -217,7 +221,7 @@ def test_deck_gun_requires_surface():
     game_state = MockGameState(u_boat, [target_ship])
     
     # DeckGunAction expects list of (ship, distance) tuples
-    action = DeckGunAction([(target_ship, 2)], cost_lookup, los_calculator, combat_resolver)
+    action = DeckGunAction([(target_ship, 2)], cost_lookup, los_calculator, combat_resolver, ship_damage)
     
     can_fire, msg = action.validate(game_state)
     print(f"Submerged deck gun: {can_fire}, reason: {msg}")

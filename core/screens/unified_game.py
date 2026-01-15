@@ -12,6 +12,9 @@ from ..actions import (
     MoveAction, RotateAction, DepthChangeAction, RepairAction,
     DeckGunAction, FireTorpedoAction, LoadTorpedoAction
 )
+from ..damage.ship_damage import ShipDamageResolver
+from ..damage.ship_damage import ShipDamageResolver
+from ..damage.ship_damage import ShipDamageResolver
 
 
 class UnifiedGameScreen(BaseScreen):
@@ -1114,7 +1117,16 @@ class UnifiedGameScreen(BaseScreen):
         """Draw a compact mini-table."""
         headers = section.get("headers", [])
         rows = section.get("rows", [])
+        style = section.get("style", "")
         
+        # Use grid-based renderer for torpedo attack range table
+        if style == "fire_torps_range":
+            attack_data = {"headers": headers, "rows": rows}
+            panel_rect = pygame.Rect(x, y, width, 200)
+            y = self._render_attack_table(self.screen, panel_rect, attack_data, self.font_small)
+            return y
+        
+        # Default rendering for other mini-tables
         # Calculate column widths
         num_cols = len(headers)
         col_width = (width - 20) // num_cols if num_cols > 0 else 50
@@ -1183,7 +1195,7 @@ class UnifiedGameScreen(BaseScreen):
             if referenced_section:
                 # Convert to result_table format and draw
                 if ref_id == "allied_ship_damage":
-                    # Special handling for ship damage chart
+                    # Special handling for ship damage chart - use grid-based renderer
                     if title:
                         title_lines = self._wrap_text(title, width - 10, self.font_small)
                         for line in title_lines:
@@ -1191,25 +1203,448 @@ class UnifiedGameScreen(BaseScreen):
                             y += 16
                         y += 4
                     
-                    # Draw each ship type
+                    # Build damage data structure for grid renderer
+                    damage_data = {}
                     for ship_class in referenced_section.get("ship_classes", []):
-                        ship_type = ship_class["ship_type"].capitalize()
-                        self.draw_text(f"{ship_type}:", x + 5, y, self.font_small, color=(200, 215, 230))
-                        y += 14
-                        
-                        for outcome in ship_class["outcomes"][:4]:  # Limit to 4 outcomes
-                            roll_text = f"{outcome['roll_min']}"
-                            if outcome['roll_max'] != outcome['roll_min']:
-                                roll_text = f"{outcome['roll_min']}-{outcome['roll_max']}"
-                            result_text = f"{roll_text}: {outcome['result']} - {outcome.get('description', '')[:30]}"
-                            
-                            wrapped = self._wrap_text(result_text, width - 20, self.font_small)
-                            for line in wrapped[:1]:
-                                self.draw_text(line, x + 10, y, self.font_small, color=(170, 185, 200))
-                                y += 13
-                        y += 6
+                        ship_type = ship_class["ship_type"]
+                        damage_data[ship_type] = ship_class
+                    
+                    # Use grid-based renderer
+                    panel_rect = pygame.Rect(x, y, width, 200)
+                    y = self._render_damage_chart(self.screen, panel_rect, damage_data, self.font_small)
         
         return y
+    
+    def _build_damage_chart_data(self, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Build damage chart data structure from table rows.
+        
+        Args:
+            rows: List of row dictionaries with "cells" representing ship damage outcomes
+        
+        Returns:
+            Dictionary mapping ship_type to outcomes data
+        """
+        # If we have access to mission rules, use that
+        if self.mission_rules:
+            damage_section = self.mission_rules.get_section_by_id("allied_ship_damage")
+            if damage_section:
+                damage_data = {}
+                for ship_class in damage_section.get("ship_classes", []):
+                    ship_type = ship_class["ship_type"]
+                    damage_data[ship_type] = ship_class
+                return damage_data
+        
+        # Fallback: construct from rows (if provided in that format)
+        # This is a simplified fallback
+        damage_data = {
+            "merchant": {"outcomes": []},
+            "corvette": {"outcomes": []},
+            "destroyer": {"outcomes": []}
+        }
+        return damage_data
+    
+    # ==================== BRIEFING GRID SYSTEM ====================
+    
+    class BriefingGrid:
+        """
+        Helper for rendering column-based layouts with consistent margins and alignment.
+        Each section/table can instantiate its own grid with appropriate column widths.
+        """
+        
+        def __init__(
+            self,
+            screen: pygame.Surface,
+            font: pygame.font.Font,
+            panel_rect: pygame.Rect,
+            padding: int,
+            columns: List[Tuple[str, Any]],  # List of (name, width) where width is int (px) or float (fraction)
+            line_height: int = 18,
+            gutter: int = 8
+        ):
+            """
+            Initialize grid system.
+            
+            Args:
+                screen: Pygame surface to draw on
+                font: Font to use for text
+                panel_rect: Full panel rectangle (x, y, width, height)
+                padding: Inner padding from panel edges
+                columns: List of (name, width) tuples. Width can be:
+                    - int: absolute pixels
+                    - float 0.0-1.0: fraction of available width
+                line_height: Height per row in pixels
+                gutter: Horizontal spacing between columns
+            """
+            self.screen = screen
+            self.font = font
+            self.panel_rect = panel_rect
+            self.padding = padding
+            self.line_height = line_height
+            self.gutter = gutter
+            
+            # Compute usable inner rect
+            self.inner_rect = pygame.Rect(
+                panel_rect.x + padding,
+                panel_rect.y + padding,
+                panel_rect.width - 2 * padding,
+                panel_rect.height - 2 * padding
+            )
+            
+            # Parse column definitions and compute rects
+            self.columns = columns
+            self.col_rects = self._compute_col_rects()
+            
+            # Current baseline Y position
+            self.current_y = self.inner_rect.y
+        
+        def _compute_col_rects(self) -> Dict[str, pygame.Rect]:
+            """
+            Compute column rectangles based on column definitions.
+            
+            Returns:
+                Dictionary mapping column name to pygame.Rect
+            """
+            col_rects = {}
+            available_width = self.inner_rect.width
+            
+            # First pass: calculate absolute widths for fractional columns
+            total_fixed = 0
+            total_fraction = 0.0
+            
+            for name, width in self.columns:
+                if isinstance(width, int):
+                    total_fixed += width
+                else:
+                    total_fraction += width
+            
+            # Subtract gutter space (n-1 gutters for n columns)
+            available_for_fraction = available_width - total_fixed - (len(self.columns) - 1) * self.gutter
+            
+            # Second pass: create rects
+            current_x = self.inner_rect.x
+            for i, (name, width) in enumerate(self.columns):
+                if isinstance(width, int):
+                    col_width = width
+                else:
+                    col_width = int(available_for_fraction * width)
+                
+                col_rects[name] = pygame.Rect(
+                    current_x,
+                    self.current_y,
+                    col_width,
+                    self.line_height
+                )
+                
+                current_x += col_width + self.gutter
+            
+            return col_rects
+        
+        def draw_cell(
+            self,
+            col_name: str,
+            text: str,
+            align: str = "left",
+            color: Tuple[int, int, int] = (180, 195, 210)
+        ) -> None:
+            """
+            Draw text in a specific column cell at the current row.
+            
+            Args:
+                col_name: Name of the column
+                text: Text to render
+                align: "left", "center", or "right"
+                color: RGB color tuple
+            """
+            if col_name not in self.col_rects:
+                return
+            
+            rect = self.col_rects[col_name]
+            text_surface = self.font.render(str(text), True, color)
+            
+            if align == "center":
+                text_x = rect.x + (rect.width - text_surface.get_width()) // 2
+            elif align == "right":
+                text_x = rect.x + rect.width - text_surface.get_width()
+            else:  # left
+                text_x = rect.x
+            
+            # Update rect y position to current baseline
+            text_y = self.current_y
+            self.screen.blit(text_surface, (text_x, text_y))
+        
+        def draw_wrapped_in_col(
+            self,
+            col_name: str,
+            text: str,
+            color: Tuple[int, int, int] = (155, 170, 185),
+            indent_px: int = 0,
+            v_spacing: int = 2
+        ) -> int:
+            """
+            Draw wrapped text within a column, advancing baseline for each line.
+            
+            Args:
+                col_name: Name of the column
+                text: Text to wrap and render
+                color: RGB color tuple
+                indent_px: Additional left indent in pixels
+                v_spacing: Extra vertical spacing between lines
+            
+            Returns:
+                Number of lines drawn
+            """
+            if col_name not in self.col_rects:
+                return 0
+            
+            rect = self.col_rects[col_name]
+            wrapped_lines = self._wrap_text(text, rect.width - indent_px)
+            
+            lines_drawn = 0
+            for line in wrapped_lines:
+                text_surface = self.font.render(line, True, color)
+                self.screen.blit(text_surface, (rect.x + indent_px, self.current_y))
+                self.current_y += self.line_height - v_spacing
+                lines_drawn += 1
+            
+            return lines_drawn
+        
+        def next_row(self, extra_lines: int = 0) -> None:
+            """
+            Advance to next row.
+            
+            Args:
+                extra_lines: Additional blank lines to skip (for spacing)
+            """
+            self.current_y += self.line_height * (1 + extra_lines)
+            
+            # Update all column rects to new y position
+            for rect in self.col_rects.values():
+                rect.y = self.current_y
+        
+        def _wrap_text(self, text: str, max_width: int) -> List[str]:
+            """Wrap text to fit within max_width pixels."""
+            words = text.split(' ')
+            lines = []
+            current_line = ""
+            
+            for word in words:
+                test_line = f"{current_line} {word}".strip()
+                test_surface = self.font.render(test_line, True, (255, 255, 255))
+                
+                if test_surface.get_width() <= max_width:
+                    current_line = test_line
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word
+            
+            if current_line:
+                lines.append(current_line)
+            
+            return lines if lines else [""]
+    
+    def _render_ap_table(
+        self,
+        surface: pygame.Surface,
+        panel_rect: pygame.Rect,
+        rows: List[Dict[str, Any]],
+        font: pygame.font.Font
+    ) -> int:
+        """
+        Render Action Points cost table using BriefingGrid.
+        
+        Args:
+            surface: Surface to draw on
+            panel_rect: Rectangle defining the table area (x, y, width, height)
+            rows: List of row dictionaries with "cells" and optional "comment"
+            font: Font to use
+        
+        Returns:
+            Final Y position after rendering
+        """
+        # Create grid with 5 columns: Action (35%), Surf (16.25%), Peri (16.25%), Med (16.25%), Deep (16.25%)
+        grid = self.BriefingGrid(
+            surface,
+            font,
+            panel_rect,
+            padding=5,
+            columns=[
+                ("action", 0.35),
+                ("surf", 0.1625),
+                ("peri", 0.1625),
+                ("med", 0.1625),
+                ("deep", 0.1625)
+            ],
+            line_height=18,
+            gutter=4
+        )
+        
+        # Draw headers
+        grid.draw_cell("action", "Action", align="left", color=(220, 230, 150))
+        grid.draw_cell("surf", "Surf", align="center", color=(220, 230, 150))
+        grid.draw_cell("peri", "Peri", align="center", color=(220, 230, 150))
+        grid.draw_cell("med", "Med", align="center", color=(220, 230, 150))
+        grid.draw_cell("deep", "Deep", align="center", color=(220, 230, 150))
+        grid.next_row()
+        
+        # Draw horizontal line under headers
+        line_y = grid.current_y - 2
+        pygame.draw.line(surface, (70, 90, 120), (panel_rect.x, line_y), (panel_rect.x + panel_rect.width, line_y), 1)
+        grid.current_y += 2
+        
+        # Draw data rows
+        for row in rows:
+            cells = row.get("cells", [])
+            comment = row.get("comment", "")
+            
+            if len(cells) >= 5:
+                # Draw action name and AP costs
+                grid.draw_cell("action", cells[0], align="left", color=(230, 240, 160))
+                grid.draw_cell("surf", cells[1], align="center", color=(180, 195, 210))
+                grid.draw_cell("peri", cells[2], align="center", color=(180, 195, 210))
+                grid.draw_cell("med", cells[3], align="center", color=(180, 195, 210))
+                grid.draw_cell("deep", cells[4], align="center", color=(180, 195, 210))
+                grid.next_row()
+                
+                # Draw comment indented under action column
+                if comment:
+                    grid.draw_wrapped_in_col("action", comment, color=(155, 170, 185), indent_px=12, v_spacing=2)
+                    grid.next_row(extra_lines=0)
+        
+        return grid.current_y
+    
+    def _render_attack_table(
+        self,
+        surface: pygame.Surface,
+        panel_rect: pygame.Rect,
+        data: Dict[str, Any],
+        font: pygame.font.Font
+    ) -> int:
+        """
+        Render torpedo attack range table using BriefingGrid.
+        
+        Args:
+            surface: Surface to draw on
+            panel_rect: Rectangle defining the table area
+            data: Dictionary with "headers" and "rows"
+            font: Font to use
+        
+        Returns:
+            Final Y position after rendering
+        """
+        headers = data.get("headers", [])
+        rows = data.get("rows", [])
+        
+        # Create grid with label column (30%) + 4 range columns (17.5% each)
+        grid = self.BriefingGrid(
+            surface,
+            font,
+            panel_rect,
+            padding=5,
+            columns=[
+                ("label", 0.30),
+                ("range1", 0.175),
+                ("range2", 0.175),
+                ("range3", 0.175),
+                ("range4", 0.175)
+            ],
+            line_height=16,
+            gutter=4
+        )
+        
+        # Draw headers
+        if len(headers) >= 5:
+            grid.draw_cell("label", headers[0], align="left", color=(220, 230, 150))
+            grid.draw_cell("range1", headers[1], align="center", color=(220, 230, 150))
+            grid.draw_cell("range2", headers[2], align="center", color=(220, 230, 150))
+            grid.draw_cell("range3", headers[3], align="center", color=(220, 230, 150))
+            grid.draw_cell("range4", headers[4], align="center", color=(220, 230, 150))
+            grid.next_row()
+        
+        # Draw rows
+        for row in rows:
+            if len(row) >= 5:
+                grid.draw_cell("label", row[0], align="left", color=(190, 205, 220))
+                grid.draw_cell("range1", row[1], align="center", color=(180, 195, 210))
+                grid.draw_cell("range2", row[2], align="center", color=(180, 195, 210))
+                grid.draw_cell("range3", row[3], align="center", color=(180, 195, 210))
+                grid.draw_cell("range4", row[4], align="center", color=(180, 195, 210))
+                grid.next_row()
+        
+        return grid.current_y
+    
+    def _render_damage_chart(
+        self,
+        surface: pygame.Surface,
+        panel_rect: pygame.Rect,
+        data: Dict[str, Any],
+        font: pygame.font.Font
+    ) -> int:
+        """
+        Render Allied Ship Damage chart using BriefingGrid.
+        
+        Args:
+            surface: Surface to draw on
+            panel_rect: Rectangle defining the table area
+            data: Dictionary with ship damage data
+            font: Font to use
+        
+        Returns:
+            Final Y position after rendering
+        """
+        # Create grid with ship column (25%) + 3 result columns (25% each)
+        grid = self.BriefingGrid(
+            surface,
+            font,
+            panel_rect,
+            padding=5,
+            columns=[
+                ("ship", 0.25),
+                ("result1", 0.25),
+                ("result2", 0.25),
+                ("result3", 0.25)
+            ],
+            line_height=16,
+            gutter=4
+        )
+        
+        # Draw headers
+        grid.draw_cell("ship", "Ship", align="left", color=(220, 230, 150))
+        grid.draw_cell("result1", "1-2", align="center", color=(220, 230, 150))
+        grid.draw_cell("result2", "3-4", align="center", color=(220, 230, 150))
+        grid.draw_cell("result3", "5-6", align="center", color=(220, 230, 150))
+        grid.next_row()
+        
+        # Draw rows for each ship type
+        ship_types = ["merchant", "corvette", "destroyer"]
+        ship_labels = ["Merchant", "Corvette", "Destroyer"]
+        
+        for ship_type, ship_label in zip(ship_types, ship_labels):
+            ship_data = data.get(ship_type, {})
+            outcomes = ship_data.get("outcomes", [])
+            
+            if len(outcomes) >= 3:
+                grid.draw_cell("ship", ship_label, align="left", color=(200, 215, 230))
+                
+                # Map outcomes to columns (1-2, 3-4, 5-6)
+                for i, outcome in enumerate(outcomes[:3]):
+                    result_text = outcome.get("result", "")
+                    col_name = f"result{i+1}"
+                    
+                    # Color code results
+                    if "SUNK" in result_text or "CRIT" in result_text:
+                        color = (255, 100, 100)
+                    elif "DAMAGE" in result_text:
+                        color = (255, 200, 100)
+                    else:
+                        color = (150, 220, 150)
+                    
+                    grid.draw_cell(col_name, result_text, align="center", color=color)
+                
+                grid.next_row()
+        
+        return grid.current_y
     
     def _draw_reminder_block(self, reminder: Dict[str, Any], x: int, y: int, width: int, panel_width: int) -> int:
         """Draw the reminder block with special styling."""
@@ -1370,6 +1805,30 @@ class UnifiedGameScreen(BaseScreen):
                 self.draw_text(line, x + 5, y, self.font_small, color=(220, 230, 150))
                 y += 16
             y += 4
+        
+        # === USE GRID-BASED RENDERERS FOR SPECIFIC STYLES ===
+        
+        # Action Costs table (Phase 1)
+        if style == "action_costs":
+            panel_rect = pygame.Rect(x, y, width, 600)  # Height will be computed by renderer
+            y = self._render_ap_table(self.screen, panel_rect, rows, self.font_small)
+            return y + 8
+        
+        # Torpedo attack range sub-table
+        if style == "fire_torps_range":
+            panel_rect = pygame.Rect(x, y, width, 200)
+            attack_data = {"headers": columns, "rows": [row if isinstance(row, list) else row.get("cells", []) for row in rows]}
+            y = self._render_attack_table(self.screen, panel_rect, attack_data, self.font_small)
+            return y + 8
+        
+        # Allied Ship Damage chart
+        if style == "allied_ship_damage":
+            # Need to fetch the actual damage data from mission rules
+            # For now, construct it from the rows if available
+            damage_data = self._build_damage_chart_data(rows)
+            panel_rect = pygame.Rect(x, y, width, 200)
+            y = self._render_damage_chart(self.screen, panel_rect, damage_data, self.font_small)
+            return y + 8
         
         # Calculate column widths based on style
         num_cols = len(columns)
@@ -3587,13 +4046,13 @@ class UnifiedGameScreen(BaseScreen):
                 # For now, just pick first damaged system
                 validator = RepairValidator()
                 if u_boat.engine_damaged:
-                    action = RepairAction("engine", cost_lookup, validator)
+                    action = RepairAction("Engine", cost_lookup, validator)
                 elif u_boat.deck_gun_damaged:
-                    action = RepairAction("deck_gun", cost_lookup, validator)
+                    action = RepairAction("Deck Gun", cost_lookup, validator)
                 elif u_boat.flak_gun_damaged:
-                    action = RepairAction("flak_gun", cost_lookup, validator)
+                    action = RepairAction("Flak Gun", cost_lookup, validator)
                 elif not all(u_boat.torpedo_tubes):
-                    action = RepairAction("torpedoes", cost_lookup, validator)
+                    action = RepairAction("Torpedo Tubes", cost_lookup, validator)
                 else:
                     self.add_event("No damaged systems to repair")
                     return
@@ -3627,11 +4086,13 @@ class UnifiedGameScreen(BaseScreen):
                 
                 # Create action with targets stored for later interactive resolution
                 from ..combat_resolver import CombatResolver
+                ship_damage_resolver = ShipDamageResolver(self.game.turn_manager.dice, self.game.mission_rules)
                 action = DeckGunAction(
                     targets=valid_targets,
                     cost_lookup=cost_lookup,
                     los_calculator=los_calc,
-                    combat_resolver=CombatResolver(self.game.turn_manager.dice, self.game.mission_rules)
+                    combat_resolver=CombatResolver(self.game.turn_manager.dice, self.game.mission_rules),
+                    ship_damage=ship_damage_resolver
                 )
                 # Store targets for interactive resolution during commit
                 action._interactive_targets = valid_targets  # type: ignore[attr-defined]

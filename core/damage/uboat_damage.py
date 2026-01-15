@@ -482,7 +482,8 @@ class UBoatDamageResolver:
         else:
             # Corvette or other: roll 1d6
             chart_roll = self.dice.roll_1d6()
-            print(f"[DAMAGE] {ship_type.capitalize()} {attack_type}: chart roll = {chart_roll}")
+            ship_name = ship_type.capitalize() if ship_type else "B24"
+            print(f"[DAMAGE] {ship_name} {attack_type}: chart roll = {chart_roll}")
         
         hull_damage = 0
         systems_damaged: List[str] = []

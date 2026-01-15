@@ -256,11 +256,11 @@ class RepairValidator:
         elif component == "Flak Gun":
             return u_boat.flak_gun_damaged
         elif component == "Torpedo Tubes":
-            # NOTE: In this system, torpedo_tubes[i]=False means either unloaded OR damaged
-            # Since repair and reload are the same action (both set to True), we don't
-            # offer "repair" for torpedo tubes - only "reload" action exists.
-            # If tubes are truly damaged, player must use reload action to fix them.
-            return False  # Never offer repair for tubes, use reload instead
+            # Check if any torpedo tubes are damaged (False = unloaded/damaged)
+            # NOTE: In this system, torpedo_tubes[i]=False means unloaded OR damaged
+            # Repair action can fix up to 2 tubes at once
+            damaged_count = sum(1 for loaded in u_boat.torpedo_tubes if not loaded)
+            return damaged_count > 0
         else:
             return False
     

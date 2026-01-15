@@ -99,20 +99,16 @@ class DeckGunAction(Action):
             if hit:
                 total_hits += 1
                 
-                # Roll and apply damage
-                damage_roll, damage_desc = self.combat_resolver.roll_deck_gun_damage()
-                systems_damaged, effect = self.ship_damage.resolve_damage(
-                    ship=ship,
-                    damage_roll=damage_roll
-                )
+                # Apply damage using ShipDamageResolver
+                damage_result = self.ship_damage.apply_damage(ship, "deck_gun")
                 
                 results.append(
                     f"HIT {ship.ship_type} at range {distance}: {description}, "
-                    f"Damage {damage_roll} - {effect}"
+                    f"{damage_result.description}"
                 )
                 
-                if ship.damaged or systems_damaged:
-                    damaged_ships.append(f"{ship.ship_type}: {systems_damaged}")
+                if damage_result.is_now_sunk or damage_result.effect == "damaged":
+                    damaged_ships.append(f"{ship.ship_type}: {damage_result.effect}")
             else:
                 results.append(f"MISS {ship.ship_type} at range {distance}: {description}")
         

@@ -29,6 +29,8 @@ class MockGameState:
     def __init__(self, u_boat: UBoat, ships: Optional[List[Ship]] = None):
         self.u_boat = u_boat
         self.ships = ships or []
+        # Add turn_manager with depth_changed_this_turn flag for depth change validation
+        self.turn_manager = type('obj', (object,), {'depth_changed_this_turn': False})()
 
 
 def test_move_action():
