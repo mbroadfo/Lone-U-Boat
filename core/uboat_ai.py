@@ -5,7 +5,7 @@ Makes random tactical decisions to test game systems.
 Uses ActionCatalog to query available actions from centralized rule logic.
 """
 
-from typing import List, Tuple, Optional, Any
+from typing import List, Tuple, Optional, Any, Dict
 import random
 from .models import UBoat, Ship, Depth, Facing
 from .action_catalog import ActionCatalog
@@ -14,6 +14,8 @@ from .movement_validator import MovementValidator
 from .depth_validator import DepthValidator
 from .torpedo_validator import TorpedoValidator
 from .repair_validator import RepairValidator
+from .actions.base_action import ActionResult
+from .damage.ship_damage import ShipDamageResolver
 
 
 class UBoatAI:
@@ -55,6 +57,11 @@ class UBoatAI:
             for result in results:
                 if result.success:
                     messages.append(f"[OK] {result.message}")
+                    
+                    # Check if action needs interactive combat resolution
+                    if result.state_changes.get('needs_interactive_resolution'):
+                        combat_messages = self._resolve_combat(result)
+                        messages.extend(combat_messages)
                 else:
                     messages.append(f"[FAIL] {result.message}")
             
@@ -133,5 +140,148 @@ class UBoatAI:
             else:
                 # Action failed, try a different one
                 continue
+        
+        return messages
+    
+    def _resolve_combat(self, action_result: ActionResult) -> List[str]:
+        """
+        Automatically resolve combat (torpedoes or deck gun).
+        
+        Args:
+            action_result: The ActionResult with combat targets
+            
+        Returns:
+            List of combat resolution messages
+        """
+        messages: List[str] = []
+        action_name = action_result.state_changes.get('action_name', '')
+        
+        if action_name == "Fire Torpedo":
+            messages.extend(self._resolve_torpedo_combat(action_result))
+        elif action_name == "Fire Deck Gun":
+            messages.extend(self._resolve_deck_gun_combat(action_result))
+        
+        return messages
+    
+    def _resolve_torpedo_combat(self, action_result: ActionResult) -> List[str]:
+        """
+        Resolve torpedo attack automatically.
+        
+        Args:
+            action_result: The torpedo action result with targets
+            
+        Returns:
+            List of messages about torpedo hits/misses
+        """
+        messages: List[str] = []
+        targets = action_result.state_changes.get('targets', [])
+        torpedo_count = action_result.state_changes.get('torpedo_count', 1)
+        
+        if not targets:
+            messages.append("[COMBAT] Torpedoes missed - no targets in path")
+            return messages
+        
+        # Get combat resolver
+        combat_resolver = self.game.combat_resolver
+        ship_damage = ShipDamageResolver(self.game.turn_manager.dice)
+        
+        total_hits = 0
+        dl_increase = 0
+        
+        for ship, distance, aspect in targets:
+            # Roll for torpedoes against this ship
+            result = combat_resolver.resolve_torpedo_attack(
+                range_to_target=distance,
+                aspect=aspect,
+                num_torpedoes=torpedo_count
+            )
+            
+            if result['hits'] > 0:
+                total_hits += result['hits']
+                
+                # Roll damage for all hits
+                damage_rolls = combat_resolver.roll_torpedo_damage(result['hits'])
+                
+                # Apply each hit's damage
+                for i, (damage_roll, damage_desc) in enumerate(damage_rolls):
+                    systems_damaged, effect = ship_damage.resolve_damage(
+                        ship=ship,
+                        damage_roll=damage_roll
+                    )
+                    
+                    messages.append(
+                        f"[COMBAT] Torpedo #{i+1} HIT {ship.ship_type} at range {distance} ({aspect}): "
+                        f"Roll {damage_roll} - {effect}"
+                    )
+                    
+                    if ship.damaged or systems_damaged:
+                        messages.append(f"[DAMAGE] {ship.ship_type} damaged: {systems_damaged}")
+                
+                # Track DL increase (+1 per hit, max +2)
+                dl_increase = min(dl_increase + result['hits'], 2)
+            else:
+                messages.append(
+                    f"[COMBAT] Torpedo MISS {ship.ship_type} at range {distance} ({aspect}): "
+                    f"Rolled {result['rolls']} (need {result['target']}+)"
+                )
+        
+        # Apply detection level increase
+        if dl_increase > 0:
+            old_dl = self.game.detection_level
+            self.game.detection_level = min(3, old_dl + dl_increase)
+            messages.append(f"[DL] Torpedo attack: DL {old_dl} -> {self.game.detection_level} (+{dl_increase})")
+        
+        return messages
+    
+    def _resolve_deck_gun_combat(self, action_result: ActionResult) -> List[str]:
+        """
+        Resolve deck gun attack automatically.
+        
+        Args:
+            action_result: The deck gun action result with target
+            
+        Returns:
+            List of messages about deck gun hit/miss
+        """
+        messages: List[str] = []
+        target_ship = action_result.state_changes.get('target_ship')
+        range_to_target = action_result.state_changes.get('range', 0)
+        
+        if not target_ship:
+            messages.append("[COMBAT] Deck gun fired but no target")
+            return messages
+        
+        # Get combat resolver
+        combat_resolver = self.game.combat_resolver
+        ship_damage = ShipDamageResolver(self.game.turn_manager.dice)
+        
+        # Roll to hit
+        hit, roll_result, desc = combat_resolver.resolve_deck_gun_attack(range_to_target)
+        
+        if hit:
+            # Roll damage
+            damage_roll, damage_desc = combat_resolver.roll_deck_gun_damage()
+            systems_damaged, effect = ship_damage.resolve_damage(
+                ship=target_ship,
+                damage_roll=damage_roll
+            )
+            
+            messages.append(
+                f"[COMBAT] Deck Gun HIT {target_ship.ship_type} at range {range_to_target}: "
+                f"2d6={roll_result}, Damage={damage_roll} - {effect}"
+            )
+            
+            if target_ship.damaged or systems_damaged:
+                messages.append(f"[DAMAGE] {target_ship.ship_type} damaged: {systems_damaged}")
+            
+            # DL increases by 1 on hit
+            old_dl = self.game.detection_level
+            self.game.detection_level = min(3, old_dl + 1)
+            messages.append(f"[DL] Deck gun hit: DL {old_dl} -> {self.game.detection_level} (+1)")
+        else:
+            messages.append(
+                f"[COMBAT] Deck Gun MISS {target_ship.ship_type} at range {range_to_target}: "
+                f"2d6={roll_result} (need {7 if range_to_target <= 2 else 8}+)"
+            )
         
         return messages

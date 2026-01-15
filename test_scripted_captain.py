@@ -81,18 +81,68 @@ def run_scripted_test(num_turns: int = 10):
                 print(f"AP Roll: {roll_info['rolls']} -> {roll_info['highest']}+{roll_info['captain_bonus']}(captain) = {game.u_boat.action_points} AP")
             
             # Show Phase 1 actions
-            action_summary: list[str] = []
-            for msg in messages:
-                if any(keyword in msg for keyword in ['MOVE', 'ROTATE', 'REPAIR', 'ENGAGE', 'MANEUVER']):
-                    action_summary.append(msg)
+            # Extract [OK] messages which show executed actions
+            action_msgs = [msg for msg in messages if msg.startswith('[OK]')]
+            combat_msgs = [msg for msg in messages if msg.startswith('[COMBAT]') or msg.startswith('[DAMAGE]')]
             
-            if action_summary:
-                actions_executed = len([msg for msg in messages if 'executed' in msg])
-                if actions_executed:
-                    stats['total_actions'] += 1
-                print(f"Phase 1 (U-Boat): {', '.join(action_summary[:3])}")
-                if len(action_summary) > 3:
-                    print(f"                  {', '.join(action_summary[3:])}")
+            if action_msgs:
+                # Count actions for stats
+                stats['total_actions'] += len(action_msgs)
+                
+                # Simplify action messages for display
+                action_display = []
+                combat_results = []
+                for msg in action_msgs:
+                    # Extract just the action type from messages like "[OK] Moved from..."
+                    if 'Moved' in msg:
+                        action_display.append('Move(2AP)')
+                    elif 'Rotated' in msg:
+                        direction = 'R' if 'clockwise' in msg and 'counter' not in msg else 'L'
+                        action_display.append(f'Rotate-{direction}(1AP)')
+                    elif 'depth' in msg.lower():
+                        action_display.append('Depth(2AP)')
+                    elif 'Repaired' in msg:
+                        # Extract what was repaired
+                        if 'Engine' in msg:
+                            action_display.append('Repair(Engine)')
+                        elif 'Deck Gun' in msg:
+                            action_display.append('Repair(DeckGun)')
+                        elif 'Torpedo' in msg:
+                            action_display.append('Repair(Tubes)')
+                        else:
+                            action_display.append('Repair')
+                    elif 'Fired deck gun' in msg:
+                        action_display.append('DeckGun(2AP)')
+                        # Extract hit/miss info
+                        if 'Hit' in msg:
+                            combat_results.append(f"  DeckGun: HIT! {msg.split('Hit')[1].strip()}")
+                        elif 'Miss' in msg:
+                            combat_results.append(f"  DeckGun: MISS")
+                    elif 'Fire' in msg or 'torpedo' in msg.lower():
+                        # Count how many torpedoes
+                        import re
+                        torp_match = re.search(r'(\d+) torpedo', msg)
+                        if torp_match:
+                            num_torps = torp_match.group(1)
+                            action_display.append(f'FireTorp(x{num_torps})')
+                        else:
+                            action_display.append('FireTorp')
+                        # Extract hit/miss info
+                        if 'Hit' in msg:
+                            hits = msg.count('Hit')
+                            combat_results.append(f"  Torpedoes: {hits} HIT(S)!")
+                        elif 'Miss' in msg or 'missed' in msg:
+                            combat_results.append(f"  Torpedoes: All missed")
+                    else:
+                        action_display.append('Action')
+                
+                print(f"Phase 1 (U-Boat): {', '.join(action_display)} [{len(action_msgs)} actions]")
+                # Show combat results if any
+                for result in combat_results:
+                    print(f"                  {result}")
+                # Show detailed combat messages from AI combat resolution
+                for msg in combat_msgs:
+                    print(f"                  {msg}")
             else:
                 print(f"Phase 1 (U-Boat): No actions taken")
             
@@ -107,65 +157,91 @@ def run_scripted_test(num_turns: int = 10):
                     changes.append(f"->{game.u_boat.facing.name}")
                 print(f"                  {' '.join(changes)}")
             
-            # Execute remaining phases
+            # Execute remaining phases (2-7)
             phase_count = 0
+            
+            # Get references before phase loop
             merchant = next((s for s in game.ships if s.ship_type == 'merchant'), None)
             escorts = [s for s in game.ships if s.ship_type in ['corvette', 'destroyer']]
+            
+            # Track positions before phases
             old_merchant_pos = merchant.position if merchant else None
             old_escort_pos = escorts[0].position if escorts else None
             
-            while game.turn_manager.current_phase != GamePhase.UBOAT_PHASE:
-                phase = game.turn_manager.current_phase
+            # Advance through phases until we wrap back to UBOAT_PHASE
+            # There are 6 more phases: MERCHANT, DETECTION, ESCORT, B24, END_TURN_EVENTS, END_TURN_PHASE
+            # Then END_TURN_PHASE should wrap to UBOAT_PHASE for next turn
+            for _ in range(7):  # Need 7 advances to complete turn and wrap back
+                current_phase = game.turn_manager.current_phase
                 
-                # Track merchant position for Phase 2
-                if phase == GamePhase.MERCHANT_PHASE and merchant:
-                    old_merchant_pos = merchant.position
-                
-                # Track escorts for Phase 4
-                if phase == GamePhase.ESCORT_PHASE and escorts:
-                    old_escort_pos = escorts[0].position
-                
-                # Advance phase (executes current phase logic)
+                # Advance to next phase (this executes current phase's logic)
                 game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
                 phase_count += 1
                 stats['phases_executed'] += 1
                 
-                # Report phase results
-                if phase == GamePhase.MERCHANT_PHASE and merchant:
-                    if merchant.position != old_merchant_pos:
-                        print(f"Phase 2 (Merchant): Merchant moved {old_merchant_pos} -> {merchant.position}")
-                    else:
-                        print(f"Phase 2 (Merchant): Merchant stayed at {merchant.position}")
+                # Break if we've wrapped back to UBOAT_PHASE (start of next turn)
+                if game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
+                    break
                 
-                elif phase == GamePhase.DETECTION_PHASE:
+                # Get updated references after phase execution
+                merchant = next((s for s in game.ships if s.ship_type == 'merchant'), None)
+                escorts = [s for s in game.ships if s.ship_type in ['corvette', 'destroyer']]
+                
+                # Report what happened in the phase we just executed
+                if current_phase == GamePhase.MERCHANT_PHASE:
+                    new_merchant_pos = merchant.position if merchant else None
+                    if merchant and new_merchant_pos != old_merchant_pos:
+                        print(f"Phase 2 (Merchant): Moved {old_merchant_pos} -> {new_merchant_pos}")
+                    elif merchant:
+                        print(f"Phase 2 (Merchant): Stayed at {new_merchant_pos}")
+                    else:
+                        print(f"Phase 2 (Merchant): No merchants")
+                    old_merchant_pos = new_merchant_pos
+                
+                elif current_phase == GamePhase.DETECTION_PHASE:
                     if game.detection_level != old_dl:
-                        print(f"Phase 3 (Detection): DETECTED - DL {old_dl} -> {game.detection_level}")
+                        print(f"Phase 3 (Detection): DETECTED! DL {old_dl} -> {game.detection_level}")
                         stats['combat_engaged'] += 1
                     else:
-                        print(f"Phase 3 (Detection): Not detected (DL: {game.detection_level})")
+                        # Check if escorts are in range
+                        in_range = False
+                        if escorts and merchant:
+                            for escort in escorts:
+                                dist = game.hex_grid.hex_distance(escort.position, game.u_boat.position)
+                                if dist <= 3:
+                                    in_range = True
+                                    break
+                        if in_range:
+                            print(f"Phase 3 (Detection): Detection attempt failed (DL: {game.detection_level})")
+                        else:
+                            print(f"Phase 3 (Detection): No detection - escorts out of range (DL: {game.detection_level})")
                 
-                elif phase == GamePhase.ESCORT_PHASE and escorts:
-                    escort = escorts[0]
-                    if escort.position != old_escort_pos:
-                        print(f"Phase 4 (Escort): {escort.ship_type.capitalize()} moved {old_escort_pos} -> {escort.position}")
+                elif current_phase == GamePhase.ESCORT_PHASE:
+                    new_escort_pos = escorts[0].position if escorts else None
+                    if escorts and new_escort_pos != old_escort_pos:
+                        escort = escorts[0]
+                        print(f"Phase 4 (Escort): {escort.ship_type.capitalize()} moved {old_escort_pos} -> {new_escort_pos}")
+                    elif escorts:
+                        escort = escorts[0]
+                        print(f"Phase 4 (Escort): {escort.ship_type.capitalize()} at {new_escort_pos}")
                     else:
-                        print(f"Phase 4 (Escort): {escort.ship_type.capitalize()} at {escort.position}")
+                        print(f"Phase 4 (Escort): No escorts")
+                    old_escort_pos = new_escort_pos
                 
-                elif phase == GamePhase.B24_PHASE:
+                elif current_phase == GamePhase.B24_PHASE:
                     if game.aircraft:
-                        aircraft_pos = game.aircraft[0].position if game.aircraft else None
+                        aircraft_pos = game.aircraft[0].position
                         print(f"Phase 5 (B-24 Aircraft): Aircraft at {aircraft_pos}")
                     else:
                         print(f"Phase 5 (B-24 Aircraft): No B-24 present")
                 
-                elif phase == GamePhase.END_TURN_PHASE:
-                    # Check for events
-                    event_logs = [log for log in game.turn_manager.phase_logs if 'Event:' in log[1]]
-                    if event_logs:
-                        for _phase_name, log in event_logs:
-                            print(f"Phase 6 (End Turn Events): {log}")
-                    else:
-                        print(f"Phase 6 (End Turn Events): No events")
+                elif current_phase == GamePhase.END_TURN_EVENTS:
+                    # Show event roll if available
+                    print(f"Phase 6 (End Turn Events): Executed")
+                
+                elif current_phase == GamePhase.END_TURN_PHASE:
+                    # This wraps back to UBOAT_PHASE
+                    break
             
             # Check for damage taken
             if game.u_boat.hull_damage > old_hull:

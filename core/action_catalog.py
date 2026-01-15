@@ -18,6 +18,7 @@ from .actions.fire_torpedo_action import FireTorpedoAction
 from .action_costs import ActionCostLookup
 from .los import LOSCalculator
 from .combat_resolver import CombatResolver
+from .damage.ship_damage import ShipDamageResolver
 
 
 @dataclass
@@ -79,6 +80,7 @@ class ActionCatalog:
         # Create combat components
         self.los_calculator = LOSCalculator(land_hexes)
         self.combat_resolver = CombatResolver(dice_roller, mission_rules)
+        self.ship_damage = ShipDamageResolver(dice_roller)
     
     def get_available_actions(self, game_state: Any) -> List[AvailableAction]:
         """
@@ -249,7 +251,8 @@ class ActionCatalog:
                 targets=valid_targets,
                 cost_lookup=self.cost_lookup,
                 los_calculator=self.los_calculator,
-                combat_resolver=self.combat_resolver
+                combat_resolver=self.combat_resolver,
+                ship_damage=self.ship_damage
             )
             cost = action.get_cost(u_boat)
             

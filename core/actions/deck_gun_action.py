@@ -10,6 +10,7 @@ from ..models import UBoat, Ship, Depth
 from ..los import LOSCalculator
 from ..combat_resolver import CombatResolver
 from ..action_costs import ActionCostLookup
+from ..damage.ship_damage import ShipDamageResolver
 
 
 class DeckGunAction(Action):
@@ -30,7 +31,8 @@ class DeckGunAction(Action):
         targets: List[Tuple[Ship, int]],  # List of (ship, distance) tuples
         cost_lookup: ActionCostLookup,
         los_calculator: LOSCalculator,
-        combat_resolver: CombatResolver
+        combat_resolver: CombatResolver,
+        ship_damage: ShipDamageResolver
     ):
         """
         Initialize deck gun action.
@@ -40,12 +42,14 @@ class DeckGunAction(Action):
             cost_lookup: Action cost lookup for AP costs
             los_calculator: LOS calculator for line of sight checks
             combat_resolver: Combat resolver for hit/damage rolls
+            ship_damage: Ship damage resolver for applying damage
         """
         super().__init__()
         self.targets = targets
         self.cost_lookup = cost_lookup
         self.los_calculator = los_calculator
         self.combat_resolver = combat_resolver
+        self.ship_damage = ship_damage
     
     def get_cost(self, u_boat: UBoat) -> int:
         """Get AP cost - only available at surface."""
@@ -83,6 +87,7 @@ class DeckGunAction(Action):
         
         results = []
         total_hits = 0
+        damaged_ships = []
         
         # Attack each target in order (closest to furthest)
         for ship, distance in self.targets:
@@ -93,18 +98,31 @@ class DeckGunAction(Action):
             
             if hit:
                 total_hits += 1
-                results.append(f"HIT {ship.ship_type} at range {distance}: {description}")
-                # TODO: Apply damage to ship
+                
+                # Roll and apply damage
+                damage_roll, damage_desc = self.combat_resolver.roll_deck_gun_damage()
+                systems_damaged, effect = self.ship_damage.resolve_damage(
+                    ship=ship,
+                    damage_roll=damage_roll
+                )
+                
+                results.append(
+                    f"HIT {ship.ship_type} at range {distance}: {description}, "
+                    f"Damage {damage_roll} - {effect}"
+                )
+                
+                if ship.damaged or systems_damaged:
+                    damaged_ships.append(f"{ship.ship_type}: {systems_damaged}")
             else:
                 results.append(f"MISS {ship.ship_type} at range {distance}: {description}")
         
         # Build result message
-        message = f"Deck gun fired at {len(self.targets)} ship(s): {total_hits} hit(s). " + "; ".join(results)
+        message = f"Fired deck gun at {len(self.targets)} ship(s): {total_hits} hit(s). " + "; ".join(results)
         
         # On any hit: Set detection level to 3
         if total_hits > 0:
-            message += " (DL set to 3)"
-            # TODO: Set game_state.detection_level = 3
+            game_state.detection_level = 3
+            message += " [DL -> 3]"
         
         ap_cost = self.get_cost(u_boat)
         
@@ -115,6 +133,7 @@ class DeckGunAction(Action):
             state_changes={
                 "targets": [ship for ship, _ in self.targets],
                 "hits": total_hits,
+                "damaged_ships": damaged_ships,
                 "action_name": "Deck Gun"
             }
         )
