@@ -636,17 +636,17 @@ They will try to prevent you from achieving your objectives by protecting the Me
 
 The relevant Chart is as follows:
 
-| **4** | **Escorts Phase:** Activate closest first (you choose for ties); Resolve dice in order |
-|------|------------------------------------------------------------------------------------------|
+| **4** | **Escorts Phase:** Activate closest first (ties are random); Resolve dice in order |
+|------|------------------------------------------------------------------------------------|
 | **d6** | **DESTROYER:** Dice = **3 + DL** *(3 if damaged)* • **CORVETTE:** Dice = **2 + DL** *(2 if damaged)* |
 | Die | Action |
 |-----|--------|
 | **1** | If DL=1-3: **FIRE** or **DEPTH CHARGE** |
-| **2** | **MOVE** (If Blocked, **TURN**) If DL=1-3: **DEPTH CHARGE** |
-| **3** | **MOVE** If DL=1-3: **DEPTH CHARGE** |
-| **4** | **MOVE** (If Blocked, **TURN**) If DL=1-3: **DEPTH CHARGE** |
-| **5** | **TURN** If DL=1-3: **DEPTH CHARGE** |
-| **6** | **MOVE** (If Blocked, **TURN**) If DL=1-3: **DEPTH CHARGE** |
+| **2** | **MOVE** (If Blocked, **TURN**); If DL=1-3: **DEPTH CHARGE** |
+| **3** | **MOVE**, **TURN**; If DL=1-3: **DEPTH CHARGE** |
+| **4** | **MOVE** (If Blocked, **TURN**); If DL=1-3: **DEPTH CHARGE** |
+| **5** | If DL=1-3: **FIRE** |
+| **6** | **MOVE**, **TURN**; If DL=1-3: **DEPTH CHARGE** |
 
 **DEPTH CHARGE:**  
 If U-Boat is not Surfaced and is at Range 0-1, roll **1d6 on U-Boat Damage Chart**  
@@ -654,19 +654,19 @@ If U-Boat is not Surfaced and is at Range 0-1, roll **1d6 on U-Boat Damage Chart
 
 **TURN:**  
 If DL=0-1, turn 1 hex edge towards Anchor.  
-If DL=2-3 turn 1 hex edge towards U-Boat/Anchor.  
-If Facing U-Boat/Anchor, only turn if blocked (turn randomly).  
+If DL=2-3, turn 1 hex edge towards U-Boat.  
+If Facing Anchor/U-Boat, only turn if blocked (turn randomly).  
 If Facing away, turn randomly.  
 If on same hex as U-Boat/Anchor, only turn if Blocked (turn randomly).
 
 **FIRE:**  
 If U-Boat is **Surfaced**, in LoS and at **Range 1-3**,  
-**Set DL to 3** and roll as a **Critical Hit** on U-Boat Damage Chart below.
+**Set DL to 3** and roll as a **Critical Hit** on U-Boat Damage Chart.
 
 ---
 
 Escorts activate in order, starting with the Ship which is **closest to the U-Boat**.  
-For ties, you get to decide which activates first.
+For ties, ties are resolved randomly.
 
 On each Escort’s activation in turn, complete the following steps:
 
@@ -849,7 +849,7 @@ to each Mission Map and looks like this:
 1   Critical Hit! Roll d6:
     1 U-Boat Destroyed
     2 +2 Hull Damage
-    3-4 Torp tubes 3-4
+    3-4 Torp tubes 3d6
     5-6 Damage x 2 (roll twice at 3-4 below)
 
 2   Hull Damage: +1 Hull Damage
@@ -857,7 +857,7 @@ to each Mission Map and looks like this:
 3-4 Damage: Roll 1d6:
       1 +1 Hull Damage
       2 Flak gun
-      3 Torp tubes
+      3 Torp tubes 2d6
       4-5 Engine
       6 Deck gun (no effect if already damaged)
 
@@ -901,7 +901,7 @@ Each type of Damage will now be explained in full:
 1   Critical Hit: Roll d6
         1  U-Boat Destroyed
         2  +2 Hull Damage
-        3-4 Torp tubes 3-6
+        3-4 Torp tubes 3d6
         5-6 Damage x 2 (roll twice at 3-4 below)
 
 2   Hull Damage: +1 Hull Damage

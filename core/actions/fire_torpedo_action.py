@@ -86,7 +86,8 @@ class FireTorpedoAction(Action):
     
     def trace_torpedo_path(
         self,
-        u_boat: UBoat,
+        firing_position: HexCoord,
+        fire_direction: Facing,
         ships: List[Ship],
         mission_hexes: set[HexCoord],
         land_hexes: set[HexCoord]
@@ -97,7 +98,8 @@ class FireTorpedoAction(Action):
         Torpedoes stop when they hit land.
         
         Args:
-            u_boat: The firing u-boat
+            firing_position: The position where torpedoes are fired from
+            fire_direction: The direction torpedoes are traveling
             ships: List of all ships in game
             mission_hexes: Set of valid mission hexes
             land_hexes: Set of land hexes (torpedo stops)
@@ -107,11 +109,11 @@ class FireTorpedoAction(Action):
             aspect is 'side' or 'front_rear'
         """
         targets: List[Tuple[Ship, int, str]] = []
-        current_hex = u_boat.position
+        current_hex = firing_position
         
         # Travel up to max torpedo range (9 hexes per rules)
         for distance in range(1, 10):
-            next_hex = self.fire_direction.forward(current_hex)
+            next_hex = fire_direction.forward(current_hex)
             
             # Check if hex is in mission area
             if next_hex not in mission_hexes:
@@ -125,7 +127,7 @@ class FireTorpedoAction(Action):
             for ship in ships:
                 if ship.position == next_hex:
                     # Calculate aspect
-                    aspect = self._calculate_aspect(ship, self.fire_direction)
+                    aspect = self._calculate_aspect(ship, fire_direction)
                     targets.append((ship, distance, aspect))
                     # Don't break - continue to find all ships in line
             
@@ -214,9 +216,18 @@ class FireTorpedoAction(Action):
         """
         u_boat = game_state.u_boat
         
-        # Trace path and find all ships in line
+        # Determine actual fire direction at execution time based on tube and current facing
+        if self.tube_indices[0] <= 4:
+            # Front tubes fire forward using current facing
+            fire_direction = u_boat.facing
+        else:
+            # Rear tube fires backward (opposite of current facing)
+            fire_direction = Facing((u_boat.facing.value + 3) % 6)
+        
+        # Trace path and find all ships in line (use current u_boat position and facing)
         targets = self.trace_torpedo_path(
-            u_boat, 
+            u_boat.position,
+            fire_direction,
             game_state.ships, 
             game_state.mission_hexes,
             game_state.land_hexes

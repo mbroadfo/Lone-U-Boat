@@ -32,6 +32,11 @@ class ActionQueue:
         self._committed = False
         self.action_history: List[Action] = []  # Track executed actions for statistics
     
+    @property
+    def is_committed(self) -> bool:
+        """Check if actions have been committed."""
+        return self._committed
+    
     def add_action(self, action: Action, game_state: Any) -> Tuple[bool, str]:
         """
         Add action to queue if valid and affordable.
@@ -110,9 +115,8 @@ class ActionQueue:
         return self.get_total_cost(game_state) <= self.max_ap
     
     def clear(self):
-        """Clear all queued actions."""
+        """Clear all queued actions without marking as committed."""
         self.actions.clear()
-        self._committed = False
     
     def reset_for_new_turn(self, new_max_ap: int):
         """Reset queue for a new turn with new AP allocation.

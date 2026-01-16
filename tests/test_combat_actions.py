@@ -183,7 +183,7 @@ def test_deck_gun_action():
     result = action.execute(game_state)
     print(f"Deck gun result: {result}")
     assert result.success
-    assert "Deck gun" in result.message
+    assert "deck gun" in result.message.lower()
     
     # Check preview
     preview = action.get_preview_data(game_state)

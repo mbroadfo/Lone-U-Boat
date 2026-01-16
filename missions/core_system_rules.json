@@ -19,7 +19,7 @@
       },
       {
         "roll_min": 2,
-        "roll_max": 3,
+        "roll_max": 2,
         "result": "HULL_DAMAGE",
         "description": "Hull Damage",
         "effect": "Add 1 Hull damage marker (cannot be repaired)",
@@ -27,11 +27,18 @@
         "limit_effect": "U-Boat destroyed"
       },
       {
-        "roll_min": 4,
+        "roll_min": 3,
+        "roll_max": 4,
+        "result": "DAMAGE",
+        "description": "Damage",
+        "sub_table": "damage_table"
+      },
+      {
+        "roll_min": 5,
         "roll_max": 6,
-        "result": "GENERAL_DAMAGE",
-        "description": "General Damage",
-        "sub_table": "general_damage_table"
+        "result": "CREW_KIA",
+        "description": "Crew KIA",
+        "sub_table": "crew_kia_table"
       }
     ],
     "sub_tables": {
@@ -43,42 +50,42 @@
             "roll_min": 1,
             "roll_max": 1,
             "result": "CATASTROPHIC",
-            "description": "Catastrophic Damage",
+            "description": "U-Boat Destroyed",
             "effect": "U-Boat destroyed"
           },
           {
             "roll_min": 2,
             "roll_max": 2,
             "result": "HULL_DAMAGE_X2",
-            "description": "Hull Damage x2",
+            "description": "+2 Hull Damage",
             "effect": "Add 2 Hull damage markers"
           },
           {
             "roll_min": 3,
             "roll_max": 4,
-            "result": "TORPEDO_TUBES_3_4",
-            "description": "Torpedo Tubes 3-4 Damaged",
+            "result": "TORPEDO_TUBES_3D6",
+            "description": "Torpedo Tubes Damaged (3d6)",
             "effect": "Roll 3d6: tubes matching 1-5 are damaged (ignore 6s, duplicates, and already damaged tubes). Loaded tubes become unloaded.",
             "note": "Lucky escape if all matching tubes already damaged"
           },
           {
             "roll_min": 5,
             "roll_max": 6,
-            "result": "DOUBLE_DAMAGE",
-            "description": "Double Damage",
-            "effect": "Roll twice on General Damage table"
+            "result": "DAMAGE_X2",
+            "description": "Damage x2",
+            "effect": "Roll twice on Damage sub-table"
           }
         ]
       },
-      "general_damage_table": {
-        "label": "General Damage Sub-Table",
+      "damage_table": {
+        "label": "Damage Sub-Table",
         "dice": "1d6",
         "outcomes": [
           {
             "roll_min": 1,
             "roll_max": 1,
             "result": "HULL_DAMAGE",
-            "description": "Hull Damage",
+            "description": "+1 Hull Damage",
             "effect": "Add 1 Hull damage marker (cannot be repaired)"
           },
           {
@@ -92,8 +99,8 @@
           {
             "roll_min": 3,
             "roll_max": 3,
-            "result": "TORPEDO_TUBES",
-            "description": "Torpedo Tubes Damaged",
+            "result": "TORPEDO_TUBES_2D6",
+            "description": "Torpedo Tubes Damaged (2d6)",
             "effect": "Roll 2d6: tubes matching 1-5 are damaged (ignore 6s, duplicates, and already damaged tubes). Loaded tubes become unloaded.",
             "note": "Lucky escape if all matching tubes already damaged"
           },
@@ -112,6 +119,60 @@
             "description": "Deck Gun Damaged",
             "effect": "Mark deck gun as damaged. Cannot use until repaired (Surfaced only)",
             "note": "No effect if already damaged (lucky escape)"
+          }
+        ]
+      },
+      "crew_kia_table": {
+        "label": "Crew KIA Sub-Table",
+        "dice": "1d6",
+        "outcomes": [
+          {
+            "roll_min": 1,
+            "roll_max": 1,
+            "result": "CAPTAIN_KIA",
+            "description": "Captain",
+            "crew_member": "captain",
+            "medic_save": true
+          },
+          {
+            "roll_min": 2,
+            "roll_max": 2,
+            "result": "SONAR_KIA",
+            "description": "Sonar Operator",
+            "crew_member": "sonar_operator",
+            "medic_save": true
+          },
+          {
+            "roll_min": 3,
+            "roll_max": 3,
+            "result": "ENGINEER_KIA",
+            "description": "Engineer",
+            "crew_member": "engineer",
+            "medic_save": true
+          },
+          {
+            "roll_min": 4,
+            "roll_max": 4,
+            "result": "WEAPONS_KIA",
+            "description": "Weapons Officer",
+            "crew_member": "weapons_officer",
+            "medic_save": true
+          },
+          {
+            "roll_min": 5,
+            "roll_max": 5,
+            "result": "LOOKOUT_KIA",
+            "description": "Lookout",
+            "crew_member": "lookout",
+            "medic_save": true
+          },
+          {
+            "roll_min": 6,
+            "roll_max": 6,
+            "result": "MEDIC_KIA",
+            "description": "Medical Officer",
+            "crew_member": "medic",
+            "medic_save": false
           }
         ]
       }

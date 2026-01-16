@@ -349,6 +349,10 @@ class Game:
         # Advance phase
         new_phase, turn_wrapped = self.turn_manager.advance_phase()
         
+        # Stop if game ended
+        if not self.running:
+            return
+        
         # If wrapped to new turn, start it
         if turn_wrapped:
             self._start_new_turn()
@@ -452,6 +456,18 @@ class Game:
         if new_detection_level != self.detection_level:
             print(f"[EVENT] Detection Level changed: {self.detection_level} -> {new_detection_level}")
         self.detection_level = new_detection_level
+        
+        # Check if U-boat was destroyed during escort phase
+        is_destroyed, reason = self.escort_ai.damage_resolver.check_destruction(self.u_boat)
+        if is_destroyed:
+            print(f"\n{'='*60}")
+            print("MISSION FAILED - U-BOAT DESTROYED BY ESCORT!")
+            print(f"{'='*60}")
+            print(f"Reason: {reason}")
+            print(f"Turn: {self.turn_manager.turn_number}")
+            print(f"{'='*60}\n")
+            self.running = False
+            return
     
     def _execute_b24_phase(self):
         """Execute B24 aircraft phase."""
@@ -478,6 +494,18 @@ class Game:
         # Update detection level
         if new_dl > self.detection_level:
             self.detection_level = new_dl
+        
+        # Check if U-boat was destroyed during B24 phase
+        is_destroyed, reason = self.b24_ai.damage_resolver.check_destruction(self.u_boat)
+        if is_destroyed:
+            print(f"\n{'='*60}")
+            print("MISSION FAILED - U-BOAT DESTROYED BY AIRCRAFT!")
+            print(f"{'='*60}")
+            print(f"Reason: {reason}")
+            print(f"Turn: {self.turn_manager.turn_number}")
+            print(f"{'='*60}\n")
+            self.running = False
+            return
             msg = f"Detection Level increased to {new_dl}"
             self.turn_manager.add_phase_log("B24 Phase", msg)
             print(f"[EVENT] {msg}")
@@ -555,10 +583,11 @@ class Game:
         msg = f"Turn {self.turn_manager.turn_number} complete"
         self.turn_manager.add_phase_log("End Turn Phase", msg)
         print(f"[EVENT] {msg}")
-        print(f"[EVENT] U-Boat: {self.u_boat.position}, {self.u_boat.depth.name}, Hull:{self.u_boat.hull_damage}/3")
+        print(f"[EVENT] U-Boat: {self.u_boat.position}, {self.u_boat.depth.name}, Hull:{self.u_boat.hull_damage}/{self.escort_ai.damage_resolver.max_hull_damage}")
         print(f"[EVENT] Ships: {len(self.ships)} remaining, Detection Level: {self.detection_level}")
         
-        # TODO Phase 6: Check victory/defeat conditions
+        # Check victory/defeat conditions
+        self._check_game_over_conditions()
     
     def _start_new_turn(self):
         """Start a new turn - reset state and wait for player to roll AP."""
@@ -584,6 +613,36 @@ class Game:
         else:
             self.action_queue = ActionQueue(max_ap=0)
         self.selected_target = None
+    
+    def _check_game_over_conditions(self):
+        """Check if the game is over (victory or defeat)."""
+        # Check U-boat destruction (defeat)
+        is_destroyed, reason = self.escort_ai.damage_resolver.check_destruction(self.u_boat)
+        if is_destroyed:
+            print(f"\n{'='*60}")
+            print("MISSION FAILED - U-BOAT DESTROYED!")
+            print(f"{'='*60}")
+            print(f"Reason: {reason}")
+            print(f"Turn: {self.turn_manager.turn_number}")
+            print(f"Final Position: {self.u_boat.position}")
+            print(f"Hull Damage: {self.u_boat.hull_damage}/4")
+            print(f"{'='*60}\n")
+            self.running = False
+            return
+        
+        # Check mission objectives (victory)
+        merchant_count = sum(1 for ship in self.ships if ship.ship_type == "merchant")
+        if merchant_count == 0:
+            print(f"\n{'='*60}")
+            print("MISSION SUCCESS!")
+            print(f"{'='*60}")
+            print(f"All merchant ships destroyed!")
+            print(f"Turn: {self.turn_manager.turn_number}")
+            print(f"Final Position: {self.u_boat.position}")
+            print(f"Hull Damage: {self.u_boat.hull_damage}/{self.escort_ai.damage_resolver.max_hull_damage}")
+            print(f"{'='*60}\n")
+            self.running = False
+            return
     
     def update(self):
         """Update game state - NPC AI and game rules will go here."""

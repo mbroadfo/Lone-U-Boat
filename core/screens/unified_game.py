@@ -6,7 +6,7 @@ Left: Mission briefing | Center: Game board | Right: Event log | Bottom: Control
 import pygame
 import sys
 from typing import Optional, Any, List, Dict, Tuple
-from ..models import Facing, Depth, Ship
+from ..models import Facing, Depth, Ship, HexCoord
 from .base_screen import BaseScreen
 from ..actions import (
     MoveAction, RotateAction, DepthChangeAction, RepairAction,
@@ -80,7 +80,7 @@ class UnifiedGameScreen(BaseScreen):
             print(f"Warning: Could not load mission briefing: {e}")
         
         # Mission Rules panel state
-        self.expanded_phases = {1: True, 2: False, 3: False, 4: False, 5: False, 6: False}  # Phase 1 expanded by default
+        self.expanded_phases = {1: False, 2: False, 3: False, 4: False, 5: False, 6: False}  # All phases collapsed by default
         self.phase_header_rects: Dict[int, pygame.Rect] = {}  # Store clickable regions for phase headers
         
         # Panel scroll positions
@@ -116,9 +116,44 @@ class UnifiedGameScreen(BaseScreen):
         self.confirm_load_button_rect: Optional[pygame.Rect] = None
         self.cancel_load_button_rect: Optional[pygame.Rect] = None
         
+        # Torpedo firing selection state (for interactive tube selection)
+        self.fire_torpedo_selection_state: Optional[Dict[str, Any]] = None
+        self.fire_tube_checkbox_rects: Dict[int, pygame.Rect] = {}  # tube_num -> checkbox rect
+        self.confirm_fire_button_rect: Optional[pygame.Rect] = None
+        self.cancel_fire_button_rect: Optional[pygame.Rect] = None
+        
+        # Repair selection state (for interactive system selection)
+        self.repair_selection_state: Optional[Dict[str, Any]] = None
+        self.repair_checkbox_rects: Dict[str, pygame.Rect] = {}  # system_name -> checkbox rect
+        self.confirm_repair_button_rect: Optional[pygame.Rect] = None
+        self.cancel_repair_button_rect: Optional[pygame.Rect] = None
+        
         # Mission rules (loaded separately if needed)
         self.mission_rules: Optional[Any] = None
         self.mission_rules_view: Optional[Any] = None
+        
+        # On-map action buttons (near status boxes)
+        self.fire_torpedo_button_rect: Optional[pygame.Rect] = None
+        self.fire_deck_gun_button_rect: Optional[pygame.Rect] = None
+        self.load_torpedo_button_rect: Optional[pygame.Rect] = None
+        self.repair_button_rect: Optional[pygame.Rect] = None
+        
+        # Load button images
+        self.fire_button_image: Optional[pygame.Surface] = None
+        self.load_button_image: Optional[pygame.Surface] = None
+        self.repair_button_image: Optional[pygame.Surface] = None
+        self.damaged_icon: Optional[pygame.Surface] = None
+        self.kia_icon: Optional[pygame.Surface] = None
+        try:
+            import os
+            assets_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'assets')
+            self.fire_button_image = pygame.image.load(os.path.join(assets_path, 'Fire.png'))
+            self.load_button_image = pygame.image.load(os.path.join(assets_path, 'Load.png'))
+            self.repair_button_image = pygame.image.load(os.path.join(assets_path, 'Repair.png'))
+            self.damaged_icon = pygame.image.load(os.path.join(assets_path, 'Damaged.png'))
+            self.kia_icon = pygame.image.load(os.path.join(assets_path, 'kia.png'))
+        except Exception as e:
+            print(f"Warning: Could not load button images: {e}")
     
     def add_event(self, message: str) -> None:
         """Add an event to the log."""
@@ -175,17 +210,24 @@ class UnifiedGameScreen(BaseScreen):
             else:
                 # Game is active - handle game keys
                 if event.key == pygame.K_SPACE:
-                    # Check if in U-Boat phase with uncommitted actions
+                    # SPACE advances phase, but during U-Boat phase must commit first
                     from ..models import GamePhase
                     if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
-                        # If actions are queued but not committed, warn player
-                        if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
-                            self.add_event("⚠ Commit your actions first (press C or click Commit button)")
+                        # Check if actions have been committed this turn
+                        if hasattr(self.game, 'action_queue'):
+                            if self.game.action_queue.actions:
+                                # Actions queued but not committed
+                                self.add_event("⚠ Commit your actions first (press C or click Commit button)")
+                            elif self.game.action_queue.is_committed:
+                                # Actions were committed, can advance
+                                self._advance_phase_and_update_ui()
+                            else:
+                                # No actions queued at all
+                                self.add_event("⚠ Queue and commit actions to advance (press C to commit)")
                         else:
-                            # No uncommitted actions, can advance
                             self._advance_phase_and_update_ui()
                     else:
-                        # Not in U-Boat phase, can always advance
+                        # Not in U-Boat phase, SPACE always advances
                         self._advance_phase_and_update_ui()
                 
                 elif event.key == pygame.K_u:
@@ -318,11 +360,26 @@ class UnifiedGameScreen(BaseScreen):
                                             if not isinstance(a, DeckGunAction)
                                         ]
                                     else:
+                                        # Execute all non-interactive actions BEFORE deck gun
+                                        # This ensures moves/rotations happen first
+                                        non_interactive = [a for a in self.game.action_queue.actions 
+                                                         if not isinstance(a, (DeckGunAction, FireTorpedoAction))]
+                                        for action in non_interactive:
+                                            result = action.execute(self.game)
+                                            if result.success:
+                                                action_name = result.state_changes.get('action_name', 'Action')
+                                                self.add_event(f"✓ {action_name}")
+                                            self.game.u_boat.action_points -= result.ap_spent
+                                        
+                                        # Remove executed actions from queue
+                                        self.game.action_queue.actions = [a for a in self.game.action_queue.actions 
+                                                                         if isinstance(a, (DeckGunAction, FireTorpedoAction))]
+                                        
                                         # Find the first deck gun action and start interactive resolution
                                         for i, action in enumerate(self.game.action_queue.actions):
                                             if isinstance(action, DeckGunAction):
                                                 # Recalculate targets based on CURRENT u-boat position
-                                                # (may have moved since action was queued)
+                                                # (after moves/rotations have been executed)
                                                 from ..los import LOSCalculator
                                                 from ..hex_grid import HexGrid
                                                 
@@ -357,6 +414,20 @@ class UnifiedGameScreen(BaseScreen):
                                                 break
                                 
                                 elif has_torpedo:
+                                    # Execute all non-interactive actions BEFORE torpedo
+                                    non_interactive = [a for a in self.game.action_queue.actions 
+                                                     if not isinstance(a, (DeckGunAction, FireTorpedoAction))]
+                                    for action in non_interactive:
+                                        result = action.execute(self.game)
+                                        if result.success:
+                                            action_name = result.state_changes.get('action_name', 'Action')
+                                            self.add_event(f"✓ {action_name}")
+                                        self.game.u_boat.action_points -= result.ap_spent
+                                    
+                                    # Remove executed actions from queue
+                                    self.game.action_queue.actions = [a for a in self.game.action_queue.actions 
+                                                                     if isinstance(a, (DeckGunAction, FireTorpedoAction))]
+                                    
                                     # Find first torpedo action and start interactive resolution
                                     for i, action in enumerate(self.game.action_queue.actions):
                                         if isinstance(action, FireTorpedoAction):
@@ -419,8 +490,12 @@ class UnifiedGameScreen(BaseScreen):
                     elif self.load_torpedo_selection_state:
                         self._handle_load_torpedo_clicks(mouse_pos)
                     
+                    # Check if clicking torpedo firing UI buttons
+                    elif self.fire_torpedo_selection_state:
+                        self._handle_fire_torpedo_clicks(mouse_pos)
+                    
                     # Check if clicking action selection buttons
-                    elif not self.load_torpedo_selection_state:  # Only allow if not in torpedo selection
+                    elif not self.load_torpedo_selection_state and not self.fire_torpedo_selection_state:  # Only allow if not in torpedo selection
                         for action_id, button_data in self.action_button_rects.items():
                             rect: pygame.Rect
                             is_clickable: bool
@@ -773,8 +848,38 @@ class UnifiedGameScreen(BaseScreen):
             color=(150, 170, 200)
         )
     
+    def _draw_event_log_in_left_panel(self, x: int, y: int, width: int, height: int) -> None:
+        """Draw event log in the bottom section of the left panel."""
+        # Title
+        self.draw_text(
+            "EVENT LOG",
+            x + width // 2,
+            y,
+            self.font_small,
+            color=(200, 220, 255),
+            center=True
+        )
+        
+        log_y = y + 25
+        log_max_y = y + height
+        
+        # Show latest events
+        visible_events = self.event_log[-20:] if self.event_log else []
+        
+        for event_text in visible_events:
+            wrapped_lines = self._wrap_text(event_text, width, self.font_small)
+            for line in wrapped_lines:
+                if log_y + 16 > log_max_y:
+                    break
+                self.draw_text(line, x, log_y, self.font_small, color=(180, 195, 210))
+                log_y += 16
+            log_y += 4  # Small gap between events
+            
+            if log_y > log_max_y:
+                break
+    
     def _draw_left_panel(self, width: int, y: int, height: int) -> None:
-        """Draw the left panel with mission briefing (from JSON structure)."""
+        """Draw the left panel with mission briefing and event log."""
         panel_rect = pygame.Rect(0, y, width, height)
         pygame.draw.rect(self.screen, (20, 25, 35), panel_rect)
         pygame.draw.line(self.screen, (50, 70, 100), (width-1, y), (width-1, y+height), 2)
@@ -850,95 +955,103 @@ class UnifiedGameScreen(BaseScreen):
         )
         text_y += 12
         
-        # === PHASE SECTIONS ===
-        phases = self.mission_briefing.get("phases", [])
-        current_phase = self.game.turn_manager.current_phase.value if hasattr(self.game, 'turn_manager') else 1
+        # === EVENT LOG (moved from right panel) ===
+        self.draw_text(
+            "EVENT LOG",
+            text_x,
+            text_y,
+            self.font_small,
+            color=(200, 215, 230)
+        )
+        text_y += 20
         
-        for phase in phases:
-            phase_id = phase.get("id", 0)
-            phase_name = phase.get("name", "")
-            header_text = phase.get("header_text", "")
-            is_expanded = self.expanded_phases.get(phase_id, False)
-            is_active = (phase_id == current_phase)
-            sections = phase.get("sections", [])
-            
-            # Phase header
-            header_height = 26
-            header_rect = pygame.Rect(0, text_y, width, header_height)
-            
-            # Background color for active phase
-            if is_active:
-                pygame.draw.rect(self.screen, (40, 60, 90), header_rect)
-            else:
-                pygame.draw.rect(self.screen, (28, 33, 42), header_rect)
-            
-            # Store rect for click detection
-            self.phase_header_rects[phase_id] = header_rect
-            
-            # Expand/collapse indicator
-            indicator = "▼" if is_expanded else "▶"
-            self.draw_text(
-                indicator,
-                text_x,
-                text_y + 5,
-                self.font_small,
-                color=(180, 200, 220)
-            )
-            
-            # Phase name
-            phase_label = f"Phase {phase_id} — {phase_name}"
-            label_color = (255, 255, 150) if is_active else (180, 200, 220)
-            self.draw_text(
-                phase_label,
-                text_x + 20,
-                text_y + 5,
-                self.font_small,
-                color=label_color
-            )
-            
-            # Border
-            border_color = (100, 140, 180) if is_active else (50, 70, 100)
-            pygame.draw.rect(self.screen, border_color, header_rect, 1)
-            
-            text_y += header_height + 3
-            
-            # Header text (if any)
-            if is_expanded and header_text:
-                self.draw_text(
-                    header_text,
-                    text_x + 5,
-                    text_y,
-                    self.font_small,
-                    color=(220, 200, 100)
-                )
-                text_y += 18
-            
-            # Phase content (if expanded)
-            if is_expanded and sections:
-                text_y = self._draw_briefing_sections(sections, text_x, text_y, text_width, y + height)
-                text_y += 8
-            
-            # Check if we need to stop (running out of space)
-            if text_y > y + height - 150:
-                break
+        # Calculate available space for event log
+        available_height = y + height - text_y - 10
+        visible_lines = min(available_height // 16, len(self.event_log))
+        start_index = max(0, len(self.event_log) - visible_lines - self.event_log_scroll)
+        end_index = len(self.event_log) - self.event_log_scroll
         
-        # === GLOBAL NOTES (at bottom if space available) ===
-        global_notes = self.mission_briefing.get("global_notes", [])
-        if global_notes and text_y < y + height - 100:
-            text_y += 10
-            pygame.draw.line(
-                self.screen,
-                (70, 90, 120),
-                (text_x, text_y),
-                (width - text_x, text_y),
-                1
-            )
-            text_y += 10
+        for i, event in enumerate(self.event_log[start_index:end_index]):
+            line_y = text_y + (i * 16)
+            if line_y < y + height - 10:
+                self.draw_text(event, text_x + 5, line_y, self.font_small, color=(170, 185, 200))
+        
+        # === PHASE SECTIONS (HIDDEN) ===
+        # phases = self.mission_briefing.get("phases", [])
+        # current_phase = self.game.turn_manager.current_phase.value if hasattr(self.game, 'turn_manager') else 1
+        # 
+        # for phase in phases:
+        #     phase_id = phase.get("id", 0)
+        #     phase_name = phase.get("name", "")
+        #     header_text = phase.get("header_text", "")
+        #     is_expanded = self.expanded_phases.get(phase_id, False)
+        #     is_active = (phase_id == current_phase)
+        #     sections = phase.get("sections", [])
+        #     
+        #     # Phase header
+        #     header_height = 26
+        #     header_rect = pygame.Rect(0, text_y, width, header_height)
+        #     
+        #     # Background color for active phase
+        #     if is_active:
+        #         pygame.draw.rect(self.screen, (40, 60, 90), header_rect)
+        #     else:
+        #         pygame.draw.rect(self.screen, (28, 33, 42), header_rect)
+        #     
+        #     # Store rect for click detection
+        #     self.phase_header_rects[phase_id] = header_rect
+        #     
+        #     # Expand/collapse indicator
+        #     indicator = "▼" if is_expanded else "▶"
+        #     self.draw_text(
+        #         indicator,
+        #         text_x,
+        #         text_y + 5,
+        #         self.font_small,
+        #         color=(180, 200, 220)
+        #     )
+        #     
+        #     # Phase name
+        #     phase_label = f"Phase {phase_id} — {phase_name}"
+        #     label_color = (255, 255, 150) if is_active else (180, 200, 220)
+        #     self.draw_text(
+        #         phase_label,
+        #         text_x + 20,
+        #         text_y + 5,
+        #         self.font_small,
+        #         color=label_color
+        #     )
+        #     
+        #     # Border
+        #     border_color = (100, 140, 180) if is_active else (50, 70, 100)
+        #     pygame.draw.rect(self.screen, border_color, header_rect, 1)
+        #     
+        #     text_y += header_height + 3
+        #     
+        #     # Header text (if any)
+        #     if is_expanded and header_text:
+        #         self.draw_text(
+        #             header_text,
+        #             text_x + 5,
+        #             text_y,
+        #             self.font_small,
+        #             color=(220, 200, 100)
+        #         )
+        #         text_y += 18
+        #     
+        #     # Phase content (if expanded)
+        #     if is_expanded and sections:
+        #         text_y = self._draw_briefing_sections(sections, text_x, text_y, text_width, rules_max_y)
+        #         text_y += 8
             
-            for note in global_notes:
-                text_y = self._draw_global_note(note, text_x, text_y, text_width, width, y + height)
-                if text_y > y + height - 20:
-                    break
+            # # Check if we need to stop (running out of space)
+            # if text_y > rules_max_y - 20:
+            #     break
+        
+        # === PHASES AND EVENT LOG (both hidden/moved) ===
+        # Event log moved to top of left panel
+        # Mission phases hidden
+        # Can be re-enabled by uncommenting the section above
     
     def _draw_sections(self, sections: List[Dict[str, Any]], x: int, y: int, width: int, max_y: int) -> int:
         """
@@ -1204,7 +1317,7 @@ class UnifiedGameScreen(BaseScreen):
                         y += 4
                     
                     # Build damage data structure for grid renderer
-                    damage_data = {}
+                    damage_data: Dict[str, Any] = {}
                     for ship_class in referenced_section.get("ship_classes", []):
                         ship_type = ship_class["ship_type"]
                         damage_data[ship_type] = ship_class
@@ -1229,7 +1342,7 @@ class UnifiedGameScreen(BaseScreen):
         if self.mission_rules:
             damage_section = self.mission_rules.get_section_by_id("allied_ship_damage")
             if damage_section:
-                damage_data = {}
+                damage_data: Dict[str, Any] = {}
                 for ship_class in damage_section.get("ship_classes", []):
                     ship_type = ship_class["ship_type"]
                     damage_data[ship_type] = ship_class
@@ -1237,7 +1350,7 @@ class UnifiedGameScreen(BaseScreen):
         
         # Fallback: construct from rows (if provided in that format)
         # This is a simplified fallback
-        damage_data = {
+        damage_data: Dict[str, Any] = {
             "merchant": {"outcomes": []},
             "corvette": {"outcomes": []},
             "destroyer": {"outcomes": []}
@@ -1323,7 +1436,7 @@ class UnifiedGameScreen(BaseScreen):
             
             # Second pass: create rects
             current_x = self.inner_rect.x
-            for i, (name, width) in enumerate(self.columns):
+            for _i, (name, width) in enumerate(self.columns):
                 if isinstance(width, int):
                     col_width = width
                 else:
@@ -1338,7 +1451,7 @@ class UnifiedGameScreen(BaseScreen):
                 
                 current_x += col_width + self.gutter
             
-            return col_rects
+            return col_rects  # type: ignore[return-value]
         
         def draw_cell(
             self,
@@ -1425,7 +1538,7 @@ class UnifiedGameScreen(BaseScreen):
         def _wrap_text(self, text: str, max_width: int) -> List[str]:
             """Wrap text to fit within max_width pixels."""
             words = text.split(' ')
-            lines = []
+            lines: List[str] = []
             current_line = ""
             
             for word in words:
@@ -1817,7 +1930,7 @@ class UnifiedGameScreen(BaseScreen):
         # Torpedo attack range sub-table
         if style == "fire_torps_range":
             panel_rect = pygame.Rect(x, y, width, 200)
-            attack_data = {"headers": columns, "rows": [row if isinstance(row, list) else row.get("cells", []) for row in rows]}
+            attack_data: Dict[str, Any] = {"headers": columns, "rows": [row if isinstance(row, list) else row.get("cells", []) for row in rows]}
             y = self._render_attack_table(self.screen, panel_rect, attack_data, self.font_small)
             return y + 8
         
@@ -2174,8 +2287,303 @@ class UnifiedGameScreen(BaseScreen):
         # Restore clip region
         self.screen.set_clip(old_clip)
         
+        # Draw status values in status boxes (detection level, torpedo status, etc.)
+        if not self.awaiting_initial_setup and not self.alignment_mode:
+            self._draw_status_values()
+        
         # Draw border
         pygame.draw.rect(self.screen, (50, 70, 100), board_rect, 2)
+    
+    def _draw_status_values(self) -> None:
+        """Draw status values (numbers, icons) inside status boxes."""
+        layout = self.game.layout
+        if not layout or not hasattr(layout, 'status_box_rects'):
+            return
+        
+        u_boat = self.game.u_boat
+        
+        # === DETECTION LEVEL ===
+        if 'detection_level' in layout.status_box_rects:
+            dl_rect = layout.status_box_rects['detection_level']
+            dl_value = self.game.detection_level
+            
+            # Draw detection level number in center of box
+            font_size = max(16, dl_rect.height // 2)
+            font = pygame.font.Font(None, font_size)
+            text_color = (255, 255, 255) if dl_value > 0 else (120, 120, 120)
+            text = font.render(str(dl_value), True, text_color)
+            text_rect = text.get_rect(center=dl_rect.center)
+            self.screen.blit(text, text_rect)
+        
+        # === TORPEDO TUBES ===
+        torpedo_boxes = ['torpedo_tube_1', 'torpedo_tube_2', 'torpedo_tube_3', 'torpedo_tube_4', 'torpedo_tube_5']
+        for i, box_name in enumerate(torpedo_boxes):
+            if box_name not in layout.status_box_rects:
+                continue
+            
+            tube_rect = layout.status_box_rects[box_name]
+            is_loaded = u_boat.torpedo_tubes[i]
+            
+            # Draw F (filled) or X (empty) in center
+            font_size = max(12, tube_rect.height // 3)
+            font = pygame.font.Font(None, font_size)
+            text = "F" if is_loaded else "X"
+            text_color = (100, 255, 100) if is_loaded else (255, 100, 100)
+            text_surface = font.render(text, True, text_color)
+            text_rect = text_surface.get_rect(center=tube_rect.center)
+            self.screen.blit(text_surface, text_rect)
+        
+        # === HULL DAMAGE ===
+        if self.damaged_icon:
+            # Draw Damaged.png icon for each point of hull damage
+            hull_damage_boxes = ['hull_damage_0', 'hull_damage_1', 'hull_damage_2', 'hull_damage_3']
+            for i in range(u_boat.hull_damage):
+                if i < len(hull_damage_boxes):
+                    box_name = hull_damage_boxes[i]
+                    if box_name in layout.status_box_rects:
+                        hull_rect = layout.status_box_rects[box_name]
+                        scaled_icon = pygame.transform.scale(self.damaged_icon, (hull_rect.width, hull_rect.height))
+                        self.screen.blit(scaled_icon, hull_rect)
+        
+        # === DAMAGED SYSTEMS ===
+        if self.damaged_icon:
+            # Engine
+            if u_boat.engine_damaged and 'engine_damaged' in layout.status_box_rects:
+                engine_rect = layout.status_box_rects['engine_damaged']
+                scaled_icon = pygame.transform.scale(self.damaged_icon, (engine_rect.width, engine_rect.height))
+                self.screen.blit(scaled_icon, engine_rect)
+            
+            # Deck Gun
+            if u_boat.deck_gun_damaged and 'deck_gun_damaged' in layout.status_box_rects:
+                deck_gun_rect = layout.status_box_rects['deck_gun_damaged']
+                scaled_icon = pygame.transform.scale(self.damaged_icon, (deck_gun_rect.width, deck_gun_rect.height))
+                self.screen.blit(scaled_icon, deck_gun_rect)
+            
+            # Flak Gun
+            if u_boat.flak_gun_damaged and 'flak_gun_damaged' in layout.status_box_rects:
+                flak_gun_rect = layout.status_box_rects['flak_gun_damaged']
+                scaled_icon = pygame.transform.scale(self.damaged_icon, (flak_gun_rect.width, flak_gun_rect.height))
+                self.screen.blit(scaled_icon, flak_gun_rect)
+        
+        # === KILLED CREW ===
+        if self.kia_icon:
+            # Captain
+            if not u_boat.captain_alive and 'captain_damaged' in layout.status_box_rects:
+                captain_rect = layout.status_box_rects['captain_damaged']
+                scaled_icon = pygame.transform.scale(self.kia_icon, (captain_rect.width, captain_rect.height))
+                self.screen.blit(scaled_icon, captain_rect)
+            
+            # Engineer
+            if not u_boat.engineer_alive and 'engineer_damaged' in layout.status_box_rects:
+                engineer_rect = layout.status_box_rects['engineer_damaged']
+                scaled_icon = pygame.transform.scale(self.kia_icon, (engineer_rect.width, engineer_rect.height))
+                self.screen.blit(scaled_icon, engineer_rect)
+            
+            # Sonar Operator
+            if not u_boat.sonar_operator_alive and 'sonar_operator_damaged' in layout.status_box_rects:
+                sonar_rect = layout.status_box_rects['sonar_operator_damaged']
+                scaled_icon = pygame.transform.scale(self.kia_icon, (sonar_rect.width, sonar_rect.height))
+                self.screen.blit(scaled_icon, sonar_rect)
+            
+            # Weapons Officer
+            if not u_boat.weapons_officer_alive and 'weapons_officer_damaged' in layout.status_box_rects:
+                weapons_rect = layout.status_box_rects['weapons_officer_damaged']
+                scaled_icon = pygame.transform.scale(self.kia_icon, (weapons_rect.width, weapons_rect.height))
+                self.screen.blit(scaled_icon, weapons_rect)
+            
+            # Lookout
+            if not u_boat.lookout_alive and 'lookout_damaged' in layout.status_box_rects:
+                lookout_rect = layout.status_box_rects['lookout_damaged']
+                scaled_icon = pygame.transform.scale(self.kia_icon, (lookout_rect.width, lookout_rect.height))
+                self.screen.blit(scaled_icon, lookout_rect)
+            
+            # Medic
+            if not u_boat.medic_alive and 'medic_damaged' in layout.status_box_rects:
+                medic_rect = layout.status_box_rects['medic_damaged']
+                scaled_icon = pygame.transform.scale(self.kia_icon, (medic_rect.width, medic_rect.height))
+                self.screen.blit(scaled_icon, medic_rect)
+    
+    def _get_preview_state(self) -> Tuple[HexCoord, Facing, Depth]:
+        """Calculate the preview state after all queued actions."""
+        u_boat = self.game.u_boat
+        
+        # Start from either setup state or current state
+        if self.awaiting_initial_setup:
+            preview_position = u_boat.position
+            preview_facing = self.selected_facing
+            preview_depth = self.selected_depth
+        else:
+            preview_position = u_boat.position
+            preview_facing = u_boat.facing
+            preview_depth = u_boat.depth
+        
+        # Apply queued actions
+        for action in self.game.action_queue.actions:
+            action_type = type(action).__name__
+            
+            if action_type == "MoveAction":
+                assert isinstance(action, MoveAction)
+                preview_position = action.target_hex
+            elif action_type == "RotateAction":
+                assert isinstance(action, RotateAction)
+                if action.clockwise:
+                    preview_facing = Facing((preview_facing.value + 1) % 6)
+                else:
+                    preview_facing = Facing((preview_facing.value - 1) % 6)
+            elif action_type == "DepthChangeAction":
+                assert isinstance(action, DepthChangeAction)
+                preview_depth = action.new_depth
+        
+        return preview_position, preview_facing, preview_depth
+    
+    def _draw_on_map_action_buttons(self) -> None:
+        """Draw action buttons on the map near relevant status boxes."""
+        return  # DISABLED - using submenu approach instead
+        # Get status box rectangles from layout
+        layout = self.game.layout
+        if not layout or not hasattr(layout, 'status_box_rects'):
+            return
+        
+        base_button_size = 32  # Base button size
+        padding = 4  # Pixels below status box
+        
+        # Get U-boat current state for display
+        u_boat = self.game.u_boat
+        
+        # Get preview state after queued actions for button availability
+        preview_position, preview_facing, preview_depth = self._get_preview_state()
+        
+        # Calculate fire button dimensions (half height, maintain aspect ratio)
+        fire_aspect = 1.0
+        if self.fire_button_image:
+            img_width = self.fire_button_image.get_width()
+            img_height = self.fire_button_image.get_height()
+            fire_aspect = img_width / img_height if img_height > 0 else 1.0
+        
+        fire_button_height = base_button_size // 2
+        fire_button_width = int(fire_button_height * fire_aspect)
+        load_button_size = base_button_size
+        repair_button_size = base_button_size
+        
+        # === TORPEDO TUBE BUTTONS (one button per tube: Fire OR Load OR Repair) ===
+        # Show mutually exclusive button for each tube based on state
+        torpedo_boxes = ['torpedo_tube_1', 'torpedo_tube_2', 'torpedo_tube_3', 'torpedo_tube_4', 'torpedo_tube_5']
+        self.torpedo_button_rects = {}  # Store as {tube_index: (rect, button_type, enabled)}
+        
+        for i, box_name in enumerate(torpedo_boxes):
+            if box_name not in layout.status_box_rects:
+                continue
+            
+            tube_rect = layout.status_box_rects[box_name]
+            is_loaded = u_boat.torpedo_tubes[i]
+            proper_depth = preview_depth in [Depth.SURFACED, Depth.PERISCOPE]  # Use preview depth
+            
+            button_image = None
+            button_type = None
+            button_width = 0
+            button_height = 0
+            enabled = False
+            border_color = (80, 80, 80)
+            
+            # Decide which button to show (mutually exclusive)
+            if is_loaded and proper_depth:
+                # Tube is loaded and can fire -> FIRE button
+                button_image = self.fire_button_image
+                button_type = 'fire'
+                button_width = fire_button_width
+                button_height = fire_button_height
+                enabled = True
+                border_color = (100, 200, 255)
+            elif not is_loaded and proper_depth:
+                # Tube is empty and can load -> LOAD button
+                button_image = self.load_button_image
+                button_type = 'load'
+                button_width = load_button_size
+                button_height = load_button_size
+                enabled = True
+                border_color = (100, 255, 100)
+            elif not is_loaded and not proper_depth:
+                # Tube is empty but at wrong depth -> REPAIR button (greyed out)
+                button_image = self.repair_button_image
+                button_type = 'repair'
+                button_width = repair_button_size
+                button_height = repair_button_size
+                enabled = False  # Can't repair at wrong depth
+                border_color = (80, 80, 80)
+            
+            if button_image:
+                # Position button centered under tube
+                button_x = tube_rect.centerx - button_width // 2
+                button_y = tube_rect.bottom + padding
+                
+                # Scale button to calculated size
+                scaled_button = pygame.transform.scale(button_image, (button_width, button_height))
+                
+                # Draw with transparency if disabled
+                if enabled:
+                    self.screen.blit(scaled_button, (button_x, button_y))
+                else:
+                    scaled_button.set_alpha(80)
+                    self.screen.blit(scaled_button, (button_x, button_y))
+                    scaled_button.set_alpha(255)
+                
+                # Store rect for click detection
+                button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+                self.torpedo_button_rects[i] = (button_rect, button_type, enabled)
+                
+                # Draw border
+                pygame.draw.rect(self.screen, border_color, button_rect, 1)
+        
+        # === FIRE DECK GUN BUTTON (under deck gun damage box) ===
+        if 'deck_gun_damaged' in layout.status_box_rects and self.fire_button_image:
+            deck_gun_rect = layout.status_box_rects['deck_gun_damaged']
+            
+            # Check if deck gun can fire (use preview depth)
+            enabled = (preview_depth == Depth.SURFACED and 
+                      not u_boat.deck_gun_damaged and 
+                      self._has_valid_deck_gun_targets())
+            
+            # Position button centered under deck gun box
+            button_x = deck_gun_rect.centerx - fire_button_width // 2
+            button_y = deck_gun_rect.bottom + padding
+            
+            scaled_button = pygame.transform.scale(self.fire_button_image, (fire_button_width, fire_button_height))
+            
+            if enabled:
+                self.screen.blit(scaled_button, (button_x, button_y))
+            else:
+                scaled_button.set_alpha(80)
+                self.screen.blit(scaled_button, (button_x, button_y))
+                scaled_button.set_alpha(255)
+            
+            self.fire_deck_gun_button_rect = pygame.Rect(button_x, button_y, fire_button_width, fire_button_height)
+            border_color = (255, 100, 100) if enabled else (80, 80, 80)
+            pygame.draw.rect(self.screen, border_color, self.fire_deck_gun_button_rect, 1)
+        
+        # === REPAIR BUTTON (under engine damage box or another central location) ===
+        if 'engine_damaged' in layout.status_box_rects and self.repair_button_image:
+            engine_rect = layout.status_box_rects['engine_damaged']
+            
+            # Check if anything can be repaired
+            enabled = (u_boat.engine_damaged or u_boat.deck_gun_damaged or 
+                      u_boat.flak_gun_damaged or not all(u_boat.torpedo_tubes))
+            
+            # Position button centered under engine box
+            button_x = engine_rect.centerx - repair_button_size // 2
+            button_y = engine_rect.bottom + padding
+            
+            scaled_button = pygame.transform.scale(self.repair_button_image, (repair_button_size, repair_button_size))
+            
+            if enabled:
+                self.screen.blit(scaled_button, (button_x, button_y))
+            else:
+                scaled_button.set_alpha(80)
+                self.screen.blit(scaled_button, (button_x, button_y))
+                scaled_button.set_alpha(255)
+            
+            self.repair_button_rect = pygame.Rect(button_x, button_y, repair_button_size, repair_button_size)
+            border_color = (255, 200, 100) if enabled else (80, 80, 80)
+            pygame.draw.rect(self.screen, border_color, self.repair_button_rect, 1)
     
     def _render_action_preview(self) -> None:
         """Render an outline showing where the u-boat will be after all queued actions."""
@@ -2185,40 +2593,8 @@ class UnifiedGameScreen(BaseScreen):
         if not actions_to_preview:
             return
         
-        # Calculate preview state by simulating all queued actions
-        # Start from either setup state or current state
-        if self.awaiting_initial_setup:
-            preview_position = self.game.u_boat.position
-            preview_facing = self.selected_facing
-            preview_depth = self.selected_depth
-        else:
-            preview_position = self.game.u_boat.position
-            preview_facing = self.game.u_boat.facing
-            preview_depth = self.game.u_boat.depth
-        
-        for action in actions_to_preview:
-            action_type = type(action).__name__
-            
-            if action_type == "MoveAction":
-                # Move forward in current facing
-                new_position = preview_facing.forward(preview_position)
-                # Validate new position is within mission hexes
-                if new_position in self.game.mission_hexes:
-                    preview_position = new_position
-                else:
-                    # Stop preview at last valid position
-                    break
-            elif action_type == "RotateAction":
-                # Rotate left or right
-                assert isinstance(action, RotateAction)
-                if action.clockwise:
-                    preview_facing = Facing((preview_facing.value + 1) % 6)
-                else:
-                    preview_facing = Facing((preview_facing.value - 1) % 6)
-            elif action_type == "DepthChangeAction":
-                # Change depth
-                assert isinstance(action, DepthChangeAction)
-                preview_depth = action.new_depth
+        # Get preview state
+        preview_position, preview_facing, preview_depth = self._get_preview_state()
         
         # Only draw if preview differs from current
         if (preview_position != self.game.u_boat.position or 
@@ -2270,19 +2646,17 @@ class UnifiedGameScreen(BaseScreen):
             self.screen.blit(rotated_surface, rect)
     
     def _draw_right_panel(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw the right panel with dice rolls, action queue, event log, and controls."""
+        """Draw the right panel with dice rolls, action queue, and controls (event log moved to left panel)."""
         panel_rect = pygame.Rect(x, y, width, height)
         pygame.draw.rect(self.screen, (20, 25, 35), panel_rect)
         pygame.draw.line(self.screen, (50, 70, 100), (x, y), (x, y+height), 2)
         
-        # Split panel into four areas: dice rolls (top), action queue, event log (middle), controls (bottom)
+        # Split panel into three areas: dice rolls (top), action queue (middle, smaller), controls (bottom, larger)
         dice_area_height = 150
-        action_queue_height = 250
-        controls_area_height = 200
+        action_queue_height = 150  # Reduced to give more room for actions
+        controls_area_height = height - dice_area_height - action_queue_height
         queue_area_y = y + dice_area_height
-        log_area_y = y + dice_area_height + action_queue_height
-        log_area_height = height - dice_area_height - action_queue_height - controls_area_height
-        controls_area_y = y + dice_area_height + action_queue_height + log_area_height
+        controls_area_y = y + dice_area_height + action_queue_height
         
         # === DICE ROLL SECTION ===
         self.draw_text(
@@ -2391,75 +2765,8 @@ class UnifiedGameScreen(BaseScreen):
             2
         )
         
-        # === ACTION QUEUE SECTION ===
+        # === ACTION QUEUE SECTION (now larger with event log moved) ===
         self._draw_action_queue(x, queue_area_y, width, action_queue_height)
-        
-        # Separator line
-        pygame.draw.line(
-            self.screen,
-            (50, 70, 100),
-            (x, log_area_y),
-            (x + width, log_area_y),
-            2
-        )
-        
-        # === EVENT LOG SECTION ===
-        self.draw_text(
-            "EVENT LOG",
-            x + width // 2,
-            log_area_y + 15,
-            self.font_medium,
-            color=(200, 220, 255),
-            center=True
-        )
-        
-        # Event log entries
-        log_y = log_area_y + 50
-        log_x = x + 10
-        log_width = width - 20
-        log_max_y = controls_area_y - 10  # Stop before controls area
-        
-        # Calculate how many events to show based on scroll position
-        # scroll = 0 means show latest (bottom), scroll > 0 means show older events
-        total_events = len(self.event_log)
-        if self.event_log_scroll == 0:
-            # Show latest events (scrolled to bottom)
-            visible_events = self.event_log[-40:]
-        else:
-            # Show older events based on scroll position
-            end_idx = total_events - self.event_log_scroll
-            start_idx = max(0, end_idx - 40)
-            visible_events = self.event_log[start_idx:end_idx]
-        
-        # Show scroll indicator if not at bottom
-        if self.event_log_scroll > 0:
-            scroll_text = f"[Scrolled up {self.event_log_scroll} events - Use mouse wheel to scroll]"
-            self.draw_text(scroll_text, x + width // 2, log_y - 20, self.font_small, 
-                          color=(255, 200, 100), center=True)
-        
-        for event_text in visible_events:
-            # Word wrap
-            words = event_text.split()
-            current_line = ""
-            for word in words:
-                test_line = current_line + word + " "
-                if self.font_small.size(test_line)[0] > log_width:
-                    if current_line:
-                        self.draw_text(current_line.strip(), log_x, log_y, self.font_small, color=(200, 210, 230))
-                        log_y += 18
-                    current_line = word + " "
-                else:
-                    current_line = test_line
-            
-            if current_line.strip():
-                self.draw_text(current_line.strip(), log_x, log_y, self.font_small, color=(200, 210, 230))
-                log_y += 18
-            
-            # Add small gap between events
-            log_y += 5
-            
-            if log_y > log_max_y:
-                break
         
         # Separator line before controls
         pygame.draw.line(
@@ -2686,6 +2993,11 @@ class UnifiedGameScreen(BaseScreen):
             self._draw_torpedo_loading_selection(x, y + 35, width)
             return
         
+        # Check if in torpedo firing selection mode
+        if self.fire_torpedo_selection_state:
+            self._draw_torpedo_firing_selection(x, y + 35, width)
+            return
+        
         # Clear button rects
         self.action_button_rects.clear()
         
@@ -2700,6 +3012,7 @@ class UnifiedGameScreen(BaseScreen):
         # Calculate torpedo states
         loaded_tubes = sum(1 for tube in u_boat.torpedo_tubes if tube)
         empty_tubes = len(u_boat.torpedo_tubes) - loaded_tubes
+        can_fire_depth = u_boat.depth == Depth.SURFACED or u_boat.depth == Depth.PERISCOPE
         
         # Get action cost lookup
         from ..action_costs import ActionCostLookup
@@ -2713,30 +3026,11 @@ class UnifiedGameScreen(BaseScreen):
             ("ROTATE RIGHT", "rotate_r", True, "TURN"),
             ("DIVE", "dive", u_boat.depth != Depth.DEEP, "CHANGE DEPTH"),
             ("SURFACE", "surface", u_boat.depth != Depth.SURFACED, "CHANGE DEPTH"),
-            ("REPAIR", "repair", u_boat.engine_damaged or u_boat.deck_gun_damaged or u_boat.flak_gun_damaged, "REPAIR"),
-            ("FIRE DECK GUN", "deck_gun", self._has_valid_deck_gun_targets(), "FIRE DECK GUN"),
+            ("REPAIR", "repair", True, "REPAIR"),  # Always show, will open submenu
+            ("FIRE DECK GUN", "deck_gun", not u_boat.deck_gun_damaged and u_boat.depth == Depth.SURFACED and self._has_valid_deck_gun_targets(), "FIRE DECK GUN"),
             ("LOAD TORPEDOES", "load_torp", empty_tubes > 0, "LOAD TORPS"),
+            ("FIRE TORPEDOES", "fire_torp", loaded_tubes > 0 and can_fire_depth, "FIRE TORPS"),
         ]
-        
-        # Add individual torpedo tube fire buttons
-        can_fire_depth = u_boat.depth == Depth.SURFACED or u_boat.depth == Depth.PERISCOPE
-        for tube_num in range(1, 6):
-            tube_idx = tube_num - 1
-            is_loaded = u_boat.torpedo_tubes[tube_idx]
-            # TODO: Add tube damaged check when damage system implemented
-            is_damaged = False  # u_boat.torpedo_tubes_damaged[tube_idx]
-            tube_type = "Front" if tube_num <= 4 else "Rear"
-            
-            if is_loaded and not is_damaged:
-                status = "Loaded"
-            elif is_damaged:
-                status = "Damaged"
-            else:
-                status = "Empty"
-            
-            label = f"FIRE TUBE {tube_num} ({tube_type}): {status}"
-            enabled = is_loaded and not is_damaged and can_fire_depth
-            actions.append((label, f"fire_torp_{tube_num}", enabled, "FIRE TORPS"))
         
         for label, action_id, enabled, action_name in actions:
             rect = pygame.Rect(button_x, button_y, button_width, button_height)
@@ -3315,6 +3609,232 @@ class UnifiedGameScreen(BaseScreen):
             center=True
         )
     
+    def _draw_torpedo_firing_selection(self, x: int, y: int, width: int) -> None:
+        """Draw torpedo tube selection UI for firing."""
+        state = self.fire_torpedo_selection_state
+        if not state:
+            return
+        
+        self.fire_tube_checkbox_rects.clear()
+        
+        u_boat = state['u_boat']
+        selected_tubes = state['selected_tubes']
+        
+        # Title
+        info_y = y
+        self.draw_text(
+            "FIRE TORPEDOES",
+            x + width // 2,
+            info_y,
+            self.font_medium,
+            color=(255, 100, 100),
+            center=True
+        )
+        info_y += 30
+        
+        # Info text
+        cost = state['cost_lookup'].get_cost("FIRE TORPS", u_boat.depth)
+        cost_text = f"Cost: {cost} AP" if cost is not None else "Cost: N/A"
+        self.draw_text(
+            f"Select tube(s) to fire | {cost_text}",
+            x + width // 2,
+            info_y,
+            self.font_small,
+            color=(180, 180, 180),
+            center=True
+        )
+        info_y += 25
+        
+        # Tube checkboxes
+        checkbox_size = 20
+        label_x = x + 20
+        checkbox_x = x + width - 40
+        
+        for tube_num in range(1, 6):
+            tube_idx = tube_num - 1  # 0-based index
+            is_loaded = u_boat.torpedo_tubes[tube_idx]
+            is_selected = tube_num in selected_tubes
+            is_available = is_loaded
+            
+            # Tube label
+            tube_type = "Front" if tube_num <= 4 else "Rear"
+            if not is_loaded:
+                status = "Empty"
+                status_color = (150, 150, 150)
+            elif is_selected:
+                status = "Selected"
+                status_color = (255, 220, 100)
+            else:
+                status = "Loaded"
+                status_color = (100, 255, 100)
+            
+            label_text = f"Tube {tube_num} ({tube_type})"
+            self.draw_text(
+                label_text,
+                label_x,
+                info_y + checkbox_size // 2,
+                self.font_small,
+                color=(200, 200, 200)
+            )
+            
+            self.draw_text(
+                status,
+                label_x + 120,
+                info_y + checkbox_size // 2,
+                self.font_small,
+                color=status_color
+            )
+            
+            # Checkbox
+            checkbox_rect = pygame.Rect(checkbox_x, info_y, checkbox_size, checkbox_size)
+            self.fire_tube_checkbox_rects[tube_num] = checkbox_rect
+            
+            # Checkbox appearance
+            if is_available:
+                if is_selected:
+                    pygame.draw.rect(self.screen, (255, 100, 100), checkbox_rect)
+                    pygame.draw.rect(self.screen, (255, 150, 150), checkbox_rect, 2)
+                    # Draw checkmark
+                    pygame.draw.line(self.screen, (255, 255, 255),
+                                   (checkbox_rect.left + 4, checkbox_rect.centery),
+                                   (checkbox_rect.centerx, checkbox_rect.bottom - 4), 2)
+                    pygame.draw.line(self.screen, (255, 255, 255),
+                                   (checkbox_rect.centerx, checkbox_rect.bottom - 4),
+                                   (checkbox_rect.right - 4, checkbox_rect.top + 4), 2)
+                else:
+                    pygame.draw.rect(self.screen, (60, 60, 60), checkbox_rect)
+                    pygame.draw.rect(self.screen, (120, 120, 120), checkbox_rect, 2)
+            else:
+                # Disabled (not loaded)
+                pygame.draw.rect(self.screen, (40, 40, 40), checkbox_rect)
+                pygame.draw.rect(self.screen, (80, 80, 80), checkbox_rect, 1)
+            
+            info_y += checkbox_size + 8
+        
+        # Confirm and Cancel buttons
+        info_y += 10
+        button_height = 35
+        button_width = (width - 50) // 2
+        
+        # Confirm button
+        confirm_x = x + 15
+        self.confirm_fire_button_rect = pygame.Rect(confirm_x, info_y, button_width, button_height)
+        
+        can_confirm = len(selected_tubes) > 0
+        if can_confirm:
+            confirm_color = (120, 60, 60)
+            confirm_border = (200, 100, 100)
+            confirm_text_color = (255, 200, 200)
+        else:
+            confirm_color = (40, 40, 40)
+            confirm_border = (80, 80, 80)
+            confirm_text_color = (100, 100, 100)
+        
+        pygame.draw.rect(self.screen, confirm_color, self.confirm_fire_button_rect)
+        pygame.draw.rect(self.screen, confirm_border, self.confirm_fire_button_rect, 2)
+        self.draw_text(
+            "CONFIRM",
+            self.confirm_fire_button_rect.centerx,
+            self.confirm_fire_button_rect.centery,
+            self.font_small,
+            color=confirm_text_color,
+            center=True
+        )
+        
+        # Cancel button
+        cancel_x = confirm_x + button_width + 20
+        self.cancel_fire_button_rect = pygame.Rect(cancel_x, info_y, button_width, button_height)
+        
+        cancel_color = (80, 60, 60)
+        cancel_border = (150, 100, 100)
+        cancel_text_color = (255, 200, 200)
+        
+        pygame.draw.rect(self.screen, cancel_color, self.cancel_fire_button_rect)
+        pygame.draw.rect(self.screen, cancel_border, self.cancel_fire_button_rect, 2)
+        self.draw_text(
+            "CANCEL",
+            self.cancel_fire_button_rect.centerx,
+            self.cancel_fire_button_rect.centery,
+            self.font_small,
+            color=cancel_text_color,
+            center=True
+        )
+    
+    def _handle_fire_torpedo_clicks(self, mouse_pos: Tuple[int, int]) -> None:
+        """Handle clicks on torpedo firing UI elements."""
+        state = self.fire_torpedo_selection_state
+        if not state:
+            return
+        
+        # Check tube checkbox clicks
+        for tube_num, rect in self.fire_tube_checkbox_rects.items():
+            if rect.collidepoint(mouse_pos):
+                # Toggle tube selection
+                u_boat = state['u_boat']
+                tube_idx = tube_num - 1  # Convert to 0-based
+                
+                # Check if tube is loaded
+                if not u_boat.torpedo_tubes[tube_idx]:
+                    self.add_event(f"Tube {tube_num} is empty")
+                    return
+                
+                if tube_num in state['selected_tubes']:
+                    state['selected_tubes'].remove(tube_num)
+                    self.add_event(f"Deselected Tube {tube_num}")
+                else:
+                    state['selected_tubes'].append(tube_num)
+                    self.add_event(f"Selected Tube {tube_num}")
+                return
+        
+        # Check Confirm button click
+        if self.confirm_fire_button_rect and self.confirm_fire_button_rect.collidepoint(mouse_pos):
+            if len(state['selected_tubes']) > 0:
+                # Queue the fire action
+                from ..torpedo_validator import TorpedoValidator
+                from ..los import LOSCalculator
+                from ..combat_resolver import CombatResolver
+                
+                tube_indices = state['selected_tubes']
+                cost_lookup = state['cost_lookup']
+                preview_facing = state['preview_facing']
+                
+                # Determine fire direction based on tubes selected
+                # If any front tubes (1-4), fire forward. If only rear tube (5), fire backward
+                has_front_tubes = any(t <= 4 for t in tube_indices)
+                if has_front_tubes:
+                    fire_direction = preview_facing
+                else:
+                    fire_direction = Facing((preview_facing.value + 3) % 6)
+                
+                los_calc = LOSCalculator(self.game.land_hexes)
+                
+                action = FireTorpedoAction(
+                    tube_indices=tube_indices,
+                    fire_direction=fire_direction,
+                    cost_lookup=cost_lookup,
+                    validator=TorpedoValidator(),
+                    los_calculator=los_calc,
+                    combat_resolver=CombatResolver(self.game.turn_manager.dice, self.game.mission_rules)
+                )
+                
+                success, message = self.game.action_queue.add_action(action, self.game)
+                if success:
+                    self.add_event(f"Queued: Fire Tubes {', '.join(str(t) for t in tube_indices)}")
+                else:
+                    self.add_event(f"✗ Failed: {message}")
+                
+                # Close selection UI
+                self.fire_torpedo_selection_state = None
+            else:
+                self.add_event("Select at least one tube to fire")
+            return
+        
+        # Check Cancel button click
+        if self.cancel_fire_button_rect and self.cancel_fire_button_rect.collidepoint(mouse_pos):
+            self.fire_torpedo_selection_state = None
+            self.add_event("Cancelled torpedo firing")
+            return
+    
     def _handle_deck_gun_roll(self) -> None:
         """Handle clicking the deck gun resolution button."""
         state = self.deck_gun_resolution_state
@@ -3485,12 +4005,15 @@ class UnifiedGameScreen(BaseScreen):
         self.deck_gun_resolution_state = None
         self.deck_gun_roll_button_rect = None
         
-        # Execute all non-deck-gun actions before next deck gun
+        # Execute all non-interactive actions before next deck gun/torpedo
         # This ensures moves/rotates happen before we recalculate targets
         # AND updates the u-boat position visually on screen
-        non_deck_gun_actions = [a for a in self.game.action_queue.actions if not isinstance(a, DeckGunAction)]
-        if non_deck_gun_actions:
-            for action in non_deck_gun_actions:
+        non_interactive_actions = [
+            a for a in self.game.action_queue.actions 
+            if not isinstance(a, (DeckGunAction, FireTorpedoAction))
+        ]
+        if non_interactive_actions:
+            for action in non_interactive_actions:
                 result = action.execute(self.game)
                 if result.success:
                     action_name = result.state_changes.get('action_name', type(action).__name__.replace('Action', ''))
@@ -3506,8 +4029,11 @@ class UnifiedGameScreen(BaseScreen):
                         self.game.u_boat.depth = result.state_changes['new_depth']
                 else:
                     self.add_event(f"✗ Action failed: {result.message}")
-            # Remove executed actions from queue
-            self.game.action_queue.actions = [a for a in self.game.action_queue.actions if isinstance(a, DeckGunAction)]
+            # Remove executed actions from queue (keep DeckGunAction and FireTorpedoAction for interactive resolution)
+            self.game.action_queue.actions = [
+                a for a in self.game.action_queue.actions 
+                if isinstance(a, (DeckGunAction, FireTorpedoAction))
+            ]
         
         # Check if there are more deck gun actions in the remaining queue
         remaining_deck_guns = [i for i, a in enumerate(self.game.action_queue.actions) if isinstance(a, DeckGunAction)]
@@ -3549,8 +4075,46 @@ class UnifiedGameScreen(BaseScreen):
             }
             self.add_event("=== DECK GUN ATTACK ===")
         else:
-            # All deck gun actions resolved - clear queue
-            self.game.action_queue.clear()
+            # All deck gun actions resolved - check for torpedo actions
+            remaining_torpedoes = [i for i, a in enumerate(self.game.action_queue.actions) if isinstance(a, FireTorpedoAction)]
+            
+            if remaining_torpedoes:
+                # Start interactive resolution for the next torpedo
+                next_idx = remaining_torpedoes[0]
+                next_action = self.game.action_queue.actions[next_idx]
+                
+                # Execute to get targets (tubes are unloaded here)
+                result = next_action.execute(self.game)
+                
+                # Spend AP
+                self.game.u_boat.action_points -= result.ap_spent
+                
+                # Check if needs interactive resolution
+                if result.state_changes.get('needs_interactive_resolution'):
+                    # Setup interactive resolution state
+                    self.torpedo_resolution_state = {
+                        'action': next_action,
+                        'action_index': next_idx,
+                        'torpedo_count': result.state_changes['torpedo_count'],
+                        'targets': result.state_changes['targets'],  # [(ship, distance, aspect), ...]
+                        'current_target_idx': 0,
+                        'current_torpedo_idx': 0,
+                        'torpedoes_available': result.state_changes['torpedo_count'],
+                        'waiting_for': 'hit',  # 'hit', 'damage', 'continue'
+                        'last_hit_roll': None,
+                        'last_damage_roll': None,
+                        'results': []  # [(torpedo_num, ship, distance, hit, damage_die), ...]
+                    }
+                    self.add_event(f"=== FIRING {self.torpedo_resolution_state['torpedo_count']} TORPEDO(ES) ===")
+                else:
+                    # No targets, just log
+                    self.add_event(result.message)
+                
+                # Remove this action from queue
+                self.game.action_queue.actions.pop(next_idx)
+            else:
+                # All interactive actions resolved - clear queue
+                self.game.action_queue.clear()
     
     def _draw_torpedo_resolution(self, x: int, y: int, width: int) -> None:
         """Draw the interactive torpedo resolution UI."""
@@ -3979,6 +4543,61 @@ class UnifiedGameScreen(BaseScreen):
             self.add_event("Cancelled torpedo loading")
             return
     
+    def _handle_on_map_button_clicks(self, mouse_pos: Tuple[int, int]) -> bool:
+        """
+        Handle clicks on on-map action buttons.
+        
+        Returns:
+            True if a button was clicked (even if disabled)
+        """
+        return False  # DISABLED - using submenu approach instead
+        u_boat = self.game.u_boat
+        
+        # Check torpedo tube buttons (each tube has its own button)
+        if hasattr(self, 'torpedo_button_rects'):
+            for tube_index, (button_rect, button_type, enabled) in self.torpedo_button_rects.items():
+                if button_rect.collidepoint(mouse_pos):
+                    if enabled:
+                        if button_type == 'fire':
+                            # Fire this specific torpedo tube
+                            self._queue_action("fire_torp")  # TODO: Need to specify which tube
+                        elif button_type == 'load':
+                            # Load this specific torpedo tube
+                            self._queue_action("load_torp")  # TODO: Need to specify which tube
+                        elif button_type == 'repair':
+                            # Repair torpedoes (needs proper depth)
+                            self.add_event("✗ Must be at surface or periscope depth to repair torpedoes")
+                    else:
+                        # Button disabled, show why
+                        if button_type == 'repair':
+                            self.add_event("✗ Must be at surface or periscope depth to repair torpedoes")
+                    return True
+        
+        # Fire Deck Gun button
+        if hasattr(self, 'fire_deck_gun_button_rect') and self.fire_deck_gun_button_rect and self.fire_deck_gun_button_rect.collidepoint(mouse_pos):
+            if u_boat.depth == Depth.SURFACED and not u_boat.deck_gun_damaged and self._has_valid_deck_gun_targets():
+                self._queue_action("deck_gun")
+            else:
+                if u_boat.depth != Depth.SURFACED:
+                    self.add_event("✗ Must be surfaced to fire deck gun")
+                elif u_boat.deck_gun_damaged:
+                    self.add_event("✗ Deck gun is damaged")
+                else:
+                    self.add_event("✗ No valid targets in range for deck gun")
+            return True
+        
+        # Repair button
+        if hasattr(self, 'repair_button_rect') and self.repair_button_rect and self.repair_button_rect.collidepoint(mouse_pos):
+            can_repair = (u_boat.engine_damaged or u_boat.deck_gun_damaged or 
+                         u_boat.flak_gun_damaged or not all(u_boat.torpedo_tubes))
+            if can_repair:
+                self._queue_action("repair")
+            else:
+                self.add_event("✗ Nothing to repair")
+            return True
+        
+        return False
+    
     def _queue_action(self, action_id: str) -> None:
         """Queue an action based on action ID."""
         from ..models import GamePhase
@@ -3997,25 +4616,7 @@ class UnifiedGameScreen(BaseScreen):
         
         # Calculate current state after all queued actions
         # This is needed so rotations affect subsequent moves
-        preview_position = u_boat.position
-        preview_facing = u_boat.facing
-        preview_depth = u_boat.depth
-        
-        for queued_action in self.game.action_queue.actions:
-            action_type = type(queued_action).__name__
-            if action_type == "MoveAction":
-                # Simply use the target hex from the queued action
-                assert isinstance(queued_action, MoveAction)
-                preview_position = queued_action.target_hex
-            elif action_type == "RotateAction":
-                assert isinstance(queued_action, RotateAction)
-                if queued_action.clockwise:
-                    preview_facing = Facing((preview_facing.value + 1) % 6)
-                else:
-                    preview_facing = Facing((preview_facing.value - 1) % 6)
-            elif action_type == "DepthChangeAction":
-                assert isinstance(queued_action, DepthChangeAction)
-                preview_depth = queued_action.new_depth
+        preview_position, preview_facing, preview_depth = self._get_preview_state()
         
         action = None
         
@@ -4108,6 +4709,17 @@ class UnifiedGameScreen(BaseScreen):
                 }
                 self.add_event(f"Select up to {max_tubes} tube(s) to load")
                 return  # Don't queue yet - wait for user to select tubes
+            
+            elif action_id == "fire_torp":
+                # Open torpedo firing selection UI
+                self.fire_torpedo_selection_state = {
+                    'selected_tubes': [],
+                    'u_boat': u_boat,
+                    'preview_facing': preview_facing,
+                    'cost_lookup': cost_lookup
+                }
+                self.add_event("Select torpedo tube(s) to fire")
+                return  # Don't queue yet - wait for user to select tubes
                 
             elif action_id.startswith("fire_torp_"):
                 # Fire individual torpedo tube
@@ -4117,13 +4729,13 @@ class UnifiedGameScreen(BaseScreen):
                 from ..los import LOSCalculator
                 from ..combat_resolver import CombatResolver
                 
-                # Determine fire direction based on tube
+                # Determine fire direction based on tube (use preview facing)
                 if tube_num <= 4:
                     # Front tubes fire forward
-                    fire_direction = u_boat.facing
+                    fire_direction = preview_facing
                 else:
                     # Rear tube fires backward
-                    fire_direction = Facing((u_boat.facing.value + 3) % 6)
+                    fire_direction = Facing((preview_facing.value + 3) % 6)
                 
                 los_calc = LOSCalculator(self.game.land_hexes)
                 
