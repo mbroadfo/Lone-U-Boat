@@ -7,6 +7,7 @@ between AI, tests, and UI systems.
 
 from typing import List, Optional, Any
 from dataclasses import dataclass
+from .models import TubeState
 
 from .models import UBoat, Facing, Depth, Ship, HexCoord
 from .actions.move_action import MoveAction
@@ -275,7 +276,8 @@ class ActionCatalog:
         
         # Try loading each tube individually
         for tube_index in range(5):
-            if not u_boat.torpedo_tubes[tube_index]:  # If tube is empty
+            tube_state = u_boat.torpedo_tubes[tube_index]
+            if tube_state == TubeState.EMPTY:  # Only load empty tubes (not damaged or loaded)
                 action = LoadTorpedoAction([tube_index], self.cost_lookup, self.torpedo_validator)
                 cost = action.get_cost(u_boat)
                 

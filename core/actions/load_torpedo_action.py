@@ -6,7 +6,7 @@ Integrates with TorpedoValidator from Phase 2.
 
 from typing import List, Tuple, Dict, Any
 from .base_action import Action, ActionResult
-from ..models import UBoat, Depth
+from ..models import UBoat, Depth, TubeState
 from ..torpedo_validator import TorpedoValidator
 from ..action_costs import ActionCostLookup
 
@@ -73,7 +73,7 @@ class LoadTorpedoAction(Action):
         
         # Load the tubes (tube_indices are 1-based, convert to 0-based for array)
         for tube_num in self.tube_indices:
-            u_boat.torpedo_tubes[tube_num - 1] = True
+            u_boat.torpedo_tubes[tube_num - 1] = TubeState.LOADED
         
         tube_names = [f"Tube {i}" for i in self.tube_indices]
         message = f"Loaded {', '.join(tube_names)}"

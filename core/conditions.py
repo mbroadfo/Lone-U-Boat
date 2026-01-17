@@ -35,10 +35,10 @@ class ConditionFactory:
             level = int(condition_key.split('_')[-1])
             return lambda: u_boat.hull_damage >= level
         
-        # Torpedo tubes
+        # Torpedo tubes (condition is true if LOADED)
         elif condition_key.startswith('torpedo_tube_'):
             tube_index = int(condition_key.split('_')[-1])
-            return lambda: u_boat.torpedo_tubes[tube_index]
+            return lambda: u_boat.torpedo_tubes[tube_index] == TubeState.LOADED
         
         # Crew (alive status - condition triggers when dead)
         elif condition_key == 'captain_dead':
@@ -91,10 +91,10 @@ class ConditionFactory:
             level = int(condition_key.split('_')[-1])
             return lambda: u_boat_getter().hull_damage >= level
         
-        # Torpedo tubes
+        # Torpedo tubes (condition is true if LOADED)
         elif condition_key.startswith('torpedo_tube_'):
             tube_index = int(condition_key.split('_')[-1])
-            return lambda: u_boat_getter().torpedo_tubes[tube_index]
+            return lambda: u_boat_getter().torpedo_tubes[tube_index] == TubeState.LOADED
         
         # Crew (alive status - condition triggers when dead)
         elif condition_key == 'captain_dead':

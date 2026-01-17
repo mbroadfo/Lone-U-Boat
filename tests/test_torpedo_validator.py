@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, '.')
 
 from core.torpedo_validator import TorpedoValidator
-from core.models import HexCoord, UBoat, Depth, Facing
+from core.models import HexCoord, UBoat, Depth, Facing, TubeState
 
 
 def test_load_single_tube():
@@ -22,7 +22,7 @@ def test_load_single_tube():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[False, True, True, True, True],  # Tube 1 empty
+        torpedo_tubes=[TubeState.EMPTY, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED],  # Tube 1 empty
         weapons_officer_alive=True
     )
     
@@ -56,7 +56,7 @@ def test_load_depth_restrictions():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[False, False, False, False, False],  # All empty
+        torpedo_tubes=[TubeState.EMPTY, TubeState.EMPTY, TubeState.EMPTY, TubeState.EMPTY, TubeState.EMPTY],  # All empty
         weapons_officer_alive=True
     )
     
@@ -97,7 +97,7 @@ def test_load_multiple_tubes_wo_alive():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[False, False, False, True, True],  # Tubes 1-3 empty
+        torpedo_tubes=[TubeState.EMPTY, TubeState.EMPTY, TubeState.EMPTY, TubeState.LOADED, TubeState.LOADED],  # Tubes 1-3 empty
         weapons_officer_alive=True
     )
     
@@ -130,7 +130,7 @@ def test_load_multiple_tubes_wo_kia():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[False, False, False, True, True],  # Tubes 1-3 empty
+        torpedo_tubes=[TubeState.EMPTY, TubeState.EMPTY, TubeState.EMPTY, TubeState.LOADED, TubeState.LOADED],  # Tubes 1-3 empty
         weapons_officer_alive=False
     )
     
@@ -160,7 +160,7 @@ def test_fire_single_tube():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[True, False, False, False, False],  # Only tube 1 loaded
+        torpedo_tubes=[TubeState.LOADED, TubeState.EMPTY, TubeState.EMPTY, TubeState.EMPTY, TubeState.EMPTY],  # Only tube 1 loaded
         weapons_officer_alive=True
     )
     
@@ -193,7 +193,7 @@ def test_fire_depth_restrictions():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[True, True, True, True, True],  # All loaded
+        torpedo_tubes=[TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED],  # All loaded
         weapons_officer_alive=True
     )
     
@@ -234,7 +234,7 @@ def test_fire_front_rear_restriction():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[True, True, True, True, True],  # All loaded
+        torpedo_tubes=[TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED],  # All loaded
         weapons_officer_alive=True
     )
     
@@ -272,7 +272,7 @@ def test_fire_tube_count_limit():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[True, True, True, True, True],  # All loaded
+        torpedo_tubes=[TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED],  # All loaded
         weapons_officer_alive=True
     )
     
@@ -310,7 +310,7 @@ def test_get_loadable_tubes():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[False, True, False, True, False],  # Tubes 1,3,5 empty
+        torpedo_tubes=[TubeState.EMPTY, TubeState.LOADED, TubeState.EMPTY, TubeState.LOADED, TubeState.EMPTY],  # Tubes 1,3,5 empty
         weapons_officer_alive=True
     )
     
@@ -327,7 +327,7 @@ def test_get_loadable_tubes():
     
     # All loaded
     u_boat.depth = Depth.SURFACED
-    u_boat.torpedo_tubes = [True] * 5
+    u_boat.torpedo_tubes = [TubeState.LOADED] * 5
     loadable = validator.get_loadable_tubes(u_boat)
     print(f"Loadable tubes (all loaded): {loadable}")
     assert loadable == [], "Should return empty list when all loaded"
@@ -345,7 +345,7 @@ def test_get_fireable_tubes():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[True, False, True, False, True],  # Tubes 1,3,5 loaded
+        torpedo_tubes=[TubeState.LOADED, TubeState.EMPTY, TubeState.LOADED, TubeState.EMPTY, TubeState.LOADED],  # Tubes 1,3,5 loaded
         weapons_officer_alive=True
     )
     
@@ -364,7 +364,7 @@ def test_get_fireable_tubes():
     
     # All empty
     u_boat.depth = Depth.SURFACED
-    u_boat.torpedo_tubes = [False] * 5
+    u_boat.torpedo_tubes = [TubeState.EMPTY] * 5
     fireable = validator.get_fireable_tubes(u_boat)
     print(f"Fireable tubes (all empty): {fireable}")
     assert fireable['front'] == [], "Should return empty front list"
@@ -383,7 +383,7 @@ def test_tube_status_display():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[True, False, True, False, True],  # Tubes 1,3,5 loaded
+        torpedo_tubes=[TubeState.LOADED, TubeState.EMPTY, TubeState.LOADED, TubeState.EMPTY, TubeState.LOADED],  # Tubes 1,3,5 loaded
         weapons_officer_alive=True
     )
     

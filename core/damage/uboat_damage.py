@@ -6,7 +6,7 @@ Handles damage to U-boat from depth charges, ramming, and other sources.
 
 from typing import Tuple, Optional, List, Any, Dict
 from dataclasses import dataclass
-from ..models import UBoat
+from ..models import UBoat, TubeState
 from ..dice import DiceRoller
 
 
@@ -354,15 +354,16 @@ class UBoatDamageResolver:
         Returns:
             Index of tube damaged, or None if all damaged
         """
-        # Find undamaged tubes
-        undamaged: List[int] = [i for i, loaded in enumerate(u_boat.torpedo_tubes) if loaded]
+        # Find undamaged tubes (loaded or empty, but not damaged)
+        undamaged: List[int] = [i for i, tube_state in enumerate(u_boat.torpedo_tubes) 
+                                if tube_state != TubeState.DAMAGED]
         
         if not undamaged:
             return None
         
         # Pick random undamaged tube
         tube_index: int = self.dice.random_choice(undamaged)
-        u_boat.torpedo_tubes[tube_index] = False  # Mark as damaged/unloaded
+        u_boat.torpedo_tubes[tube_index] = TubeState.DAMAGED  # Mark as damaged
         return tube_index
     
     def _random_crew_casualty(self, u_boat: UBoat) -> Tuple[Optional[str], bool, Optional[int]]:
@@ -673,7 +674,7 @@ class UBoatDamageResolver:
             if roll <= 5:  # Valid tube number (1-5)
                 tube_index = roll - 1
                 # Only damage if not already damaged
-                if u_boat.torpedo_tubes[tube_index]:
-                    u_boat.torpedo_tubes[tube_index] = False
+                if u_boat.torpedo_tubes[tube_index] != TubeState.DAMAGED:
+                    u_boat.torpedo_tubes[tube_index] = TubeState.DAMAGED
                     damaged.append(tube_index)
         return damaged

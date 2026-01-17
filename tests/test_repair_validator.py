@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, '.')
 
 from core.repair_validator import RepairValidator
-from core.models import HexCoord, UBoat, Depth, Facing
+from core.models import HexCoord, UBoat, Depth, Facing, TubeState
 
 
 def test_engine_repair_surfaced():
@@ -192,7 +192,7 @@ def test_torpedo_tubes_repair():
         position=HexCoord(5, 5),
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
-        torpedo_tubes=[False, True, False, True, False],  # Tubes 1, 3, 5 damaged
+        torpedo_tubes=[TubeState.DAMAGED, TubeState.LOADED, TubeState.DAMAGED, TubeState.LOADED, TubeState.DAMAGED],  # Tubes 1, 3, 5 damaged
         engineer_alive=True
     )
     
@@ -216,7 +216,7 @@ def test_torpedo_tubes_repair():
     assert "up to 2" in repair_info, "Should mention 2 tube limit"
     
     # All tubes loaded
-    u_boat.torpedo_tubes = [True] * 5
+    u_boat.torpedo_tubes = [TubeState.LOADED] * 5
     can_repair, reason = validator.can_repair_component(u_boat, "Torpedo Tubes")
     print(f"All tubes loaded: can_repair={can_repair}, reason='{reason}'")
     assert not can_repair, "Should not repair when all tubes loaded"
@@ -226,7 +226,7 @@ def test_torpedo_tubes_repair():
     assert "none need repair" in repair_info.lower(), "Should indicate no repairs needed"
     
     # Can repair submerged with Engineer
-    u_boat.torpedo_tubes[1] = False  # Damage tube 1
+    u_boat.torpedo_tubes[1] = TubeState.DAMAGED  # Damage tube 2 (index 1)
     u_boat.depth = Depth.MEDIUM
     can_repair, reason = validator.can_repair_component(u_boat, "Torpedo Tubes")
     print(f"Torpedo Tubes (Medium, Engineer alive): can_repair={can_repair}")
@@ -276,7 +276,7 @@ def test_get_repairable_components():
         engine_damaged=True,
         deck_gun_damaged=True,
         flak_gun_damaged=True,
-        torpedo_tubes=[False, False, True, True, True],
+        torpedo_tubes=[TubeState.DAMAGED, TubeState.DAMAGED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED],
         engineer_alive=True
     )
     
@@ -308,7 +308,7 @@ def test_get_repairable_components():
     u_boat.engine_damaged = False
     u_boat.deck_gun_damaged = False
     u_boat.flak_gun_damaged = False
-    u_boat.torpedo_tubes = [True] * 5
+    u_boat.torpedo_tubes = [TubeState.LOADED] * 5
     repairable = validator.get_repairable_components(u_boat)
     print(f"Nothing damaged: {repairable}")
     assert len(repairable) == 0, "Should return empty list when nothing damaged"
@@ -426,7 +426,7 @@ def test_complex_scenarios():
         engine_damaged=True,
         deck_gun_damaged=True,
         flak_gun_damaged=True,
-        torpedo_tubes=[False, True, False, True, True],
+        torpedo_tubes=[TubeState.DAMAGED, TubeState.LOADED, TubeState.DAMAGED, TubeState.LOADED, TubeState.LOADED],
         engineer_alive=True
     )
     

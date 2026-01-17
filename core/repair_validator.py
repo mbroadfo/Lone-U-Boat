@@ -11,7 +11,7 @@ Rules from u_boat_ruleset_default.json -> REPAIR action
 """
 
 from typing import Tuple, List
-from .models import UBoat, Depth
+from .models import UBoat, Depth, TubeState
 
 
 class RepairValidator:
@@ -183,23 +183,24 @@ class RepairValidator:
     
     def get_damaged_torpedo_tubes(self, u_boat: UBoat) -> List[int]:
         """
-        Get list of damaged (unloaded) torpedo tube numbers.
+        Get list of damaged torpedo tube numbers.
         
         Tubes are numbered 1-5 (user-facing):
         - Tubes 1-4: Forward facing
         - Tube 5: Rearward facing
         
-        Note: Internally stored as 0-indexed list, but returns 1-indexed tube numbers.
+        Note: Only returns DAMAGED tubes, not empty tubes.
+        Empty tubes can be loaded, damaged tubes must be repaired first.
         
         Args:
             u_boat: The player's U-Boat
             
         Returns:
-            List of tube numbers (1-5) that are unloaded
+            List of tube numbers (1-5) that are damaged
         """
         damaged_tubes: List[int] = []
-        for i, loaded in enumerate(u_boat.torpedo_tubes):
-            if not loaded:
+        for i, tube_state in enumerate(u_boat.torpedo_tubes):
+            if tube_state == TubeState.DAMAGED:
                 damaged_tubes.append(i + 1)  # Convert to 1-based numbering
         return damaged_tubes
     
@@ -256,10 +257,10 @@ class RepairValidator:
         elif component == "Flak Gun":
             return u_boat.flak_gun_damaged
         elif component == "Torpedo Tubes":
-            # Check if any torpedo tubes are damaged (False = unloaded/damaged)
-            # NOTE: In this system, torpedo_tubes[i]=False means unloaded OR damaged
+            # Check if any torpedo tubes are damaged
             # Repair action can fix up to 2 tubes at once
-            damaged_count = sum(1 for loaded in u_boat.torpedo_tubes if not loaded)
+            damaged_count = sum(1 for tube_state in u_boat.torpedo_tubes 
+                               if tube_state == TubeState.DAMAGED)
             return damaged_count > 0
         else:
             return False

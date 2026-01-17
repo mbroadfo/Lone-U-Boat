@@ -10,7 +10,7 @@ Rules from u_boat_ruleset_default.json -> LOAD TORPS and FIRE TORPS actions
 """
 
 from typing import Tuple, List, Dict
-from .models import UBoat, Depth
+from .models import UBoat, Depth, TubeState
 
 
 class TorpedoValidator:
@@ -54,10 +54,15 @@ class TorpedoValidator:
         if u_boat.depth not in [Depth.SURFACED, Depth.PERISCOPE]:
             return False, f"Can only load torpedoes at Surfaced or Periscope (currently {u_boat.depth.name})"
         
-        # Check if tube is already loaded
+        # Check if tube is already loaded or damaged
         tube_index = tube_number - 1  # Convert to 0-based index
-        if u_boat.torpedo_tubes[tube_index]:
+        tube_state = u_boat.torpedo_tubes[tube_index]
+        
+        if tube_state == TubeState.LOADED:
             return False, f"Tube {tube_number} is already loaded"
+        
+        if tube_state == TubeState.DAMAGED:
+            return False, f"Tube {tube_number} is damaged (must repair first)"
         
         # All checks passed
         return True, ""
@@ -153,8 +158,13 @@ class TorpedoValidator:
         
         # Check if tube is loaded
         tube_index = tube_number - 1  # Convert to 0-based index
-        if not u_boat.torpedo_tubes[tube_index]:
-            return False, f"Tube {tube_number} is not loaded"
+        tube_state = u_boat.torpedo_tubes[tube_index]
+        
+        if tube_state != TubeState.LOADED:
+            if tube_state == TubeState.DAMAGED:
+                return False, f"Tube {tube_number} is damaged"
+            else:
+                return False, f"Tube {tube_number} is not loaded"
         
         # All checks passed
         return True, ""
@@ -241,15 +251,27 @@ class TorpedoValidator:
         """
         front_status: List[str] = []
         for i in range(4):
-            status = "●" if u_boat.torpedo_tubes[i] else "○"
+            state = u_boat.torpedo_tubes[i]
+            if state == TubeState.LOADED:
+                status = "●"
+            elif state == TubeState.DAMAGED:
+                status = "✕"
+            else:  # EMPTY
+                status = "○"
             front_status.append(f"{i+1}:{status}")
         
-        rear_status = "●" if u_boat.torpedo_tubes[4] else "○"
+        rear_state = u_boat.torpedo_tubes[4]
+        if rear_state == TubeState.LOADED:
+            rear_status = "●"
+        elif rear_state == TubeState.DAMAGED:
+            rear_status = "✕"
+        else:  # EMPTY
+            rear_status = "○"
         
         parts = [
             f"Front (1-4): {' '.join(front_status)}",
             f"Rear (5): {rear_status}",
-            "● = loaded, ○ = empty"
+            "● = loaded, ○ = empty, ✕ = damaged"
         ]
         
         return " | ".join(parts)

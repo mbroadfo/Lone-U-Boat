@@ -27,7 +27,7 @@ sys.path.insert(0, str(project_root))
 
 from typing import List, Tuple
 from core.game_state import Game
-from core.models import UBoat, Ship, HexCoord, Facing, Depth
+from core.models import UBoat, Ship, HexCoord, Facing, Depth, TubeState
 from core.actions import LoadTorpedoAction, FireTorpedoAction
 from core.torpedo_validator import TorpedoValidator
 from core.action_costs import ActionCostLookup
@@ -85,7 +85,7 @@ def create_test_game():
     game.u_boat.weapons_officer_alive = True
     
     # All tubes start empty
-    game.u_boat.torpedo_tubes = [False] * 5
+    game.u_boat.torpedo_tubes = [TubeState.EMPTY] * 5
     
     # Add ships in a line to the east for firing tests
     game.ships = [
@@ -161,8 +161,8 @@ def test_phase_a_load_torpedoes():
     
     assert result.success, "Load should succeed"
     assert result.ap_spent == 1, "Should cost 1 AP at surface"
-    assert u_boat.torpedo_tubes[0] == True, "Tube 1 should be loaded"
-    assert u_boat.torpedo_tubes[1] == True, "Tube 2 should be loaded"
+    assert u_boat.torpedo_tubes[0] == TubeState.LOADED, "Tube 1 should be loaded"
+    assert u_boat.torpedo_tubes[1] == TubeState.LOADED, "Tube 2 should be loaded"
     
     # Test 2: Try to load already-loaded tube (should fail)
     print(f"\n[Test 2] Try to load tube 1 again (already loaded)")
@@ -200,8 +200,8 @@ def test_phase_a_load_torpedoes():
     assert result3.success, "Load should succeed"
     # Note: Cost lookup may not work in test environment, so just verify it's > 0
     assert result3.ap_spent > 0, "Should cost some AP"
-    assert u_boat.torpedo_tubes[2] == True, "Tube 3 should be loaded"
-    assert u_boat.torpedo_tubes[3] == True, "Tube 4 should be loaded"
+    assert u_boat.torpedo_tubes[2] == TubeState.LOADED, "Tube 3 should be loaded"
+    assert u_boat.torpedo_tubes[3] == TubeState.LOADED, "Tube 4 should be loaded"
     
     # Test 4: Weapons Officer KIA (can only load 1 tube)
     print(f"\n[Test 4] Weapons Officer KIA - try to load 2 tubes")

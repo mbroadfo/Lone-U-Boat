@@ -41,9 +41,32 @@ python main.py
 - ✅ **Refactoring**: All game rules moved to JSON (zero redundancy)
 - ✅ **Phase 4**: All enemy AI complete - Merchants, Detection, Escorts (with depth charges), B-24 Aircraft, Event System
 
-**Test Coverage**: 225 tests across 18 test files, **all passing** ✓
+**Test Coverage**: 232 tests across 18 test files, **all passing** ✓
 
 **The game is now fully playable!** All enemy behaviors are automated.
+
+### Recent Updates (January 17, 2026)
+
+#### Torpedo Tube State System
+Torpedo tubes now track **three distinct states** instead of just loaded/unloaded:
+
+- **LOADED** (●) - Torpedo loaded and ready to fire
+- **EMPTY** (○) - Tube is functional but needs reloading  
+- **DAMAGED** (✗) - Tube is damaged and must be repaired before loading
+
+**Key behaviors:**
+- When a tube is **damaged** (hit by enemy fire), it becomes unusable until repaired
+- After **repair**, tubes are set to EMPTY state (not automatically loaded)
+- **Loading** can only be done on EMPTY tubes (not DAMAGED ones)
+- **Firing** empties the tube (LOADED → EMPTY)
+
+This properly reflects the game rules where damaged tubes must be repaired separately from the loading process.
+
+#### Gameplay Fixes
+- **Detection Level** now capped at maximum of 3 (was incorrectly going higher)
+- **Torpedo Loading** limited to once per turn (load button disabled after queuing load action)
+- **Repair Button** only enabled when systems are actually damaged (not just empty tubes)
+- **Deck Gun Damage Display** now shows the correct damage die roll value
 
 See [docs/PHASE_1_AUDIT.md](docs/PHASE_1_AUDIT.md) for comprehensive Phase 3 completion audit.
 
@@ -580,5 +603,5 @@ This is a personal implementation of the board game for educational purposes. Al
 
 ---
 
-**Last Updated**: January 13, 2026  
-**Version**: 0.4.0 (JSON Rules Engine Complete
+**Last Updated**: January 17, 2026  
+**Version**: 0.5.0 (Torpedo State System + Gameplay Fixes)

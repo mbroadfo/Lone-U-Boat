@@ -7,7 +7,7 @@ Front tubes fire forward, rear tube fires backward.
 
 from typing import List, Tuple, Dict, Any
 from .base_action import Action, ActionResult
-from ..models import UBoat, Ship, Depth, Facing, HexCoord
+from ..models import UBoat, Ship, Depth, Facing, HexCoord, TubeState
 from ..torpedo_validator import TorpedoValidator
 from ..los import LOSCalculator
 from ..combat_resolver import CombatResolver
@@ -235,7 +235,7 @@ class FireTorpedoAction(Action):
         
         # Unload fired tubes immediately (convert 1-based to 0-based)
         for tube_num in self.tube_indices:
-            u_boat.torpedo_tubes[tube_num - 1] = False
+            u_boat.torpedo_tubes[tube_num - 1] = TubeState.EMPTY
         
         ap_cost = self.get_cost(u_boat)
         

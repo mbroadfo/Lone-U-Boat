@@ -6,7 +6,7 @@ Integrates with RepairValidator from Phase 2.
 
 from typing import Tuple, Dict, Any
 from .base_action import Action, ActionResult
-from ..models import UBoat
+from ..models import UBoat, TubeState
 from ..repair_validator import RepairValidator
 from ..action_costs import ActionCostLookup
 
@@ -79,8 +79,8 @@ class RepairAction(Action):
             # Repair up to 2 damaged tubes
             repaired = 0
             for i in range(len(u_boat.torpedo_tubes)):
-                if not u_boat.torpedo_tubes[i] and repaired < 2:
-                    u_boat.torpedo_tubes[i] = True  # Mark as loaded
+                if u_boat.torpedo_tubes[i] == TubeState.DAMAGED and repaired < 2:
+                    u_boat.torpedo_tubes[i] = TubeState.EMPTY  # Repaired tubes are empty, need loading
                     repaired += 1
             message = f"Repaired {repaired} torpedo tube{'s' if repaired != 1 else ''}"
         else:

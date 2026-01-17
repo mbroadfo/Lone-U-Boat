@@ -6,7 +6,7 @@ Left: Mission briefing | Center: Game board | Right: Event log | Bottom: Control
 import pygame
 import sys
 from typing import Optional, Any, List, Dict, Tuple
-from ..models import Facing, Depth, Ship, HexCoord
+from ..models import Facing, Depth, Ship, HexCoord, TubeState
 from .base_screen import BaseScreen
 from ..actions import (
     MoveAction, RotateAction, DepthChangeAction, RepairAction,
@@ -142,24 +142,53 @@ class UnifiedGameScreen(BaseScreen):
         self.load_torpedo_button_rect: Optional[pygame.Rect] = None
         self.repair_button_rect: Optional[pygame.Rect] = None
         
-        # Load button images
+        # Load button images and icons - load each individually so one failure doesn't prevent others
+        import os
+        assets_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'assets')
+        
         self.fire_button_image: Optional[pygame.Surface] = None
         self.load_button_image: Optional[pygame.Surface] = None
         self.repair_button_image: Optional[pygame.Surface] = None
         self.damaged_icon: Optional[pygame.Surface] = None
         self.kia_icon: Optional[pygame.Surface] = None
         self.detection_icon: Optional[pygame.Surface] = None
+        self.torpedo_icon: Optional[pygame.Surface] = None
+        
+        # Load each icon individually with error handling
         try:
-            import os
-            assets_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'assets')
             self.fire_button_image = pygame.image.load(os.path.join(assets_path, 'Fire.png'))
-            self.load_button_image = pygame.image.load(os.path.join(assets_path, 'Load.png'))
-            self.repair_button_image = pygame.image.load(os.path.join(assets_path, 'Repair.png'))
-            self.damaged_icon = pygame.image.load(os.path.join(assets_path, 'Damaged.png'))
-            self.kia_icon = pygame.image.load(os.path.join(assets_path, 'kia.png'))
-            self.detection_icon = pygame.image.load(os.path.join(assets_path, 'detection.png'))
         except Exception as e:
-            print(f"Warning: Could not load button images: {e}")
+            print(f"Warning: Could not load Fire.png: {e}")
+        
+        try:
+            self.load_button_image = pygame.image.load(os.path.join(assets_path, 'Load.png'))
+        except Exception as e:
+            print(f"Warning: Could not load Load.png: {e}")
+        
+        try:
+            self.repair_button_image = pygame.image.load(os.path.join(assets_path, 'Repair.png'))
+        except Exception as e:
+            print(f"Warning: Could not load Repair.png: {e}")
+        
+        try:
+            self.damaged_icon = pygame.image.load(os.path.join(assets_path, 'Damaged.png'))
+        except Exception as e:
+            print(f"Warning: Could not load Damaged.png: {e}")
+        
+        try:
+            self.kia_icon = pygame.image.load(os.path.join(assets_path, 'kia.png'))
+        except Exception as e:
+            print(f"Warning: Could not load kia.png: {e}")
+        
+        try:
+            self.detection_icon = pygame.image.load(os.path.join(assets_path, 'Detection.png'))
+        except Exception as e:
+            print(f"Warning: Could not load Detection.png: {e}")
+        
+        try:
+            self.torpedo_icon = pygame.image.load(os.path.join(assets_path, 'Torpedo.png'))
+        except Exception as e:
+            print(f"Warning: Could not load Torpedo.png: {e}")
     
     def add_event(self, message: str) -> None:
         """Add an event to the log."""
@@ -2158,6 +2187,10 @@ class UnifiedGameScreen(BaseScreen):
         for ship in self.game.ships:
             self.game.renderer.render_ship(ship)
         
+        # Render aircraft (B-24s)
+        for aircraft in self.game.aircraft:
+            self.game.renderer.render_aircraft(aircraft)
+        
         # Render U-boat
         if self.awaiting_initial_setup:
             # Render preview with selected depth/facing
@@ -2190,7 +2223,8 @@ class UnifiedGameScreen(BaseScreen):
         self.screen.set_clip(old_clip)
         
         # Draw status values in status boxes (detection level, torpedo status, etc.)
-        if not self.awaiting_initial_setup and not self.alignment_mode:
+        # Always draw during gameplay, even if status box outlines are hidden
+        if not self.awaiting_initial_setup:
             self._draw_status_values()
         
         # Draw border
@@ -2205,25 +2239,24 @@ class UnifiedGameScreen(BaseScreen):
         u_boat = self.game.u_boat
         
         # === DETECTION LEVEL ===
-        if 'detection_level' in layout.status_box_rects:
-            dl_rect = layout.status_box_rects['detection_level']
-            dl_value = self.game.detection_level
+        # Detection level uses 4 separate boxes: detection_silent (0), detection_aware (1), 
+        # detection_traced (2), detection_locked (3)
+        detection_boxes = ['detection_silent', 'detection_aware', 'detection_traced', 'detection_locked']
+        dl_value = self.game.detection_level
+        
+        for i, box_name in enumerate(detection_boxes):
+            if box_name not in layout.status_box_rects:
+                continue
             
-            # Draw detection icon if available and DL > 0
-            if self.detection_icon and dl_value > 0:
+            dl_rect = layout.status_box_rects[box_name]
+            
+            # Draw detection icon if this is the current detection level
+            if i == dl_value and self.detection_icon:
                 # Scale icon to fit the box
-                icon_size = min(dl_rect.width, dl_rect.height) - 4
+                icon_size = min(dl_rect.width, dl_rect.height) - 2
                 scaled_icon = pygame.transform.scale(self.detection_icon, (icon_size, icon_size))
                 icon_rect = scaled_icon.get_rect(center=dl_rect.center)
                 self.screen.blit(scaled_icon, icon_rect)
-            
-            # Draw detection level number in center of box
-            font_size = max(16, dl_rect.height // 2)
-            font = pygame.font.Font(None, font_size)
-            text_color = (255, 255, 255) if dl_value > 0 else (120, 120, 120)
-            text = font.render(str(dl_value), True, text_color)
-            text_rect = text.get_rect(center=dl_rect.center)
-            self.screen.blit(text, text_rect)
         
         # === TORPEDO TUBES ===
         torpedo_boxes = ['torpedo_tube_1', 'torpedo_tube_2', 'torpedo_tube_3', 'torpedo_tube_4', 'torpedo_tube_5']
@@ -2232,16 +2265,29 @@ class UnifiedGameScreen(BaseScreen):
                 continue
             
             tube_rect = layout.status_box_rects[box_name]
-            is_loaded = u_boat.torpedo_tubes[i]
+            tube_state = u_boat.torpedo_tubes[i]
             
-            # Draw F (filled) or X (empty) in center
-            font_size = max(12, tube_rect.height // 3)
-            font = pygame.font.Font(None, font_size)
-            text = "F" if is_loaded else "X"
-            text_color = (100, 255, 100) if is_loaded else (255, 100, 100)
-            text_surface = font.render(text, True, text_color)
-            text_rect = text_surface.get_rect(center=tube_rect.center)
-            self.screen.blit(text_surface, text_rect)
+            # Draw torpedo icon for loaded tubes
+            if tube_state == TubeState.LOADED and self.torpedo_icon:
+                # Scale icon to fit the box
+                icon_size = min(tube_rect.width - 2, tube_rect.height - 2)
+                scaled_icon = pygame.transform.scale(self.torpedo_icon, (icon_size, icon_size))
+                icon_rect = scaled_icon.get_rect(center=tube_rect.center)
+                self.screen.blit(scaled_icon, icon_rect)
+            elif tube_state == TubeState.EMPTY:
+                # Draw O for empty tubes
+                font_size = max(12, tube_rect.height // 3)
+                font = pygame.font.Font(None, font_size)
+                text_surface = font.render("O", True, (150, 150, 150))
+                text_rect = text_surface.get_rect(center=tube_rect.center)
+                self.screen.blit(text_surface, text_rect)
+            elif tube_state == TubeState.DAMAGED:
+                # Draw red X for damaged tubes
+                font_size = max(12, tube_rect.height // 3)
+                font = pygame.font.Font(None, font_size)
+                text_surface = font.render("X", True, (255, 100, 100))
+                text_rect = text_surface.get_rect(center=tube_rect.center)
+                self.screen.blit(text_surface, text_rect)
         
         # === HULL DAMAGE ===
         if self.damaged_icon:
@@ -2327,8 +2373,16 @@ class UnifiedGameScreen(BaseScreen):
             preview_facing = u_boat.facing
             preview_depth = u_boat.depth
         
-        # Apply queued actions
-        for action in self.game.action_queue.actions:
+        # Get the list of actions to preview
+        # During execution, use the original list from action_execution_state
+        # Otherwise use the current queue
+        if self.action_execution_state and 'actions' in self.action_execution_state:
+            actions_to_preview = self.action_execution_state['actions']
+        else:
+            actions_to_preview = self.game.action_queue.actions
+        
+        # Apply queued/executing actions
+        for action in actions_to_preview:
             action_type = type(action).__name__
             
             if action_type == "MoveAction":
@@ -2960,13 +3014,17 @@ class UnifiedGameScreen(BaseScreen):
         u_boat = self.game.u_boat
         
         # Get preview state (position, facing, depth after all queued actions)
-        _, _, preview_depth = self._get_preview_state()
+        preview_position, _, preview_depth = self._get_preview_state()
         
         # Use preview depth for action validation and cost calculation
         # but current u-boat for torpedo tube status
-        loaded_tubes = sum(1 for tube in u_boat.torpedo_tubes if tube)
-        empty_tubes = len(u_boat.torpedo_tubes) - loaded_tubes
+        loaded_tubes = sum(1 for tube_state in u_boat.torpedo_tubes if tube_state == TubeState.LOADED)
+        empty_tubes = sum(1 for tube_state in u_boat.torpedo_tubes if tube_state == TubeState.EMPTY)
         can_fire_depth = preview_depth == Depth.SURFACED or preview_depth == Depth.PERISCOPE
+        
+        # Check if load torpedo action already queued (can only load once per turn)
+        from ..actions.load_torpedo_action import LoadTorpedoAction
+        has_load_queued = any(isinstance(action, LoadTorpedoAction) for action in self.game.action_queue.actions)
         
         # Get action cost lookup
         from ..action_costs import ActionCostLookup
@@ -2975,18 +3033,23 @@ class UnifiedGameScreen(BaseScreen):
         # Get remaining AP from action queue
         remaining_ap = self.game.action_queue.get_remaining_ap(self.game)
         
+        # Check if anything needs repair (damaged systems or damaged torpedo tubes)
+        has_damaged_tubes = any(tube_state == TubeState.DAMAGED for tube_state in u_boat.torpedo_tubes)
+        has_damage = (u_boat.engine_damaged or u_boat.deck_gun_damaged or 
+                     u_boat.flak_gun_damaged or has_damaged_tubes)
+        
         # Define action buttons with cost info
         # Format: (label, action_id, enabled, action_name_for_cost)
-        # Use preview_depth for depth-based validations
+        # Use preview_depth and preview_position for depth-based validations
         actions: list[tuple[str, str, bool, str]] = [
             ("MOVE FORWARD", "move", preview_depth != Depth.DEEP, "MOVE"),
             ("ROTATE LEFT", "rotate_l", True, "TURN"),
             ("ROTATE RIGHT", "rotate_r", True, "TURN"),
             ("DIVE", "dive", preview_depth != Depth.DEEP, "CHANGE DEPTH"),
             ("SURFACE", "surface", preview_depth != Depth.SURFACED, "CHANGE DEPTH"),
-            ("REPAIR", "repair", True, "REPAIR"),  # Always show, will open submenu
-            ("FIRE DECK GUN", "deck_gun", not u_boat.deck_gun_damaged and preview_depth == Depth.SURFACED and self._has_valid_deck_gun_targets(), "FIRE DECK GUN"),
-            ("LOAD TORPEDOES", "load_torp", empty_tubes > 0, "LOAD TORPS"),
+            ("REPAIR", "repair", has_damage, "REPAIR"),  # Only enabled if something is damaged
+            ("FIRE DECK GUN", "deck_gun", not u_boat.deck_gun_damaged and preview_depth == Depth.SURFACED and self._has_valid_deck_gun_targets(preview_position), "FIRE DECK GUN"),
+            ("LOAD TORPEDOES", "load_torp", empty_tubes > 0 and not has_load_queued, "LOAD TORPS"),  # Disabled if already queued
             ("FIRE TORPEDOES", "fire_torp", loaded_tubes > 0 and can_fire_depth, "FIRE TORPS"),
         ]
         
@@ -3122,13 +3185,16 @@ class UnifiedGameScreen(BaseScreen):
         else:
             return action_type.replace('Action', '')
     
-    def _has_valid_deck_gun_targets(self) -> bool:
-        """Check if any ships are in LOS and range 1-3 for deck gun."""
+    def _has_valid_deck_gun_targets(self, preview_position: Optional[HexCoord] = None) -> bool:
+        """Check if any ships are in LOS and range 1-3 for deck gun.
+        
+        Args:
+            preview_position: Optional preview position to check from (after queued moves)
+        """
         u_boat = self.game.u_boat
         
-        # Must be surfaced
-        if u_boat.depth != Depth.SURFACED:
-            return False
+        # Use preview position if provided, otherwise current position
+        check_position = preview_position if preview_position is not None else u_boat.position
         
         # Deck gun must not be damaged
         if u_boat.deck_gun_damaged:
@@ -3141,10 +3207,10 @@ class UnifiedGameScreen(BaseScreen):
         los_calc = LOSCalculator(self.game.land_hexes)
         
         for ship in self.game.ships:
-            distance = HexGrid.hex_distance(u_boat.position, ship.position)
+            distance = HexGrid.hex_distance(check_position, ship.position)
             if 1 <= distance <= 3:
                 has_los, _ = los_calc.has_line_of_sight(
-                    u_boat.position,
+                    check_position,
                     ship.position
                 )
                 if has_los:
@@ -3880,19 +3946,22 @@ class UnifiedGameScreen(BaseScreen):
             result_msgs: list[str] = []
             
             # Process each target sequentially, removing sunk ships immediately
-            for ship, distance, hit, _ in results:
+            for ship, distance, hit, damage_result_die in results:
                 # Skip if ship was already sunk by a previous attack in this volley
                 if ship not in self.game.ships:
                     continue
                 
                 if hit:
+                    # Get the damage die from the results (4th element of tuple)
+                    damage_die = damage_result_die
+                    
                     # Apply proper damage using ShipDamageResolver
                     damage_result = damage_resolver.apply_damage(ship, "deck_gun")
                     
-                    # Log the damage result
+                    # Log the damage result with the actual rolled die value
                     if damage_result.is_now_sunk:
                         result_msgs.append(
-                            f"HIT {ship.ship_type} at range {distance} - {damage_result.description} - SUNK!"
+                            f"HIT {ship.ship_type} at range {distance} - {damage_result.description} (die: {damage_die}) - SUNK!"
                         )
                         # Remove ship immediately
                         if ship in self.game.ships:
@@ -3902,7 +3971,7 @@ class UnifiedGameScreen(BaseScreen):
                         # Apply damage marker immediately
                         ship.damaged = True
                         result_msgs.append(
-                            f"HIT {ship.ship_type} at range {distance} - DAMAGED (roll: {damage_result.roll})"
+                            f"HIT {ship.ship_type} at range {distance} - DAMAGED (die: {damage_die})"
                         )
                         self.add_event(f"💥 {ship.ship_type.title()} DAMAGED")
                         # Render immediately to show damage marker
@@ -3910,17 +3979,19 @@ class UnifiedGameScreen(BaseScreen):
                         pygame.display.flip()
                     else:  # no_effect
                         result_msgs.append(
-                            f"HIT {ship.ship_type} at range {distance} - No effect (roll: {damage_result.roll})"
+                            f"HIT {ship.ship_type} at range {distance} - No effect (die: {damage_die})"
                         )
                 else:
                     result_msgs.append(f"MISS {ship.ship_type} at range {distance}")
             
             message = f"Deck gun fired at {len(results)} ship(s): {hits} hit(s). " + "; ".join(result_msgs)
             
-            # Set detection level to 3 if any hits
+            # Set detection level to 3 if any hits (cap at 3)
             if hits > 0:
-                message += " (DL set to 3)"
-                self.game.detection_level = 3
+                old_dl = self.game.detection_level
+                self.game.detection_level = min(3, self.game.detection_level)
+                if old_dl < 3:
+                    message += " (DL set to 3)"
             
             # Get cost and apply
             cost = action.get_cost(self.game.u_boat)

@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pygame
 from core.game_state import Game
 from core.uboat_ai import UBoatAI
-from core.models import HexCoord, Depth
+from core.models import HexCoord, Depth, TubeState
 
 def test_combat_resolution():
     """Test that captain can resolve torpedo and deck gun combat."""

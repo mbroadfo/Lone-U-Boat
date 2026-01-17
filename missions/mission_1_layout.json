@@ -5,7 +5,7 @@
   },
   "hex_grid_calibration": {
     "hex_size": 46.5,
-    "origin_in_map": [-10.0, -137.0]
+    "origin_in_map": [-2.0, -124.0]
   },
   "status_box_calibration": {
     "boxes_in_map": {

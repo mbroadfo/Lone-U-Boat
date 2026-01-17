@@ -70,6 +70,13 @@ class Depth(Enum):
     DEEP = 3
 
 
+class TubeState(Enum):
+    """Torpedo tube states."""
+    LOADED = "loaded"      # Tube has torpedo loaded and ready to fire
+    EMPTY = "empty"        # Tube is empty but functional, can be loaded
+    DAMAGED = "damaged"    # Tube is damaged and must be repaired before loading
+
+
 @dataclass
 class HexCoord:
     """Axial coordinate system for hexagons."""
@@ -119,7 +126,8 @@ class UBoat:
     medic_alive: bool = True
     
     # Weapons
-    torpedo_tubes: List[bool] = field(default_factory=lambda: [True] * 5)  # True = loaded, 5 tubes: [0-3]=front (tubes 1-4), [4]=rear (tube 5)
+    # 5 tubes: [0-3]=front (tubes 1-4), [4]=rear (tube 5)
+    torpedo_tubes: List[TubeState] = field(default_factory=lambda: [TubeState.LOADED] * 5)
     deck_gun_damaged: bool = False
     flak_gun_damaged: bool = False
 

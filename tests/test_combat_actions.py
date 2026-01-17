@@ -20,7 +20,7 @@ from core.actions.load_torpedo_action import LoadTorpedoAction
 from core.actions.fire_torpedo_action import FireTorpedoAction
 
 # Import models directly
-from core.models import UBoat, Ship, HexCoord, Depth, Facing
+from core.models import UBoat, Ship, HexCoord, Depth, Facing, TubeState
 
 # Import validators and resolvers directly
 from core.repair_validator import RepairValidator
@@ -93,7 +93,7 @@ def test_repair_action_torpedoes():
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
         action_points=10,
-        torpedo_tubes=[True, False, False, True, True]  # 2 damaged
+        torpedo_tubes=[TubeState.LOADED, TubeState.DAMAGED, TubeState.DAMAGED, TubeState.LOADED, TubeState.LOADED]  # 2 damaged
     )
     
     game_state = MockGameState(u_boat)
@@ -107,8 +107,9 @@ def test_repair_action_torpedoes():
     result = action.execute(game_state)
     print(f"Repair result: {result}")
     assert result.success
-    assert game_state.u_boat.torpedo_tubes[1] == True
-    assert game_state.u_boat.torpedo_tubes[2] == True
+    # Repaired tubes should be EMPTY (need to be loaded again)
+    assert game_state.u_boat.torpedo_tubes[1] == TubeState.EMPTY
+    assert game_state.u_boat.torpedo_tubes[2] == TubeState.EMPTY
     assert "2 torpedo tubes" in result.message
     
     print("✅ RepairAction torpedo tests passed!")
@@ -243,7 +244,7 @@ def test_load_torpedo_action():
         facing=Facing.NORTH,
         depth=Depth.SURFACED,
         action_points=10,
-        torpedo_tubes=[False, False, True, True, True]  # 2 empty
+        torpedo_tubes=[TubeState.EMPTY, TubeState.EMPTY, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED]  # 2 empty
     )
     
     game_state = MockGameState(u_boat)
@@ -262,8 +263,8 @@ def test_load_torpedo_action():
     result = action.execute(game_state)
     print(f"Load result: {result}")
     assert result.success
-    assert game_state.u_boat.torpedo_tubes[0] == True  # Tube 1 (index 0)
-    assert game_state.u_boat.torpedo_tubes[1] == True  # Tube 2 (index 1)
+    assert game_state.u_boat.torpedo_tubes[0] == TubeState.LOADED  # Tube 1 (index 0)
+    assert game_state.u_boat.torpedo_tubes[1] == TubeState.LOADED  # Tube 2 (index 1)
     assert "Tube 1" in result.message or "Tube 2" in result.message
     
     print("✅ LoadTorpedoAction tests passed!")
@@ -281,7 +282,7 @@ def test_load_torpedo_requires_surface_or_periscope():
         facing=Facing.NORTH,
         depth=Depth.MEDIUM,  # Too deep
         action_points=10,
-        torpedo_tubes=[False, False, True, True, True]
+        torpedo_tubes=[TubeState.EMPTY, TubeState.EMPTY, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED]
     )
     
     game_state = MockGameState(u_boat)
@@ -311,7 +312,7 @@ def test_fire_torpedo_action():
         facing=Facing.NORTH,
         depth=Depth.PERISCOPE,
         action_points=10,
-        torpedo_tubes=[True, True, True, True, True]  # All loaded
+        torpedo_tubes=[TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED]  # All loaded
     )
     
     target_ship = Ship(
@@ -344,8 +345,8 @@ def test_fire_torpedo_action():
     print(f"Fire result: {result}")
     assert result.success
     assert "torpedo" in result.message.lower()
-    assert game_state.u_boat.torpedo_tubes[0] == False  # Unloaded
-    assert game_state.u_boat.torpedo_tubes[1] == False  # Unloaded
+    assert game_state.u_boat.torpedo_tubes[0] == TubeState.EMPTY  # Unloaded
+    assert game_state.u_boat.torpedo_tubes[1] == TubeState.EMPTY  # Unloaded
     
     # Check preview
     preview = action.get_preview_data(game_state)
@@ -371,7 +372,7 @@ def test_fire_torpedo_front_and_rear_restriction():
         facing=Facing.NORTH,
         depth=Depth.PERISCOPE,
         action_points=10,
-        torpedo_tubes=[True, True, True, True, True]
+        torpedo_tubes=[TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED, TubeState.LOADED]
     )
     
     target_ship = Ship(
