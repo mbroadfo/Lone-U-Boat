@@ -347,8 +347,9 @@ class EscortAI:
         self,
         escort: Ship,
         u_boat: UBoat,
-        new_position: HexCoord
-    ) -> Tuple[bool, str]:
+        new_position: HexCoord,
+        shallow_hexes: Set[HexCoord]
+    ) -> Tuple[bool, str, bool]:
         """
         Check if escort movement forces U-boat to dive.
         
@@ -356,19 +357,25 @@ class EscortAI:
             escort: The escort ship
             u_boat: The U-boat
             new_position: Escort's new position
+            shallow_hexes: Set of shallow water hexes
             
         Returns:
-            Tuple of (forced_dive_occurred, message)
+            Tuple of (forced_dive_occurred, message, u_boat_destroyed)
         """
         # Check if escort moved into same hex as U-boat
         if new_position != u_boat.position:
-            return False, ""
+            return False, "", False
         
         # Check U-boat depth
         if u_boat.depth in [Depth.SURFACED, Depth.PERISCOPE]:
-            return True, f"Escort forces U-boat to dive from {u_boat.depth.name} to MEDIUM (+1 DL, -2 AP next turn)"
+            # Check if in shallow water - cannot dive below Periscope
+            if new_position in shallow_hexes and u_boat.depth == Depth.PERISCOPE:
+                # U-boat is destroyed - cannot dive to Medium in shallow water
+                return True, "Escort forces U-boat to dive in shallow water - U-BOAT DESTROYED!", True
+            
+            return True, f"Escort forces U-boat to dive from {u_boat.depth.name} to MEDIUM (+1 DL, -2 AP next turn)", False
         
-        return False, ""
+        return False, "", False
     
     def can_use_fire(
         self,
@@ -492,11 +499,12 @@ class EscortAI:
         detection_level: int,
         land_hexes: Set[HexCoord],
         hex_grid: HexGrid,
-        mission_hexes: Optional[Set[HexCoord]] = None
+        mission_hexes: Optional[Set[HexCoord]] = None,
+        shallow_hexes: Optional[Set[HexCoord]] = None
     ) -> Tuple[int, List[str]]:
         """
         Execute the escort phase for all escort ships.
-        
+
         Args:
             ships: List of all ships
             u_boat: The U-boat
@@ -504,10 +512,14 @@ class EscortAI:
             land_hexes: Set of land hexes
             hex_grid: Hex grid
             mission_hexes: Set of valid mission hexes (for off-map check)
-            
+            shallow_hexes: Set of shallow water hexes (for forced dive destruction check)
+
         Returns:
             Tuple of (new_detection_level, messages)
         """
+        if shallow_hexes is None:
+            shallow_hexes = set()
+        
         messages: List[str] = []
         current_dl = detection_level
         
@@ -544,7 +556,7 @@ class EscortAI:
                             
                             # Apply gunfire damage (automatic critical hit)
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
-                                u_boat, attack_type="gunfire", ship_type=escort.ship_type
+                                u_boat, attack_type="gunfire", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
                         
@@ -554,7 +566,7 @@ class EscortAI:
                             
                             # Apply depth charge damage
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
-                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type
+                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
                         else:
@@ -574,9 +586,13 @@ class EscortAI:
                         messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r}")
                         
                         # Check for forced dive
-                        forced, msg = self.check_forced_dive(escort, u_boat, next_hex)
+                        forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
                             messages.append(f"    {msg}")
+                            if destroyed:
+                                # U-boat destroyed in shallow water
+                                u_boat.hull_damage = 4
+                                return current_dl, messages
                             u_boat.depth = Depth.MEDIUM
                             current_dl = min(3, current_dl + 1)
                     else:
@@ -597,7 +613,7 @@ class EscortAI:
                             messages.append(f"    DEPTH CHARGE: Attack U-boat at range {hex_grid.hex_distance(escort.position, u_boat.position)}")
                             
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
-                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type
+                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
                 
@@ -613,9 +629,13 @@ class EscortAI:
                         messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r}")
                         
                         # Check for forced dive
-                        forced, msg = self.check_forced_dive(escort, u_boat, next_hex)
+                        forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
                             messages.append(f"    {msg}")
+                            if destroyed:
+                                # U-boat destroyed in shallow water
+                                u_boat.hull_damage = 4
+                                return current_dl, messages
                             u_boat.depth = Depth.MEDIUM
                             current_dl = min(3, current_dl + 1)
                     else:
@@ -637,7 +657,7 @@ class EscortAI:
                             messages.append(f"    DEPTH CHARGE: Attack U-boat at range {hex_grid.hex_distance(escort.position, u_boat.position)}")
                             
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
-                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type
+                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
                 
@@ -653,9 +673,13 @@ class EscortAI:
                         messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r}")
                         
                         # Check for forced dive
-                        forced, msg = self.check_forced_dive(escort, u_boat, next_hex)
+                        forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
                             messages.append(f"    {msg}")
+                            if destroyed:
+                                # U-boat destroyed in shallow water
+                                u_boat.hull_damage = 4
+                                return current_dl, messages
                             u_boat.depth = Depth.MEDIUM
                             current_dl = min(3, current_dl + 1)
                     else:
@@ -676,7 +700,7 @@ class EscortAI:
                             messages.append(f"    DEPTH CHARGE: Attack U-boat at range {hex_grid.hex_distance(escort.position, u_boat.position)}")
                             
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
-                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type
+                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
                 
@@ -689,7 +713,7 @@ class EscortAI:
                             
                             # Apply gunfire damage (automatic critical hit)
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
-                                u_boat, attack_type="gunfire", ship_type=escort.ship_type
+                                u_boat, attack_type="gunfire", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
                         else:
@@ -709,9 +733,13 @@ class EscortAI:
                         messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r}")
                         
                         # Check for forced dive
-                        forced, msg = self.check_forced_dive(escort, u_boat, next_hex)
+                        forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
                             messages.append(f"    {msg}")
+                            if destroyed:
+                                # U-boat destroyed in shallow water
+                                u_boat.hull_damage = 4
+                                return current_dl, messages
                             u_boat.depth = Depth.MEDIUM
                             current_dl = min(3, current_dl + 1)
                     else:
@@ -733,7 +761,7 @@ class EscortAI:
                             messages.append(f"    DEPTH CHARGE: Attack U-boat at range {hex_grid.hex_distance(escort.position, u_boat.position)}")
                             
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
-                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type
+                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
         

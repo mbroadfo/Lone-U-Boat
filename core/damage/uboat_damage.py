@@ -101,6 +101,9 @@ class UBoatDamageResolver:
     
     def _load_damage_tables(self) -> None:
         """Load U-Boat damage tables from mission_rules JSON."""
+        if self.mission_rules is None:
+            return
+        
         try:
             # Load critical damage table
             critical_damage = self.mission_rules.get_section_by_id("uboat_critical_damage")
@@ -112,7 +115,7 @@ class UBoatDamageResolver:
             if general_damage and "damage_table" in general_damage:
                 # Convert string keys to integers for general damage
                 new_table = {}
-                for key, value in general_damage["damage_table"].items():
+                for _key, value in general_damage["damage_table"].items():
                     if "roll_range" in value:
                         # Handle ranges like "5-6"
                         for roll_val in range(value["roll_range"][0], value["roll_range"][1] + 1):
@@ -127,7 +130,7 @@ class UBoatDamageResolver:
             if crew_casualties:
                 if "selection_table" in crew_casualties:
                     new_crew_table = {}
-                    for key, value in crew_casualties["selection_table"].items():
+                    for _key, value in crew_casualties["selection_table"].items():
                         if "roll" in value and "crew_member" in value:
                             new_crew_table[value["roll"]] = value["crew_member"]
                     if new_crew_table:
@@ -162,7 +165,7 @@ class UBoatDamageResolver:
         medic_saves: List[Tuple[str, bool]] = []
         
         # Find matching entry in damage table
-        for key, entry in self.critical_damage_table.items():
+        for _key, entry in self.critical_damage_table.items():
             roll_range = entry.get("roll_range", [])
             if len(roll_range) == 2 and roll_range[0] <= roll <= roll_range[1]:
                 damage_type = entry.get("type", "no_damage")
@@ -437,7 +440,8 @@ class UBoatDamageResolver:
         self,
         u_boat: UBoat,
         attack_type: str = "depth_charge",
-        ship_type: str = "corvette"
+        ship_type: str = "corvette",
+        ships: Optional[List[Any]] = None
     ) -> UBoatDamageResult:
         """
         Apply damage from escort attack using exact RULES.md damage chart.
@@ -564,13 +568,29 @@ class UBoatDamageResolver:
                     medic_saves.append((crew_name, True))
                     effect = f"{crew_name} targeted but saved by Medic (rolled {save_roll})"
                 else:
-                    crew_casualties.append(crew_name)
+                    if crew_name is not None:
+                        crew_casualties.append(crew_name)
                     effect = f"{crew_name} KIA"
                     if save_roll is not None:
                         effect += f" (Medic save failed: {save_roll})"
             else:
                 effect = "Crew member already KIA - no effect"
             description = f"Crew Casualty! {effect}"
+        
+        # Check for ship blocking forced ascent (after hull damage applied)
+        if hull_damage > 0 and not is_destroyed and ships is not None:
+            from ..depth_validator import DepthValidator
+            max_allowed_depth = DepthValidator.max_depth_for_hull_damage(u_boat.hull_damage)
+            
+            # If U-boat is deeper than allowed, it must ascend
+            # Depth values: SURFACED=0, PERISCOPE=1, MEDIUM=2, DEEP=3
+            if u_boat.depth.value > max_allowed_depth.value:
+                # Check if any ship is in same hex, blocking ascent
+                ship_in_hex = any(ship.position == u_boat.position for ship in ships)
+                if ship_in_hex:
+                    is_destroyed = True
+                    u_boat.hull_damage = 4
+                    description += " - Ship blocks forced ascent - U-BOAT DESTROYED!"
         
         return UBoatDamageResult(
             damage_type="escort_attack",
@@ -647,7 +667,7 @@ class UBoatDamageResolver:
         Returns:
             List of tube indices that were damaged
         """
-        damaged = []
+        damaged: List[int] = []
         for _ in range(num_dice):
             roll = self.dice.roll_1d6()
             if roll <= 5:  # Valid tube number (1-5)

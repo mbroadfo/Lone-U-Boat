@@ -118,6 +118,10 @@ class UnifiedGameScreen(BaseScreen):
         
         # Torpedo firing selection state (for interactive tube selection)
         self.fire_torpedo_selection_state: Optional[Dict[str, Any]] = None
+        
+        # Action execution state - for step-by-step execution with spacebar
+        self.action_execution_state: Optional[Dict[str, Any]] = None
+        self.action_continue_button_rect: Optional[pygame.Rect] = None
         self.fire_tube_checkbox_rects: Dict[int, pygame.Rect] = {}  # tube_num -> checkbox rect
         self.confirm_fire_button_rect: Optional[pygame.Rect] = None
         self.cancel_fire_button_rect: Optional[pygame.Rect] = None
@@ -144,6 +148,7 @@ class UnifiedGameScreen(BaseScreen):
         self.repair_button_image: Optional[pygame.Surface] = None
         self.damaged_icon: Optional[pygame.Surface] = None
         self.kia_icon: Optional[pygame.Surface] = None
+        self.detection_icon: Optional[pygame.Surface] = None
         try:
             import os
             assets_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'assets')
@@ -152,6 +157,7 @@ class UnifiedGameScreen(BaseScreen):
             self.repair_button_image = pygame.image.load(os.path.join(assets_path, 'Repair.png'))
             self.damaged_icon = pygame.image.load(os.path.join(assets_path, 'Damaged.png'))
             self.kia_icon = pygame.image.load(os.path.join(assets_path, 'kia.png'))
+            self.detection_icon = pygame.image.load(os.path.join(assets_path, 'detection.png'))
         except Exception as e:
             print(f"Warning: Could not load button images: {e}")
     
@@ -210,24 +216,9 @@ class UnifiedGameScreen(BaseScreen):
             else:
                 # Game is active - handle game keys
                 if event.key == pygame.K_SPACE:
-                    # SPACE advances phase, but during U-Boat phase must commit first
+                    # SPACE now only used for non-U-Boat phases (Continue button replaces it for U-Boat phase)
                     from ..models import GamePhase
-                    if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
-                        # Check if actions have been committed this turn
-                        if hasattr(self.game, 'action_queue'):
-                            if self.game.action_queue.actions:
-                                # Actions queued but not committed
-                                self.add_event("⚠ Commit your actions first (press C or click Commit button)")
-                            elif self.game.action_queue.is_committed:
-                                # Actions were committed, can advance
-                                self._advance_phase_and_update_ui()
-                            else:
-                                # No actions queued at all
-                                self.add_event("⚠ Queue and commit actions to advance (press C to commit)")
-                        else:
-                            self._advance_phase_and_update_ui()
-                    else:
-                        # Not in U-Boat phase, SPACE always advances
+                    if self.game.turn_manager.current_phase != GamePhase.UBOAT_PHASE:
                         self._advance_phase_and_update_ui()
                 
                 elif event.key == pygame.K_u:
@@ -242,25 +233,31 @@ class UnifiedGameScreen(BaseScreen):
                         self.add_event("Nothing to undo")
                 
                 elif event.key == pygame.K_c:
-                    # Commit queued actions
-                    current_phase = self.game.turn_manager.current_phase
-                    from ..models import GamePhase
-                    if current_phase == GamePhase.UBOAT_PHASE:
-                        if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
-                            # Execute all actions immediately (commit_all clears queue and deducts AP)
-                            results = self.game.action_queue.commit_all(self.game)
-                            for result in results:
-                                if result.success:
-                                    action_name = result.state_changes.get('action_name', 'Action')
-                                    self.add_event(f"✓ {action_name}")
-                                else:
-                                    self.add_event(f"✗ Failed: {result.message}")
-                            remaining = self.game.action_queue.get_remaining_ap(self.game)
-                            self.add_event(f"Committed (AP: {remaining}/{self.game.action_queue.max_ap})")
-                        else:
-                            self.add_event("No actions to commit")
+                    # Commit queued actions - start step-by-step execution
+                    # Don't allow commit if already executing actions
+                    if self.action_execution_state:
+                        self.add_event("⚠ Actions already executing, press SPACE to continue")
                     else:
-                        self.add_event("Can only commit during U-Boat phase")
+                        current_phase = self.game.turn_manager.current_phase
+                        from ..models import GamePhase
+                        if current_phase == GamePhase.UBOAT_PHASE:
+                            if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
+                                # Mark queue as committed
+                                self.game.action_queue._committed = True  # type: ignore[attr-defined]
+                                
+                                # Start step-by-step execution
+                                self.action_execution_state = {
+                                    'current_index': 0,
+                                    'actions': list(self.game.action_queue.actions),  # Copy the list
+                                    'waiting_for_continue': False
+                                }
+                                self.add_event("=== EXECUTING ACTIONS ===")
+                                # Execute first action immediately
+                                self._execute_next_action()
+                            else:
+                                self.add_event("No actions to commit")
+                        else:
+                            self.add_event("Can only commit during U-Boat phase")
                 
                 # Display toggles (work during game)
                 elif event.key == pygame.K_g:
@@ -341,142 +338,43 @@ class UnifiedGameScreen(BaseScreen):
                                 action_name = type(undone_action).__name__.replace('Action', '')
                                 self.add_event(f"Undone: {action_name}")
                     
-                    elif self.commit_button_rect and self.commit_button_rect.collidepoint(mouse_pos):
-                        current_phase = self.game.turn_manager.current_phase
-                        from ..models import GamePhase
-                        if current_phase == GamePhase.UBOAT_PHASE:
-                            if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
-                                # Check if any action needs interactive resolution
-                                has_deck_gun = any(isinstance(action, DeckGunAction) for action in self.game.action_queue.actions)
-                                has_torpedo = any(isinstance(action, FireTorpedoAction) for action in self.game.action_queue.actions)
-                                
-                                if has_deck_gun:
-                                    # Check if deck gun is damaged
-                                    if self.game.u_boat.deck_gun_damaged:
-                                        self.add_event("✗ Cannot fire deck gun - deck gun is damaged")
-                                        # Remove deck gun actions from queue
-                                        self.game.action_queue.actions = [
-                                            a for a in self.game.action_queue.actions 
-                                            if not isinstance(a, DeckGunAction)
-                                        ]
-                                    else:
-                                        # Execute all non-interactive actions BEFORE deck gun
-                                        # This ensures moves/rotations happen first
-                                        non_interactive = [a for a in self.game.action_queue.actions 
-                                                         if not isinstance(a, (DeckGunAction, FireTorpedoAction))]
-                                        for action in non_interactive:
-                                            result = action.execute(self.game)
-                                            if result.success:
-                                                action_name = result.state_changes.get('action_name', 'Action')
-                                                self.add_event(f"✓ {action_name}")
-                                            self.game.u_boat.action_points -= result.ap_spent
-                                        
-                                        # Remove executed actions from queue
-                                        self.game.action_queue.actions = [a for a in self.game.action_queue.actions 
-                                                                         if isinstance(a, (DeckGunAction, FireTorpedoAction))]
-                                        
-                                        # Find the first deck gun action and start interactive resolution
-                                        for i, action in enumerate(self.game.action_queue.actions):
-                                            if isinstance(action, DeckGunAction):
-                                                # Recalculate targets based on CURRENT u-boat position
-                                                # (after moves/rotations have been executed)
-                                                from ..los import LOSCalculator
-                                                from ..hex_grid import HexGrid
-                                                
-                                                los_calc = LOSCalculator(self.game.land_hexes)
-                                                current_targets: List[Tuple[Ship, int]] = []
-                                                for ship in self.game.ships:
-                                                    distance = HexGrid.hex_distance(self.game.u_boat.position, ship.position)
-                                                    if 1 <= distance <= 3:
-                                                        has_los, _ = los_calc.has_line_of_sight(
-                                                            self.game.u_boat.position,
-                                                            ship.position
-                                                        )
-                                                        if has_los:
-                                                            current_targets.append((ship, distance))
-                                                
-                                                # Sort by distance (closest first)
-                                                import random
-                                                current_targets.sort(key=lambda ship_tuple: (ship_tuple[1], random.random()))
-                                                
-                                                # Store queue index for after resolution
-                                                self.deck_gun_resolution_state = {
-                                                    'action': action,
-                                                    'action_index': i,
-                                                    'targets': current_targets,  # Use recalculated targets
-                                                    'current_idx': 0,
-                                                    'waiting_for': 'hit',
-                                                    'last_hit_roll': None,
-                                                    'last_damage_roll': None,
-                                                    'results': []
-                                                }
-                                                self.add_event("=== DECK GUN ATTACK ===")
-                                                break
-                                
-                                elif has_torpedo:
-                                    # Execute all non-interactive actions BEFORE torpedo
-                                    non_interactive = [a for a in self.game.action_queue.actions 
-                                                     if not isinstance(a, (DeckGunAction, FireTorpedoAction))]
-                                    for action in non_interactive:
-                                        result = action.execute(self.game)
-                                        if result.success:
-                                            action_name = result.state_changes.get('action_name', 'Action')
-                                            self.add_event(f"✓ {action_name}")
-                                        self.game.u_boat.action_points -= result.ap_spent
-                                    
-                                    # Remove executed actions from queue
-                                    self.game.action_queue.actions = [a for a in self.game.action_queue.actions 
-                                                                     if isinstance(a, (DeckGunAction, FireTorpedoAction))]
-                                    
-                                    # Find first torpedo action and start interactive resolution
-                                    for i, action in enumerate(self.game.action_queue.actions):
-                                        if isinstance(action, FireTorpedoAction):
-                                            # Execute to get targets (tubes are unloaded here)
-                                            result = action.execute(self.game)
-                                            
-                                            # Spend AP
-                                            self.game.u_boat.action_points -= result.ap_spent
-                                            
-                                            # Check if needs interactive resolution
-                                            if result.state_changes.get('needs_interactive_resolution'):
-                                                # Setup interactive resolution state
-                                                self.torpedo_resolution_state = {
-                                                    'action': action,
-                                                    'action_index': i,
-                                                    'torpedo_count': result.state_changes['torpedo_count'],
-                                                    'targets': result.state_changes['targets'],  # [(ship, distance, aspect), ...]
-                                                    'current_target_idx': 0,
-                                                    'current_torpedo_idx': 0,
-                                                    'torpedoes_available': result.state_changes['torpedo_count'],
-                                                    'waiting_for': 'hit',  # 'hit', 'damage', 'continue'
-                                                    'last_hit_roll': None,
-                                                    'last_damage_roll': None,
-                                                    'results': []  # [(torpedo_num, ship, distance, hit, damage_die), ...]
-                                                }
-                                                self.add_event(f"=== FIRING {self.torpedo_resolution_state['torpedo_count']} TORPEDO(ES) ===")
-                                            else:
-                                                # No targets, just log
-                                                self.add_event(result.message)
-                                            
-                                            # Remove this action from queue
-                                            self.game.action_queue.actions.pop(i)
-                                            break
-                                
-                                else:
-                                    # No interactive actions - execute all immediately (commit_all clears queue and deducts AP)
-                                    results = self.game.action_queue.commit_all(self.game)
-                                    for result in results:
-                                        if result.success:
-                                            action_name = result.state_changes.get('action_name', 'Action')
-                                            self.add_event(f"✓ {action_name}")
-                                        else:
-                                            self.add_event(f"✗ Failed: {result.message}")
-                                    remaining = self.game.action_queue.get_remaining_ap(self.game)
-                                    self.add_event(f"Committed (AP: {remaining}/{self.game.action_queue.max_ap})")
-                            else:
-                                self.add_event("No actions to commit")
+                    elif self.action_continue_button_rect and self.action_continue_button_rect.collidepoint(mouse_pos):
+                        # Continue button clicked
+                        if not self.game.running:
+                            # Game is over, don't advance
+                            pass
+                        elif self.action_execution_state and self.action_execution_state.get('waiting_for_continue'):
+                            # Executing actions - advance to next action
+                            self._execute_next_action()
                         else:
-                            self.add_event("Can only commit during U-Boat phase")
+                            # Actions complete - advance phase
+                            self._advance_phase_and_update_ui()
+                    
+                    elif self.commit_button_rect and self.commit_button_rect.collidepoint(mouse_pos):
+                        # Don't allow commit if already executing actions
+                        if self.action_execution_state:
+                            self.add_event("⚠ Actions already executing, press SPACE to continue")
+                        else:
+                            current_phase = self.game.turn_manager.current_phase
+                            from ..models import GamePhase
+                            if current_phase == GamePhase.UBOAT_PHASE:
+                                if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
+                                    # Mark queue as committed
+                                    self.game.action_queue._committed = True  # type: ignore[attr-defined]
+                                    
+                                    # Start step-by-step execution
+                                    self.action_execution_state = {
+                                        'current_index': 0,
+                                        'actions': list(self.game.action_queue.actions),  # Copy the list
+                                        'waiting_for_continue': False
+                                    }
+                                    self.add_event("=== EXECUTING ACTIONS ===")
+                                    # Execute first action immediately
+                                    self._execute_next_action()
+                                else:
+                                    self.add_event("No actions to commit")
+                            else:
+                                self.add_event("Can only commit during U-Boat phase")
                     
                     # Check if clicking deck gun resolution button
                     elif self.deck_gun_resolution_state and self.deck_gun_roll_button_rect and self.deck_gun_roll_button_rect.collidepoint(mouse_pos):
@@ -548,6 +446,10 @@ class UnifiedGameScreen(BaseScreen):
     
     def _advance_phase_and_update_ui(self):
         """Advance to next phase and update UI with phase information."""
+        # Don't advance if game is over
+        if not self.game.running:
+            return
+        
         # Forward phase advancement to game
         self.game._advance_to_next_phase()  # type: ignore[attr-defined]
         
@@ -2307,6 +2209,14 @@ class UnifiedGameScreen(BaseScreen):
             dl_rect = layout.status_box_rects['detection_level']
             dl_value = self.game.detection_level
             
+            # Draw detection icon if available and DL > 0
+            if self.detection_icon and dl_value > 0:
+                # Scale icon to fit the box
+                icon_size = min(dl_rect.width, dl_rect.height) - 4
+                scaled_icon = pygame.transform.scale(self.detection_icon, (icon_size, icon_size))
+                icon_rect = scaled_icon.get_rect(center=dl_rect.center)
+                self.screen.blit(scaled_icon, icon_rect)
+            
             # Draw detection level number in center of box
             font_size = max(16, dl_rect.height // 2)
             font = pygame.font.Font(None, font_size)
@@ -2903,45 +2813,85 @@ class UnifiedGameScreen(BaseScreen):
                     color=(120, 120, 120)
                 )
             
-            # Buttons at bottom - only show if NOT in deck gun resolution
+            # Buttons at bottom - show commit/undo if not committed, Continue if committed/executing
             if not self.deck_gun_resolution_state:
                 button_y = y + height - 55
-                button_width = (width - 30) // 2
                 button_height = 40
                 
-                # Undo button (left)
-                undo_rect = pygame.Rect(x + 10, button_y, button_width, button_height)
-                undo_color = (100, 50, 50) if self.game.action_queue.actions else (40, 40, 40)
-                pygame.draw.rect(self.screen, undo_color, undo_rect)
-                pygame.draw.rect(self.screen, (150, 100, 100), undo_rect, 2)
-                self.draw_text(
-                    "UNDO (U)",
-                    undo_rect.centerx,
-                    undo_rect.centery,
-                    self.font_small,
-                    color=(255, 200, 200) if self.game.action_queue.actions else (100, 100, 100),
-                    center=True
-                )
+                # Check if actions are committed or executing
+                is_committed = self.game.action_queue.is_committed
+                is_executing = self.action_execution_state is not None
                 
-                # Commit button (right)
-                commit_rect = pygame.Rect(x + 20 + button_width, button_y, button_width, button_height)
-                commit_color = (50, 100, 50) if self.game.action_queue.actions else (40, 40, 40)
-                pygame.draw.rect(self.screen, commit_color, commit_rect)
-                pygame.draw.rect(self.screen, (100, 150, 100), commit_rect, 2)
-                self.draw_text(
-                    "COMMIT (C)",
-                    commit_rect.centerx,
-                    commit_rect.centery,
-                    self.font_small,
-                    color=(200, 255, 200) if self.game.action_queue.actions else (100, 100, 100),
-                    center=True
-                )
-                
-                self.undo_button_rect = undo_rect
-                self.commit_button_rect = commit_rect
+                if is_committed or is_executing:
+                    # Show Continue button (full width)
+                    button_width = width - 20
+                    continue_rect = pygame.Rect(x + 10, button_y, button_width, button_height)
+                    
+                    # Check if waiting for user to continue
+                    waiting = is_executing and self.action_execution_state is not None and self.action_execution_state.get('waiting_for_continue', False)
+                    
+                    if waiting:
+                        continue_color = (50, 100, 150)
+                        border_color = (100, 180, 255)
+                        text_color = (200, 230, 255)
+                    else:
+                        continue_color = (40, 60, 80)
+                        border_color = (80, 100, 120)
+                        text_color = (120, 140, 160)
+                    
+                    pygame.draw.rect(self.screen, continue_color, continue_rect)
+                    pygame.draw.rect(self.screen, border_color, continue_rect, 2)
+                    self.draw_text(
+                        "CONTINUE ►",
+                        continue_rect.centerx,
+                        continue_rect.centery,
+                        self.font_small,
+                        color=text_color,
+                        center=True
+                    )
+                    
+                    self.action_continue_button_rect = continue_rect
+                    self.undo_button_rect = None
+                    self.commit_button_rect = None
+                else:
+                    # Show Undo and Commit buttons
+                    button_width = (width - 30) // 2
+                    
+                    # Undo button (left)
+                    undo_rect = pygame.Rect(x + 10, button_y, button_width, button_height)
+                    undo_color = (100, 50, 50) if self.game.action_queue.actions else (40, 40, 40)
+                    pygame.draw.rect(self.screen, undo_color, undo_rect)
+                    pygame.draw.rect(self.screen, (150, 100, 100), undo_rect, 2)
+                    self.draw_text(
+                        "UNDO (U)",
+                        undo_rect.centerx,
+                        undo_rect.centery,
+                        self.font_small,
+                        color=(255, 200, 200) if self.game.action_queue.actions else (100, 100, 100),
+                        center=True
+                    )
+                    
+                    # Commit button (right)
+                    commit_rect = pygame.Rect(x + 20 + button_width, button_y, button_width, button_height)
+                    commit_color = (50, 100, 50) if self.game.action_queue.actions else (40, 40, 40)
+                    pygame.draw.rect(self.screen, commit_color, commit_rect)
+                    pygame.draw.rect(self.screen, (100, 150, 100), commit_rect, 2)
+                    self.draw_text(
+                        "COMMIT (C)",
+                        commit_rect.centerx,
+                        commit_rect.centery,
+                        self.font_small,
+                        color=(200, 255, 200) if self.game.action_queue.actions else (100, 100, 100),
+                        center=True
+                    )
+                    
+                    self.undo_button_rect = undo_rect
+                    self.commit_button_rect = commit_rect
+                    self.action_continue_button_rect = None
             else:
                 self.undo_button_rect = None
                 self.commit_button_rect = None
+                self.action_continue_button_rect = None
         else:
             self.draw_text(
                 "Action queue not initialized",
@@ -3009,25 +2959,33 @@ class UnifiedGameScreen(BaseScreen):
         
         u_boat = self.game.u_boat
         
-        # Calculate torpedo states
+        # Get preview state (position, facing, depth after all queued actions)
+        _, _, preview_depth = self._get_preview_state()
+        
+        # Use preview depth for action validation and cost calculation
+        # but current u-boat for torpedo tube status
         loaded_tubes = sum(1 for tube in u_boat.torpedo_tubes if tube)
         empty_tubes = len(u_boat.torpedo_tubes) - loaded_tubes
-        can_fire_depth = u_boat.depth == Depth.SURFACED or u_boat.depth == Depth.PERISCOPE
+        can_fire_depth = preview_depth == Depth.SURFACED or preview_depth == Depth.PERISCOPE
         
         # Get action cost lookup
         from ..action_costs import ActionCostLookup
         cost_lookup = ActionCostLookup(self.game.mission_rules)
         
+        # Get remaining AP from action queue
+        remaining_ap = self.game.action_queue.get_remaining_ap(self.game)
+        
         # Define action buttons with cost info
         # Format: (label, action_id, enabled, action_name_for_cost)
+        # Use preview_depth for depth-based validations
         actions: list[tuple[str, str, bool, str]] = [
-            ("MOVE FORWARD", "move", u_boat.depth != Depth.DEEP, "MOVE"),
+            ("MOVE FORWARD", "move", preview_depth != Depth.DEEP, "MOVE"),
             ("ROTATE LEFT", "rotate_l", True, "TURN"),
             ("ROTATE RIGHT", "rotate_r", True, "TURN"),
-            ("DIVE", "dive", u_boat.depth != Depth.DEEP, "CHANGE DEPTH"),
-            ("SURFACE", "surface", u_boat.depth != Depth.SURFACED, "CHANGE DEPTH"),
+            ("DIVE", "dive", preview_depth != Depth.DEEP, "CHANGE DEPTH"),
+            ("SURFACE", "surface", preview_depth != Depth.SURFACED, "CHANGE DEPTH"),
             ("REPAIR", "repair", True, "REPAIR"),  # Always show, will open submenu
-            ("FIRE DECK GUN", "deck_gun", not u_boat.deck_gun_damaged and u_boat.depth == Depth.SURFACED and self._has_valid_deck_gun_targets(), "FIRE DECK GUN"),
+            ("FIRE DECK GUN", "deck_gun", not u_boat.deck_gun_damaged and preview_depth == Depth.SURFACED and self._has_valid_deck_gun_targets(), "FIRE DECK GUN"),
             ("LOAD TORPEDOES", "load_torp", empty_tubes > 0, "LOAD TORPS"),
             ("FIRE TORPEDOES", "fire_torp", loaded_tubes > 0 and can_fire_depth, "FIRE TORPS"),
         ]
@@ -3035,8 +2993,8 @@ class UnifiedGameScreen(BaseScreen):
         for label, action_id, enabled, action_name in actions:
             rect = pygame.Rect(button_x, button_y, button_width, button_height)
             
-            # Get action cost
-            cost = cost_lookup.get_cost(action_name, u_boat.depth)
+            # Get action cost based on PREVIEW depth (costs change with depth)
+            cost = cost_lookup.get_cost(action_name, preview_depth)
             
             # Build label with cost
             if cost is not None:
@@ -3046,8 +3004,8 @@ class UnifiedGameScreen(BaseScreen):
             else:
                 full_label = f"{label} - N/A"
             
-            # Check if button is clickable (enabled AND enough AP)
-            can_afford = cost is not None and cost <= u_boat.action_points
+            # Check if button is clickable (enabled AND enough remaining AP)
+            can_afford = cost is not None and cost <= remaining_ap
             is_clickable = enabled and can_afford
             
             # Store rect AND clickable state
@@ -3083,11 +3041,11 @@ class UnifiedGameScreen(BaseScreen):
             
             button_y += button_height + button_spacing
         
-        # Info section: Depth cost modifiers
+        # Info section: Preview depth and cost info
         info_y = button_y + 10
         
-        # Show current depth and its effect on costs
-        depth_name = u_boat.depth.name
+        # Show preview depth and its effect on costs
+        depth_name = preview_depth.name
         self.draw_text(
             f"At {depth_name}:",
             x + width // 2,
@@ -3098,15 +3056,15 @@ class UnifiedGameScreen(BaseScreen):
         )
         info_y += 18
         
-        # Show cost for common actions at this depth vs surfaced
+        # Show cost for common actions at preview depth vs surfaced
         surfaced_move = cost_lookup.get_cost("MOVE", Depth.SURFACED)
-        current_move = cost_lookup.get_cost("MOVE", u_boat.depth)
+        preview_move = cost_lookup.get_cost("MOVE", preview_depth)
         surfaced_turn = cost_lookup.get_cost("TURN", Depth.SURFACED)
-        current_turn = cost_lookup.get_cost("TURN", u_boat.depth)
+        preview_turn = cost_lookup.get_cost("TURN", preview_depth)
         
-        if surfaced_move and current_move:
-            move_diff = current_move - surfaced_move
-            move_text = f"Move: {current_move} AP"
+        if surfaced_move and preview_move:
+            move_diff = preview_move - surfaced_move
+            move_text = f"Move: {preview_move} AP"
             if move_diff > 0:
                 move_text += f" (+{move_diff})"
             self.draw_text(
@@ -3117,9 +3075,9 @@ class UnifiedGameScreen(BaseScreen):
                 color=(180, 180, 180)
             )
         
-        if surfaced_turn and current_turn:
-            turn_diff = current_turn - surfaced_turn
-            turn_text = f"Turn: {current_turn} AP"
+        if surfaced_turn and preview_turn:
+            turn_diff = preview_turn - surfaced_turn
+            turn_text = f"Turn: {preview_turn} AP"
             if turn_diff > 0:
                 turn_text += f" (+{turn_diff})"
             self.draw_text(
@@ -3130,37 +3088,14 @@ class UnifiedGameScreen(BaseScreen):
                 color=(180, 180, 180)
             )
         
-        # Add SPACE bar hint at bottom of action panel
-        from ..models import GamePhase
-        phase_hint_y = y + height - 60
-        
-        # Draw separator line
-        pygame.draw.line(
-            self.screen,
-            (80, 80, 80),
-            (x + 10, phase_hint_y - 10),
-            (x + width - 10, phase_hint_y - 10),
-            1
-        )
-        
-        # Show current phase and SPACE hint
-        current_phase_name = self.game.turn_manager.get_current_phase_name()
+        # Show AP remaining
+        info_y += 35
         self.draw_text(
-            f"Current: {current_phase_name}",
+            f"AP Remaining: {remaining_ap}/{self.game.action_queue.max_ap}",
             x + width // 2,
-            phase_hint_y,
+            info_y,
             self.font_small,
-            color=(200, 200, 150),
-            center=True
-        )
-        
-        # SPACE bar hint
-        self.draw_text(
-            "Press SPACE to advance phase",
-            x + width // 2,
-            phase_hint_y + 20,
-            self.font_small,
-            color=(100, 255, 100),
+            color=(100, 255, 100) if remaining_ap > 0 else (150, 150, 150),
             center=True
         )
     
@@ -3934,7 +3869,6 @@ class UnifiedGameScreen(BaseScreen):
         
         # Get the action from state
         action = state.get('action')
-        action_index = state.get('action_index', 0)
         
         # Apply deck gun results
         if action:
@@ -3988,24 +3922,25 @@ class UnifiedGameScreen(BaseScreen):
                 message += " (DL set to 3)"
                 self.game.detection_level = 3
             
-            # Get cost
+            # Get cost and apply
             cost = action.get_cost(self.game.u_boat)
-            
-            # Manually apply the action result
             self.game.u_boat.action_points -= cost
             
             # Log result
             self.add_event(f"✓ Deck Gun: {message}")
-            
-            # Remove this action from queue
-            if action_index < len(self.game.action_queue.actions):
-                self.game.action_queue.actions.pop(action_index)
         
         # Clear resolution state
         self.deck_gun_resolution_state = None
         self.deck_gun_roll_button_rect = None
         
-        # Execute all non-interactive actions before next deck gun/torpedo
+        # If in step-by-step execution mode, advance to next action
+        if self.action_execution_state:
+            self.action_execution_state['current_index'] += 1
+            self.action_execution_state['waiting_for_continue'] = True
+            self.add_event("Press SPACE to continue...")
+            return
+        
+        # OLD COMMIT PATH: Execute all non-interactive actions before next deck gun/torpedo
         # This ensures moves/rotates happen before we recalculate targets
         # AND updates the u-boat position visually on screen
         non_interactive_actions = [
@@ -4115,6 +4050,12 @@ class UnifiedGameScreen(BaseScreen):
             else:
                 # All interactive actions resolved - clear queue
                 self.game.action_queue.clear()
+        
+        # If in step-by-step execution mode, continue to next action
+        if self.action_execution_state:
+            self.action_execution_state['current_index'] += 1
+            self.action_execution_state['waiting_for_continue'] = True
+            self.add_event("Press SPACE to continue...")
     
     def _draw_torpedo_resolution(self, x: int, y: int, width: int) -> None:
         """Draw the interactive torpedo resolution UI."""
@@ -4391,20 +4332,37 @@ class UnifiedGameScreen(BaseScreen):
         
         elif waiting_for == 'continue':
             # Move to next target or next torpedo
+            # Check if we just had a hit (by checking if last result was a hit)
+            just_hit = len(state['results']) > 0 and state['results'][-1][3]  # results are (torp_num, ship, dist, hit, dmg)
+            
             state['last_hit_roll'] = None
             state['last_damage_roll'] = None
             
-            # If last action was a miss and we have more targets, continue same torpedo
-            if state['torpedoes_available'] > 0 and current_target_idx + 1 < len(targets):
-                # Continue torpedo to next ship
-                state['current_target_idx'] += 1
-                state['waiting_for'] = 'hit'
-            elif state['torpedoes_available'] > 0:
-                # No more targets, finish
-                self._finish_torpedo_resolution()
+            if just_hit:
+                # After a hit, torpedo is consumed - start next torpedo from first target
+                if state['torpedoes_available'] > 0:
+                    state['current_target_idx'] = 0  # Reset to first target for next torpedo
+                    state['waiting_for'] = 'hit'
+                else:
+                    # No more torpedoes, finish
+                    self._finish_torpedo_resolution()
             else:
-                # All torpedoes fired, finish
-                self._finish_torpedo_resolution()
+                # After a miss, torpedo continues to next target
+                if state['torpedoes_available'] > 0 and current_target_idx + 1 < len(targets):
+                    # Continue same torpedo to next ship
+                    state['current_target_idx'] += 1
+                    state['waiting_for'] = 'hit'
+                else:
+                    # No more targets for this torpedo, but we have more torpedoes
+                    # Start next torpedo from first target
+                    if state['torpedoes_available'] > 0:
+                        state['torpedoes_available'] -= 1  # This torpedo missed all targets, consume it
+                        state['current_torpedo_idx'] += 1
+                        state['current_target_idx'] = 0  # Reset to first target
+                        state['waiting_for'] = 'hit'
+                    else:
+                        # All torpedoes fired, finish
+                        self._finish_torpedo_resolution()
     
     def _finish_torpedo_resolution(self) -> None:
         """Finish torpedo resolution and calculate detection level changes."""
@@ -4480,8 +4438,127 @@ class UnifiedGameScreen(BaseScreen):
             # Remove from queue
             self.game.action_queue.actions.pop(next_idx)
         else:
-            # All torpedoes resolved - clear queue
+            # All torpedoes resolved - clear queue and mark as not committed
             self.game.action_queue.clear()
+            # Mark queue as not committed to allow phase advancement
+            self.game.action_queue._committed = False  # type: ignore[attr-defined]
+        
+        # If in step-by-step execution mode, continue to next action
+        if self.action_execution_state:
+            self.action_execution_state['current_index'] += 1
+            self.action_execution_state['waiting_for_continue'] = True
+            self.add_event("Press SPACE to continue...")
+    
+    def _execute_next_action(self) -> None:
+        """Execute the next action in step-by-step execution."""
+        state = self.action_execution_state
+        if not state:
+            return
+        
+        from ..actions.fire_torpedo_action import FireTorpedoAction
+        from ..actions.deck_gun_action import DeckGunAction
+        
+        # Reset waiting flag
+        state['waiting_for_continue'] = False
+        
+        # Check if we've finished all actions
+        if state['current_index'] >= len(state['actions']):
+            # All actions complete - keep _committed True so Continue button stays visible
+            self.action_execution_state = None
+            self.action_continue_button_rect = None
+            self.game.action_queue.clear()
+            # Don't reset _committed here - let phase advancement handle it
+            remaining = self.game.u_boat.action_points
+            self.add_event(f"=== ALL ACTIONS COMPLETE (AP remaining: {remaining}) ===")
+            return
+        
+        # Get current action
+        action = state['actions'][state['current_index']]
+        
+        # Check if this is an interactive action (torpedo or deck gun)
+        if isinstance(action, FireTorpedoAction):
+            # Execute torpedo action
+            result = action.execute(self.game)
+            self.game.u_boat.action_points -= result.ap_spent
+            
+            if result.state_changes.get('needs_interactive_resolution'):
+                # Setup torpedo resolution state
+                self.torpedo_resolution_state = {
+                    'action': action,
+                    'action_index': state['current_index'],
+                    'torpedo_count': result.state_changes['torpedo_count'],
+                    'targets': result.state_changes['targets'],
+                    'current_target_idx': 0,
+                    'current_torpedo_idx': 0,
+                    'torpedoes_available': result.state_changes['torpedo_count'],
+                    'waiting_for': 'hit',
+                    'last_hit_roll': None,
+                    'last_damage_roll': None,
+                    'results': []
+                }
+                self.add_event(f"=== FIRING {self.torpedo_resolution_state['torpedo_count']} TORPEDO(ES) ===")
+                # Don't advance index yet - will advance after torpedo resolution
+            else:
+                # No targets
+                self.add_event(result.message)
+                state['current_index'] += 1
+                state['waiting_for_continue'] = True
+                self.add_event("Press SPACE to continue...")
+        
+        elif isinstance(action, DeckGunAction):
+            # Check if deck gun is damaged
+            if self.game.u_boat.deck_gun_damaged:
+                self.add_event("✗ Cannot fire deck gun - deck gun is damaged")
+                state['current_index'] += 1
+                state['waiting_for_continue'] = True
+                self.add_event("Press SPACE to continue...")
+            elif not action.targets:
+                # No targets
+                self.add_event("✗ No valid deck gun targets")
+                state['current_index'] += 1
+                state['waiting_for_continue'] = True
+                self.add_event("Press SPACE to continue...")
+            else:
+                # Setup interactive resolution for first target
+                target, distance = action.targets[0]
+                
+                # Setup deck gun resolution state (don't execute yet)
+                self.deck_gun_resolution_state = {
+                    'action': action,
+                    'action_index': state['current_index'],
+                    'targets': action.targets,  # All targets
+                    'current_idx': 0,
+                    'target': target,
+                    'distance': distance,
+                    'waiting_for': 'hit',
+                    'last_hit_roll': None,
+                    'last_damage_roll': None,
+                    'results': []
+                }
+                self.add_event(f"=== FIRING DECK GUN ===")
+                # Don't advance index yet - will advance after deck gun resolution
+        
+        else:
+            # Non-interactive action - execute immediately
+            result = action.execute(self.game)
+            self.game.u_boat.action_points -= result.ap_spent
+            
+            if result.success:
+                action_name = result.state_changes.get('action_name', type(action).__name__.replace('Action', ''))
+                self.add_event(f"✓ {action_name}")
+            else:
+                self.add_event(f"✗ Failed: {result.message}")
+            
+            # Move to next action
+            state['current_index'] += 1
+            
+            # Wait for spacebar before continuing to next action
+            state['waiting_for_continue'] = True
+            if state['current_index'] < len(state['actions']):
+                self.add_event("Press SPACE to continue...")
+            else:
+                # This was the last action, finish up
+                self._execute_next_action()  # Call again to finish
     
     def _handle_load_torpedo_clicks(self, mouse_pos: Tuple[int, int]) -> None:
         """Handle clicks on torpedo loading UI elements."""

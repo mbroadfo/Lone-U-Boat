@@ -8,7 +8,7 @@ import importlib
 from typing import Optional, List, Any, Dict
 
 from config import board_config as cfg
-from config.board_layout_config import load_mission_layout, MissionLayoutConfig
+from config.board_layout_config import load_mission_layout
 from .models import HexCoord, Facing, Depth, UBoat, Ship, Aircraft, GamePhase
 from .hex_grid import HexGrid
 from .assets import AssetManager
@@ -22,7 +22,7 @@ from .detection_ai import DetectionAI
 from .escort_ai import EscortAI
 from .b24_ai import B24AI
 from .event_system import EventSystem
-from missions.mission_rules_loader import MissionRules, load_mission_rules
+from missions.mission_rules_loader import load_mission_rules
 
 
 class Game:
@@ -82,13 +82,13 @@ class Game:
         # Initialize B-24 AI
         self.b24_ai = B24AI(
             dice_roller=self.turn_manager.dice,
-            hex_grid=None,  # Will be set after hex_grid initialization
-            mission_rules=self.mission_rules
+            hex_grid=None,  # type: ignore[arg-type]
+            mission_rules=self.mission_rules  # type: ignore[arg-type]
         )
         
         # Initialize Event System
         self.event_system = EventSystem(
-            mission_rules=self.mission_rules,
+            mission_rules=self.mission_rules,  # type: ignore[arg-type]
             dice_roller=self.turn_manager.dice,
             game_state=self  # Pass self for condition checking
         )
@@ -123,15 +123,15 @@ class Game:
             layout_cfg = MissionLayoutConfig(
                 map_calib=MapCalibration(width=678, height=900),
                 hex_grid_calib=HexGridCalibration(
-                    hex_size=cfg.HEX_GRID['size'] * cfg.HEX_SCALE_MULTIPLIER,
-                    origin_in_map=(cfg.HEX_GRID['offset_x'] + cfg.GLOBAL_BOARD_OFFSET['offset_x'], 
-                                   cfg.HEX_GRID['offset_y'] + cfg.GLOBAL_BOARD_OFFSET['offset_y'])
+                    hex_size=cfg.HEX_GRID['size'] * cfg.HEX_SCALE_MULTIPLIER,  # type: ignore[attr-defined]
+                    origin_in_map=(cfg.HEX_GRID['offset_x'] + cfg.GLOBAL_BOARD_OFFSET['offset_x'],  # type: ignore[attr-defined]
+                                   cfg.HEX_GRID['offset_y'] + cfg.GLOBAL_BOARD_OFFSET['offset_y'])  # type: ignore[attr-defined]
                 ),
                 status_calib=StatusBoxCalibration(
-                    boxes_in_map={name: (data['rect'][0] * cfg.STATUS_BOX_SCALE_MULTIPLIER,
-                                        data['rect'][1] * cfg.STATUS_BOX_SCALE_MULTIPLIER,
-                                        data['rect'][2] * cfg.STATUS_BOX_SCALE_MULTIPLIER,
-                                        data['rect'][3] * cfg.STATUS_BOX_SCALE_MULTIPLIER)
+                    boxes_in_map={name: (data['rect'][0] * cfg.STATUS_BOX_SCALE_MULTIPLIER,  # type: ignore[attr-defined]
+                                        data['rect'][1] * cfg.STATUS_BOX_SCALE_MULTIPLIER,  # type: ignore[attr-defined]
+                                        data['rect'][2] * cfg.STATUS_BOX_SCALE_MULTIPLIER,  # type: ignore[attr-defined]
+                                        data['rect'][3] * cfg.STATUS_BOX_SCALE_MULTIPLIER)  # type: ignore[attr-defined]
                                  for name, data in cfg.STATUS_BOXES.items()}
                 )
             )
@@ -139,12 +139,12 @@ class Game:
         self.layout = BoardLayoutRuntime(
             screen_size=(self.screen.get_width(), self.screen.get_height()),
             layout_cfg=layout_cfg,
-            ui_cfg=cfg.UI
+            ui_cfg=cfg.UI  # type: ignore[arg-type]
         )
         
         # Create hex grid overlay with runtime-computed offsets
         self.hex_grid = HexGrid(
-            size=self.layout.hex_size,
+            size=int(self.layout.hex_size),
             cols=cfg.HEX_GRID['cols'],
             rows=cfg.HEX_GRID['rows'],
             offset_x=self.layout.hex_origin_screen[0],
@@ -155,7 +155,7 @@ class Game:
         
         # Set hex_grid for AI systems that need it
         self.b24_ai.hex_grid = self.hex_grid
-        self.escort_ai.hex_grid = self.hex_grid
+        self.escort_ai.hex_grid = self.hex_grid  # type: ignore[attr-defined]
         
         # Game entities - load from mission config
         u_boat_start = self.mission_config.U_BOAT_START
@@ -269,7 +269,7 @@ class Game:
         """
         self.layout.recompute(new_size)
         # Update hex grid with new computed values
-        self.hex_grid.size = self.layout.hex_size
+        self.hex_grid.size = int(self.layout.hex_size)  # type: ignore[assignment]
         self.hex_grid.offset_x, self.hex_grid.offset_y = self.layout.hex_origin_screen
         # Update renderer's layout reference
         self.renderer.update_layout(self.layout)
@@ -285,7 +285,7 @@ class Game:
         """
         self.layout.recompute_for_board(board_rect)
         # Update hex grid with new computed values
-        self.hex_grid.size = self.layout.hex_size
+        self.hex_grid.size = int(self.layout.hex_size)  # type: ignore[assignment]
         self.hex_grid.offset_x, self.hex_grid.offset_y = self.layout.hex_origin_screen
         # Update renderer's layout reference
         self.renderer.update_layout(self.layout)
@@ -347,7 +347,7 @@ class Game:
             self._execute_end_turn_phase()
         
         # Advance phase
-        new_phase, turn_wrapped = self.turn_manager.advance_phase()
+        _, turn_wrapped = self.turn_manager.advance_phase()
         
         # Stop if game ended
         if not self.running:
@@ -444,7 +444,8 @@ class Game:
             detection_level=self.detection_level,
             land_hexes=self.land_hexes,
             hex_grid=self.hex_grid,
-            mission_hexes=self.mission_hexes
+            mission_hexes=self.mission_hexes,
+            shallow_hexes=self.shallow_hexes
         )
         
         # Log all escort action messages

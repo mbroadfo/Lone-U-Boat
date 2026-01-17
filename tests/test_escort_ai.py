@@ -297,47 +297,52 @@ def test_check_forced_dive_surfaced(escort_ai, destroyer, u_boat):
     """Moving into surfaced U-boat hex forces dive."""
     u_boat.depth = Depth.SURFACED
     
-    forced, msg = escort_ai.check_forced_dive(destroyer, u_boat, u_boat.position)
+    forced, msg, destroyed = escort_ai.check_forced_dive(destroyer, u_boat, u_boat.position, set())
     
     assert forced is True
     assert "dive" in msg.lower()
     assert "MEDIUM" in msg
+    assert destroyed is False
 
 
 def test_check_forced_dive_periscope(escort_ai, destroyer, u_boat):
     """Moving into periscope depth U-boat hex forces dive."""
     u_boat.depth = Depth.PERISCOPE
     
-    forced, msg = escort_ai.check_forced_dive(destroyer, u_boat, u_boat.position)
+    forced, msg, destroyed = escort_ai.check_forced_dive(destroyer, u_boat, u_boat.position, set())
     
     assert forced is True
     assert "dive" in msg.lower()
+    assert destroyed is False
 
 
 def test_check_forced_dive_medium_no_effect(escort_ai, destroyer, u_boat):
     """Moving into medium depth U-boat hex has no forced dive."""
     u_boat.depth = Depth.MEDIUM
     
-    forced, msg = escort_ai.check_forced_dive(destroyer, u_boat, u_boat.position)
+    forced, msg, destroyed = escort_ai.check_forced_dive(destroyer, u_boat, u_boat.position, set())
     
     assert forced is False
     assert msg == ""
+    assert destroyed is False
 
 
 def test_check_forced_dive_deep_no_effect(escort_ai, destroyer, u_boat):
     """Moving into deep depth U-boat hex has no forced dive."""
     u_boat.depth = Depth.DEEP
     
-    forced, msg = escort_ai.check_forced_dive(destroyer, u_boat, u_boat.position)
+    forced, msg, destroyed = escort_ai.check_forced_dive(destroyer, u_boat, u_boat.position, set())
     
     assert forced is False
+    assert destroyed is False
 
 
 def test_check_forced_dive_different_hex_no_effect(escort_ai, destroyer, u_boat):
     """Moving to different hex doesn't trigger forced dive."""
-    forced, msg = escort_ai.check_forced_dive(destroyer, u_boat, HexCoord(10, 10))
+    forced, msg, destroyed = escort_ai.check_forced_dive(destroyer, u_boat, HexCoord(10, 10), set())
     
     assert forced is False
+    assert destroyed is False
 
 
 # ===== Combat Validation Tests =====

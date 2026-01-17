@@ -12,6 +12,7 @@ test_files = [
     "tests/test_combat_resolver.py",
     "tests/test_damage_resolution.py",
     "tests/test_depth_validator.py",
+    "tests/test_destruction_conditions.py",
     "tests/test_detection_ai.py",
     "tests/test_detection_integration.py",
     "tests/test_escort_ai.py",
