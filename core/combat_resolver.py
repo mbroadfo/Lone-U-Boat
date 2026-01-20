@@ -113,7 +113,7 @@ class CombatResolver:
     def resolve_deck_gun_attack(
         self,
         range_to_target: int
-    ) -> Tuple[bool, int, str]:
+    ) -> Tuple[bool, int, str, List[int]]:
         """
         Resolve deck gun attack with 2d6 roll.
         
@@ -125,14 +125,15 @@ class CombatResolver:
             range_to_target: Hex distance to target (1-3)
             
         Returns:
-            (hit, roll_result, description)
+            (hit, roll_result, description, individual_dice)
             - hit: True if attack hits
             - roll_result: The 2d6 roll result
             - description: Formatted attack description
+            - individual_dice: List of individual die values [d1, d2]
         """
         # Determine target number based on range
         if range_to_target <= 0:
-            return False, 0, "Invalid range (must be 1-3)"
+            return False, 0, "Invalid range (must be 1-3)", []
         elif range_to_target <= 2:
             target = self.deck_gun_hit_table["range_1_2"]
             range_desc = "1-2"
@@ -140,16 +141,18 @@ class CombatResolver:
             target = self.deck_gun_hit_table["range_3"]
             range_desc = "3"
         else:
-            return False, 0, f"Out of range (max 3, target at {range_to_target})"
+            return False, 0, f"Out of range (max 3, target at {range_to_target})", []
         
-        # Roll 2d6
-        roll = self.dice.roll_2d6()
+        # Roll 2d6 - get individual dice values
+        die1 = self.dice.roll_1d6()
+        die2 = self.dice.roll_1d6()
+        roll = die1 + die2
         hit = roll >= target
         
-        # Format description
-        desc = f"Range {range_desc}: rolled {roll} (need {target}+) = {'HIT' if hit else 'MISS'}"
+        # Format description with individual dice
+        desc = f"Range {range_desc}: rolled [{die1}][{die2}] = {roll} (need {target}+) = {'HIT' if hit else 'MISS'}"
         
-        return hit, roll, desc
+        return hit, roll, desc, [die1, die2]
     
     def roll_deck_gun_damage(self) -> Tuple[int, str]:
         """

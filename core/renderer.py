@@ -252,6 +252,15 @@ class GameRenderer:
         """
         center = self.hex_grid.hex_to_pixel(u_boat.position)
         
+        # Check if U-boat is destroyed
+        if u_boat.hull_damage >= 4:
+            # Show KIA marker instead of U-boat image
+            kia_image = self.marker_images.get('kia')
+            if kia_image:
+                rect = kia_image.get_rect(center=(int(center[0]), int(center[1])))
+                self.screen.blit(kia_image, rect)
+            return
+        
         # Get the appropriate image for current depth
         image = self.u_boat_images.get(u_boat.depth)
         if image is None:

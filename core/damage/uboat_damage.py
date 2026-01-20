@@ -500,6 +500,7 @@ class UBoatDamageResolver:
         if chart_roll == 1:
             # Critical Hit!
             crit_roll = self.dice.roll_1d6()
+            print(f"[DAMAGE] Critical hit sub-table: rolled {crit_roll} (1=destroyed, 2=+2 hull, 3-4=torps, 5-6=double)")
             
             if crit_roll == 1:
                 # U-Boat Destroyed
@@ -522,7 +523,10 @@ class UBoatDamageResolver:
                 # Torp tubes 3d6
                 damaged_tubes = self._damage_torpedo_tubes(u_boat, 3)
                 systems_damaged.extend([f"Torpedo Tube {t+1}" for t in damaged_tubes])
-                effect = f"Torpedo tubes damaged: {[t+1 for t in damaged_tubes]}"
+                if damaged_tubes:
+                    effect = f"Torpedo tubes damaged: {[t+1 for t in damaged_tubes]}"
+                else:
+                    effect = "Torpedo tube damage rolled but no tubes affected (already damaged or rolled 6)"
                 description = f"Critical Hit! Roll {crit_roll}: {effect}"
             
             else:  # crit_roll in [5, 6]
@@ -669,12 +673,17 @@ class UBoatDamageResolver:
             List of tube indices that were damaged
         """
         damaged: List[int] = []
+        rolls: List[int] = []
         for _ in range(num_dice):
             roll = self.dice.roll_1d6()
+            rolls.append(roll)
             if roll <= 5:  # Valid tube number (1-5)
                 tube_index = roll - 1
                 # Only damage if not already damaged
                 if u_boat.torpedo_tubes[tube_index] != TubeState.DAMAGED:
                     u_boat.torpedo_tubes[tube_index] = TubeState.DAMAGED
                     damaged.append(tube_index)
+        
+        # Log the actual dice rolls for clarity
+        print(f"[DAMAGE] Torpedo tube damage: rolled {num_dice}d6 = {rolls}, tubes damaged: {[t+1 for t in damaged]}")
         return damaged

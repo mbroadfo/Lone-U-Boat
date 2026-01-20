@@ -537,13 +537,22 @@ class EscortAI:
         for escort in escorts:
             messages.append(f"\n{escort.ship_type.upper()} at {escort.position.q},{escort.position.r} activates:")
             
-            # Roll action dice
-            action_rolls = self.roll_escort_actions(escort, current_dl)
-            messages.append(f"  Rolled {len(action_rolls)} dice: {action_rolls}")
+            # Calculate and show dice count
+            dice_count = self.calculate_dice_count(escort, current_dl)
+            base_dice = self.corvette_base_dice if escort.ship_type == 'corvette' else self.destroyer_base_dice
+            dice_calc_msg = f"  Dice count: {base_dice} (base)"
+            if not escort.damaged and current_dl >= 1:
+                dice_calc_msg += f" +{current_dl} (DL={current_dl})"
+            elif escort.damaged and current_dl >= 1:
+                dice_calc_msg += f" (damaged: no DL bonus)"
+            dice_calc_msg += f" = {dice_count} dice"
+            messages.append(dice_calc_msg)
             
-            # Execute each die result in order
-            for die_result in action_rolls:
-                messages.append(f"  Die {die_result}:")
+            # Roll and execute dice one at a time, stopping if U-boat is destroyed
+            for die_idx in range(1, dice_count + 1):
+                # Roll this die
+                die_result = self.dice.roll_1d6()
+                messages.append(f"  Die {die_idx} (rolled {die_result}):")
                 
                 # Execute actions based on die result (correct rules)
                 if die_result == 1:
@@ -559,16 +568,27 @@ class EscortAI:
                                 u_boat, attack_type="gunfire", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
+                            
+                            # Check if U-boat destroyed - stop processing remaining dice
+                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
+                            if is_destroyed:
+                                return current_dl, messages
                         
                         # Otherwise try DEPTH CHARGE
                         elif self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {hex_grid.hex_distance(escort.position, u_boat.position)}")
+                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {distance}")
                             
                             # Apply depth charge damage
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
+                            
+                            # Check if U-boat destroyed - stop processing remaining dice
+                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
+                            if is_destroyed:
+                                return current_dl, messages
                         else:
                             messages.append(f"    No valid FIRE or DEPTH CHARGE targets")
                     else:
@@ -610,12 +630,18 @@ class EscortAI:
                     # Then try depth charge if DL=1-3
                     if current_dl >= 1 and current_dl <= 3:
                         if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {hex_grid.hex_distance(escort.position, u_boat.position)}")
+                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {distance}")
                             
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
+                            
+                            # Check if U-boat destroyed - stop processing remaining dice
+                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
+                            if is_destroyed:
+                                return current_dl, messages
                 
                 elif die_result == 3:
                     # Die 3: Move, Turn, if DL=1-3 Depth Charge
@@ -654,12 +680,18 @@ class EscortAI:
                     # Then try depth charge if DL=1-3
                     if current_dl >= 1 and current_dl <= 3:
                         if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {hex_grid.hex_distance(escort.position, u_boat.position)}")
+                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {distance}")
                             
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
+                            
+                            # Check if U-boat destroyed - stop processing remaining dice
+                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
+                            if is_destroyed:
+                                return current_dl, messages
                 
                 elif die_result == 4:
                     # Die 4: Move (if blocked turn), if DL=1-3 Depth Charge
@@ -697,12 +729,18 @@ class EscortAI:
                     # Then try depth charge if DL=1-3
                     if current_dl >= 1 and current_dl <= 3:
                         if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {hex_grid.hex_distance(escort.position, u_boat.position)}")
+                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {distance}")
                             
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
+                            
+                            # Check if U-boat destroyed - stop processing remaining dice
+                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
+                            if is_destroyed:
+                                return current_dl, messages
                 
                 elif die_result == 5:
                     # Die 5: If DL=1-3, FIRE
@@ -716,6 +754,11 @@ class EscortAI:
                                 u_boat, attack_type="gunfire", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
+                            
+                            # Check if U-boat destroyed - stop processing remaining dice
+                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
+                            if is_destroyed:
+                                return current_dl, messages
                         else:
                             messages.append(f"    FIRE: No valid target (must be surfaced, in LOS, range 1-3)")
                     else:
@@ -758,11 +801,17 @@ class EscortAI:
                     # Then try depth charge if DL=1-3
                     if current_dl >= 1 and current_dl <= 3:
                         if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {hex_grid.hex_distance(escort.position, u_boat.position)}")
+                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {distance}")
                             
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
+                            
+                            # Check if U-boat destroyed - stop processing remaining dice
+                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
+                            if is_destroyed:
+                                return current_dl, messages
         
         return current_dl, messages

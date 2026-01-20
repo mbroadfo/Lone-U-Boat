@@ -4,8 +4,8 @@
     "height": 900
   },
   "hex_grid_calibration": {
-    "hex_size": 46.5,
-    "origin_in_map": [-2.0, -124.0]
+    "hex_size": 47.0,
+    "origin_in_map": [-11.0, -137.0]
   },
   "status_box_calibration": {
     "boxes_in_map": {

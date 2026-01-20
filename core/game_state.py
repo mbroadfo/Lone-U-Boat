@@ -346,12 +346,12 @@ class Game:
         elif current_phase == GamePhase.END_TURN_PHASE:
             self._execute_end_turn_phase()
         
-        # Advance phase
-        _, turn_wrapped = self.turn_manager.advance_phase()
-        
-        # Stop if game ended
+        # Stop if game ended during phase execution
         if not self.running:
             return
+        
+        # Advance phase
+        _, turn_wrapped = self.turn_manager.advance_phase()
         
         # If wrapped to new turn, start it
         if turn_wrapped:
@@ -633,11 +633,20 @@ class Game:
         
         # Check mission objectives (victory)
         merchant_count = sum(1 for ship in self.ships if ship.ship_type == "merchant")
-        if merchant_count == 0:
+        merchants_destroyed = merchant_count == 0
+        
+        # Check if U-boat reached exit hex
+        exit_position = self.mission_config.EXIT_POSITIONS['u_boat']['position']
+        exit_hex = HexCoord(exit_position[0], exit_position[1])
+        reached_exit = self.u_boat.position == exit_hex
+        
+        # Victory requires BOTH objectives
+        if merchants_destroyed and reached_exit:
             print(f"\n{'='*60}")
             print("MISSION SUCCESS!")
             print(f"{'='*60}")
             print(f"All merchant ships destroyed!")
+            print(f"U-boat escaped via exit hex!")
             print(f"Turn: {self.turn_manager.turn_number}")
             print(f"Final Position: {self.u_boat.position}")
             print(f"Hull Damage: {self.u_boat.hull_damage}/{self.escort_ai.damage_resolver.max_hull_damage}")

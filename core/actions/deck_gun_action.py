@@ -85,14 +85,27 @@ class DeckGunAction(Action):
         """Execute the deck gun attack on all targets."""
         u_boat = game_state.u_boat
         
+        # Filter out sunk/destroyed ships (targets captured at queue time, validate at execution)
+        # Ships are removed from game_state.ships when sunk, so check if still in that list
+        active_targets = [(ship, distance) for ship, distance in self.targets if ship in game_state.ships]
+        
+        if not active_targets:
+            ap_cost = self.get_cost(u_boat)
+            return ActionResult(
+                success=False,
+                message="All targets destroyed before deck gun could fire",
+                ap_spent=ap_cost,
+                state_changes={"action_name": "Deck Gun"}
+            )
+        
         results = []
         total_hits = 0
         damaged_ships = []
         
-        # Attack each target in order (closest to furthest)
-        for ship, distance in self.targets:
-            # Resolve attack
-            hit, roll_result, description = self.combat_resolver.resolve_deck_gun_attack(
+        # Attack each active target in order (closest to furthest)
+        for ship, distance in active_targets:
+            # Resolve attack (returns 4 values: hit, roll_result, description, dice_values)
+            hit, roll_result, description, dice_values = self.combat_resolver.resolve_deck_gun_attack(
                 distance
             )
             

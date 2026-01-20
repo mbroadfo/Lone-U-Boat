@@ -90,7 +90,10 @@ class B24AI:
         
         # Step 2: Turn (only if DL 2-3)
         if detection_level >= 2:
+            messages.append(f"  → Turn decision (DL={detection_level} >= 2):")
             self._turn_aircraft(aircraft, u_boat, messages)
+        else:
+            messages.append(f"  → No turn (DL={detection_level} < 2)")
         
         # Step 3: Attack (if in range and U-boat vulnerable)
         new_dl = detection_level
@@ -309,10 +312,13 @@ class B24AI:
             return False
         
         # Roll 2d6, need 8+ (7+ if lookout alive)
-        roll = self.dice.roll_2d6()
+        roll1 = self.dice.roll_1d6()
+        roll2 = self.dice.roll_1d6()
+        roll = roll1 + roll2
         threshold = 7 if u_boat.lookout_alive else 8
         
-        messages.append(f"  → Flak defense: Rolled {roll} (need {threshold}+)")
+        threshold_text = "7+ (Lookout)" if u_boat.lookout_alive else "8+"
+        messages.append(f"  → Flak defense: Rolled [{roll1}]+[{roll2}]={roll} (need {threshold_text})")
         
         if roll >= threshold:
             messages.append("  → B-24 destroyed/scared off!")
@@ -342,7 +348,7 @@ class B24AI:
         
         # Roll 1d6 for attack result
         roll = self.dice.roll_1d6()
-        messages.append(f"      Rolled {roll} on attack table")
+        messages.append(f"      Attack roll: {roll} (1-2=+2 hull, 3-4=damage chart, 5-6=miss)")
         
         if roll <= 2:
             # +2 hull damage
