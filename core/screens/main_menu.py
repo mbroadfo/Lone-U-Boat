@@ -146,8 +146,8 @@ class MainMenuScreen(BaseScreen):
         # Draw mission buttons
         self.button_rects = []
         button_y = panel_y + 90
-        button_height = 70
-        button_spacing = 10
+        button_height = 85
+        button_spacing = 15
         button_width = panel_width - 80
         button_x = panel_x + 40
         
@@ -188,7 +188,7 @@ class MainMenuScreen(BaseScreen):
             
             # Draw mission number and name (wrap if too long)
             mission_text = f"Mission {mission['number']}: {mission['name']}"
-            text_y = button_y + 15
+            text_y = button_y + 12
             
             # Wrap long mission names
             max_width = button_width - 40
@@ -202,11 +202,11 @@ class MainMenuScreen(BaseScreen):
                     self.font_medium,
                     color=text_color
                 )
-                text_y += 20
+                text_y += 22
             
             # Draw description (adjust y position based on wrapped title)
-            desc_color = (150, 150, 170) if not is_unlocked else (180, 200, 220)
-            desc_y = text_y + 10  # Small gap after title
+            desc_color = (120, 120, 140) if not is_unlocked else (160, 180, 200)
+            desc_y = text_y + 2  # Smaller gap after title
             self.draw_text(
                 mission['description'],
                 button_x + 20,

@@ -7,8 +7,10 @@ import sys
 
 test_files = [
     "tests/test_action_system.py",
+    "tests/test_ai_game.py",
     "tests/test_b24_ai.py",
     "tests/test_combat_actions.py",
+    "tests/test_combat_resolution.py",
     "tests/test_combat_resolver.py",
     "tests/test_damage_resolution.py",
     "tests/test_depth_validator.py",
@@ -25,6 +27,7 @@ test_files = [
     "tests/test_phase2_subsystems.py",
     "tests/test_range_los.py",
     "tests/test_repair_validator.py",
+    "tests/test_scripted_captain.py",
     "tests/test_torpedo_validator.py",
 ]
 

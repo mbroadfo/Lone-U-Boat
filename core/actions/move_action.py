@@ -68,9 +68,12 @@ class MoveAction(Action):
     def execute(self, game_state: Any) -> ActionResult:
         """Execute the move."""
         old_position = game_state.u_boat.position
-        game_state.u_boat.position = self.target_hex
         
+        # Calculate cost BEFORE moving (in case future costs depend on position)
         ap_cost = self.get_cost(game_state.u_boat)
+        
+        # Now perform the move
+        game_state.u_boat.position = self.target_hex
         
         return ActionResult(
             success=True,

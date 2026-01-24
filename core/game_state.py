@@ -391,7 +391,6 @@ class Game:
     def _execute_merchant_phase(self):
         """Execute merchant ship movements."""
         self.turn_manager.add_phase_log("Merchant Phase", "Merchant ships acting...")
-        print("[EVENT] Merchant Phase: Executing merchant movements...")
         
         # Execute merchant AI
         messages = self.merchant_ai.execute_merchant_phase(self.ships)
@@ -399,19 +398,17 @@ class Game:
         # Log all merchant movements
         for message in messages:
             self.turn_manager.add_phase_log("Merchant Phase", message)
-            print(f"[EVENT] {message}")
         
         # Check if any merchants have exited
         exited = self.merchant_ai.check_merchant_exit(self.ships)
         if exited:
             msg = f"{len(exited)} merchant(s) exited map"
             self.turn_manager.add_phase_log("Merchant Phase", msg)
-            print(f"[EVENT] {msg}")
     
     def _execute_detection_phase(self):
         """Calculate detection level changes."""
         self.turn_manager.add_phase_log("Detection Phase", "Calculating detection...")
-        print(f"[EVENT] Detection Phase: Current DL={self.detection_level}")
+        self.turn_manager.add_phase_log("Detection Phase", f"Current DL={self.detection_level}")
         
         # Execute detection AI
         new_detection_level, messages = self.detection_ai.execute_detection_phase(
@@ -425,17 +422,16 @@ class Game:
         # Log all detection messages
         for message in messages:
             self.turn_manager.add_phase_log("Detection Phase", message)
-            print(f"[EVENT] {message}")
         
         # Update detection level
         if new_detection_level != self.detection_level:
-            print(f"[EVENT] Detection Level: {self.detection_level} -> {new_detection_level}")
-        self.detection_level = new_detection_level
+            self.turn_manager.add_phase_log("Detection Phase", f"Detection Level: {self.detection_level} -> {new_detection_level}")
+        self.detection_level = min(3, new_detection_level)  # Ensure cap at 3
     
     def _execute_escort_phase(self):
         """Execute escort ship behaviors."""
         self.turn_manager.add_phase_log("Escort Phase", "Escorts acting...")
-        print(f"[EVENT] Escort Phase: DL={self.detection_level}")
+        self.turn_manager.add_phase_log("Escort Phase", f"DL={self.detection_level}")
         
         # Execute escort AI
         new_detection_level, messages = self.escort_ai.execute_escort_phase(
@@ -451,12 +447,11 @@ class Game:
         # Log all escort action messages
         for message in messages:
             self.turn_manager.add_phase_log("Escort Phase", message)
-            print(f"[EVENT] {message}")
         
         # Update detection level (can be increased by FIRE action or forced dive)
         if new_detection_level != self.detection_level:
-            print(f"[EVENT] Detection Level changed: {self.detection_level} -> {new_detection_level}")
-        self.detection_level = new_detection_level
+            self.turn_manager.add_phase_log("Escort Phase", f"Detection Level changed: {self.detection_level} -> {new_detection_level}")
+        self.detection_level = min(3, new_detection_level)  # Ensure cap at 3
         
         # Check if U-boat was destroyed during escort phase
         is_destroyed, reason = self.escort_ai.damage_resolver.check_destruction(self.u_boat)
@@ -478,7 +473,9 @@ class Game:
             print(f"[EVENT] {msg}")
             return
         
-        print(f"[EVENT] B-24 Phase: {len(self.aircraft)} aircraft active")
+        msg = f"{len(self.aircraft)} aircraft active"
+        self.turn_manager.add_phase_log("B24 Phase", msg)
+        print(f"[EVENT] {msg}")
         
         # Execute B-24 phase
         messages, new_dl = self.b24_ai.execute_b24_phase(
@@ -490,11 +487,14 @@ class Game:
         # Log all messages
         for msg in messages:
             self.turn_manager.add_phase_log("B24 Phase", msg)
-            print(f"[EVENT] {msg}")
+            print(f"[EVENT]   {msg}")
         
         # Update detection level
         if new_dl > self.detection_level:
-            self.detection_level = new_dl
+            self.detection_level = min(3, new_dl)  # Ensure cap at 3
+            msg = f"Detection Level increased to {new_dl}"
+            self.turn_manager.add_phase_log("B24 Phase", msg)
+            print(f"[EVENT] {msg}")
         
         # Check if U-boat was destroyed during B24 phase
         is_destroyed, reason = self.b24_ai.damage_resolver.check_destruction(self.u_boat)
@@ -513,7 +513,7 @@ class Game:
     
     def _execute_end_turn_events(self):
         """Execute end-of-turn events (Phase 6)."""
-        print(f"[EVENT] End Turn Events: Checking for turn {self.turn_manager.turn_number} events...")
+        self.turn_manager.add_phase_log("End Turn Events", f"Checking for turn {self.turn_manager.turn_number} events...")
         
         result = self.event_system.execute_end_turn_events(
             self.turn_manager.turn_number
@@ -524,14 +524,12 @@ class Game:
             self.ships.append(ship)
             msg = f"Spawned {ship.ship_type} at {ship.position}"
             self.turn_manager.add_phase_log("End Turn Events", msg)
-            print(f"[EVENT] {msg}")
         
         # Add spawned aircraft
         for aircraft in result.spawned_aircraft:
             self.aircraft.append(aircraft)
             msg = f"Spawned {aircraft.aircraft_type} at {aircraft.position}"
             self.turn_manager.add_phase_log("End Turn Events", msg)
-            print(f"[EVENT] {msg}")
         
         # Handle special effects
         for effect in result.special_effects:
@@ -541,11 +539,9 @@ class Game:
         if result.messages:
             for msg in result.messages:
                 self.turn_manager.add_phase_log("End Turn Events", msg)
-                print(f"[EVENT] {msg}")
         else:
             msg = "No events this turn"
             self.turn_manager.add_phase_log("End Turn Events", msg)
-            print(f"[EVENT] {msg}")
     
     def _apply_special_effect(self, effect: str):
         """Apply special event effects to game state.
@@ -583,9 +579,8 @@ class Game:
         """Clean up turn and prepare for next."""
         msg = f"Turn {self.turn_manager.turn_number} complete"
         self.turn_manager.add_phase_log("End Turn Phase", msg)
-        print(f"[EVENT] {msg}")
-        print(f"[EVENT] U-Boat: {self.u_boat.position}, {self.u_boat.depth.name}, Hull:{self.u_boat.hull_damage}/{self.escort_ai.damage_resolver.max_hull_damage}")
-        print(f"[EVENT] Ships: {len(self.ships)} remaining, Detection Level: {self.detection_level}")
+        self.turn_manager.add_phase_log("End Turn Phase", f"U-Boat: {self.u_boat.position}, {self.u_boat.depth.name}, Hull:{self.u_boat.hull_damage}/{self.escort_ai.damage_resolver.max_hull_damage}")
+        self.turn_manager.add_phase_log("End Turn Phase", f"Ships: {len(self.ships)} remaining, Detection Level: {self.detection_level}")
         
         # Check victory/defeat conditions
         self._check_game_over_conditions()

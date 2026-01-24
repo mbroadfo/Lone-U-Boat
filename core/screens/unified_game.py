@@ -401,7 +401,8 @@ class UnifiedGameScreen(BaseScreen):
                                 if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
                                     # Check if there are unspent action points
                                     total_ap = self.game.u_boat.action_points
-                                    spent_ap = sum(action.get_cost(self.game.u_boat) for action in self.game.action_queue.actions)
+                                    # Calculate costs with simulated depth changes
+                                    spent_ap = self._calculate_total_ap_cost_with_simulation()
                                     remaining_ap = total_ap - spent_ap
                                     
                                     # If there are unspent AP that could be used, show confirmation
@@ -454,13 +455,16 @@ class UnifiedGameScreen(BaseScreen):
                     
                     # Check if clicking action selection buttons
                     elif not self.load_torpedo_selection_state and not self.fire_torpedo_selection_state:  # Only allow if not in torpedo selection
-                        for action_id, button_data in self.action_button_rects.items():
-                            rect: pygame.Rect
-                            is_clickable: bool
-                            rect, is_clickable = button_data
-                            if rect.collidepoint(mouse_pos) and is_clickable:
-                                self._queue_action(action_id)
-                                break
+                        # Only process action button clicks during U-Boat phase
+                        from ..models import GamePhase
+                        if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
+                            for action_id, button_data in self.action_button_rects.items():
+                                rect: pygame.Rect
+                                is_clickable: bool
+                                rect, is_clickable = button_data
+                                if rect.collidepoint(mouse_pos) and is_clickable:
+                                    self._queue_action(action_id)
+                                    break
                 
                 if self.awaiting_initial_setup:
                     # Handle setup clicks
@@ -2412,14 +2416,13 @@ class UnifiedGameScreen(BaseScreen):
         # === HULL DAMAGE ===
         if self.damaged_icon:
             # Draw Damaged.png icon for each point of hull damage
-            hull_damage_boxes = ['hull_damage_0', 'hull_damage_1', 'hull_damage_2', 'hull_damage_3']
-            for i in range(u_boat.hull_damage):
-                if i < len(hull_damage_boxes):
-                    box_name = hull_damage_boxes[i]
-                    if box_name in layout.status_box_rects:
-                        hull_rect = layout.status_box_rects[box_name]
-                        scaled_icon = pygame.transform.scale(self.damaged_icon, (hull_rect.width, hull_rect.height))
-                        self.screen.blit(scaled_icon, hull_rect)
+            # Hull damage boxes are 1-indexed: hull_damage_1, hull_damage_2, hull_damage_3
+            for i in range(1, u_boat.hull_damage + 1):
+                box_name = f'hull_damage_{i}'
+                if box_name in layout.status_box_rects:
+                    hull_rect = layout.status_box_rects[box_name]
+                    scaled_icon = pygame.transform.scale(self.damaged_icon, (hull_rect.width, hull_rect.height))
+                    self.screen.blit(scaled_icon, hull_rect)
         
         # === DAMAGED SYSTEMS ===
         if self.damaged_icon:
@@ -2494,10 +2497,12 @@ class UnifiedGameScreen(BaseScreen):
             preview_depth = u_boat.depth
         
         # Get the list of actions to preview
-        # During execution, use the original list from action_execution_state
+        # During execution, use remaining actions from action_execution_state
         # Otherwise use the current queue
         if self.action_execution_state and 'actions' in self.action_execution_state:
-            actions_to_preview = self.action_execution_state['actions']
+            current_index = self.action_execution_state.get('current_index', 0)
+            # Only preview actions that haven't been executed yet
+            actions_to_preview = self.action_execution_state['actions'][current_index:]
         else:
             actions_to_preview = self.game.action_queue.actions
         
@@ -2519,6 +2524,51 @@ class UnifiedGameScreen(BaseScreen):
                 preview_depth = action.new_depth
         
         return preview_position, preview_facing, preview_depth
+    
+    def _calculate_action_costs_with_simulation(self) -> List[int]:
+        """Calculate the AP cost of each queued action, simulating depth changes.
+        
+        Returns:
+            List of costs for each action in queue
+        """
+        from ..actions.depth_change_action import DepthChangeAction
+        from ..models import UBoat
+        
+        costs = []
+        if not hasattr(self.game, 'action_queue'):
+            return costs
+        
+        # Create a temporary u-boat to simulate state changes
+        simulated_depth = self.game.u_boat.depth
+        
+        for action in self.game.action_queue.actions:
+            # Calculate cost using current simulated depth
+            # Create a temporary UBoat with the simulated depth
+            temp_uboat = UBoat(
+                position=self.game.u_boat.position,
+                facing=self.game.u_boat.facing,
+                depth=simulated_depth,
+                action_points=self.game.u_boat.action_points
+            )
+            
+            # Get cost based on simulated state
+            cost = action.get_cost(temp_uboat)
+            costs.append(cost)
+            
+            # Update simulated depth if this is a depth change action
+            if isinstance(action, DepthChangeAction):
+                simulated_depth = action.new_depth
+        
+        return costs
+    
+    def _calculate_total_ap_cost_with_simulation(self) -> int:
+        """Calculate total AP cost of all queued actions with depth simulation.
+        
+        Returns:
+            Total AP cost
+        """
+        costs = self._calculate_action_costs_with_simulation()
+        return sum(costs)
     
     def _draw_on_map_action_buttons(self) -> None:
         """Draw action buttons on the map near relevant status boxes."""
@@ -2742,116 +2792,113 @@ class UnifiedGameScreen(BaseScreen):
         queue_area_y = y + dice_area_height
         controls_area_y = y + dice_area_height + action_queue_height
         
-        # Don't show dice rolls during setup
-        if self.awaiting_initial_setup:
-            return
-        
-        # === DICE ROLL SECTION ===
-        self.draw_text(
-            "DICE ROLLS",
-            x + width // 2,
-            y + 15,
-            self.font_medium,
-            color=(255, 220, 100),
-            center=True
-        )
-        
-        dice_y = y + 45
-        dice_x = x + 10
-        
-        # Show AP roll details if available
-        if hasattr(self.game, 'turn_manager') and self.game.turn_manager.last_ap_roll:
-            roll_info = self.game.turn_manager.last_ap_roll
-            
-            # Dice type label
-            num_dice = roll_info['num_dice']
-            dice_label = f"{num_dice}d6"
-            if roll_info['engine_damaged']:
-                dice_label += " (Engine Dmg)"
-            
+        # === DICE ROLL SECTION (skip during setup) ===
+        if not self.awaiting_initial_setup:
             self.draw_text(
-                f"AP Roll [{dice_label}]:",
-                dice_x,
-                dice_y,
-                self.font_small,
-                color=(200, 200, 200)
+                "DICE ROLLS",
+                x + width // 2,
+                y + 15,
+                self.font_medium,
+                color=(255, 220, 100),
+                center=True
             )
-            dice_y += 20
             
-            # Individual dice with colored boxes
-            rolls = roll_info['rolls']
-            highest = roll_info['highest']
+            dice_y = y + 45
+            dice_x = x + 10
             
-            # Draw dice as small colored boxes
-            box_x = dice_x + 10
-            box_size = 20
-            box_spacing = 5
-            
-            for _, roll_val in enumerate(rolls):
-                box_rect = pygame.Rect(box_x, dice_y, box_size, box_size)
+            # Show AP roll details if available
+            if hasattr(self.game, 'turn_manager') and self.game.turn_manager.last_ap_roll:
+                roll_info = self.game.turn_manager.last_ap_roll
                 
-                # Highlight highest die
-                if roll_val == highest:
-                    box_color = (100, 200, 100)  # Green for highest
-                    text_color = (255, 255, 255)
-                else:
-                    box_color = (60, 60, 80)
-                    text_color = (180, 180, 180)
+                # Dice type label
+                num_dice = roll_info['num_dice']
+                dice_label = f"{num_dice}d6"
+                if roll_info['engine_damaged']:
+                    dice_label += " (Engine Dmg)"
                 
-                pygame.draw.rect(self.screen, box_color, box_rect)
-                pygame.draw.rect(self.screen, (150, 150, 150), box_rect, 1)
-                
-                # Draw die value centered
                 self.draw_text(
-                    str(roll_val),
-                    box_rect.centerx,
-                    box_rect.centery,
+                    f"AP Roll [{dice_label}]:",
+                    dice_x,
+                    dice_y,
                     self.font_small,
-                    color=text_color,
-                    center=True
+                    color=(200, 200, 200)
                 )
+                dice_y += 20
                 
-                box_x += box_size + box_spacing
+                # Individual dice with colored boxes
+                rolls = roll_info['rolls']
+                highest = roll_info['highest']
+                
+                # Draw dice as small colored boxes
+                box_x = dice_x + 10
+                box_size = 20
+                box_spacing = 5
+                
+                for _, roll_val in enumerate(rolls):
+                    box_rect = pygame.Rect(box_x, dice_y, box_size, box_size)
+                    
+                    # Highlight highest die
+                    if roll_val == highest:
+                        box_color = (100, 200, 100)  # Green for highest
+                        text_color = (255, 255, 255)
+                    else:
+                        box_color = (60, 60, 80)
+                        text_color = (180, 180, 180)
+                    
+                    pygame.draw.rect(self.screen, box_color, box_rect)
+                    pygame.draw.rect(self.screen, (150, 150, 150), box_rect, 1)
+                    
+                    # Draw die value centered
+                    self.draw_text(
+                        str(roll_val),
+                        box_rect.centerx,
+                        box_rect.centery,
+                        self.font_small,
+                        color=text_color,
+                        center=True
+                    )
+                    
+                    box_x += box_size + box_spacing
+                
+                dice_y += 30
+                
+                # Result breakdown
+                result_text = f"Highest: {highest}"
+                if roll_info['captain_bonus'] > 0:
+                    result_text += f" +{roll_info['captain_bonus']} (Captain)"
+                result_text += f" = {roll_info['total_ap']} AP"
+                
+                self.draw_text(
+                    result_text,
+                    dice_x,
+                    dice_y,
+                    self.font_small,
+                    color=(100, 255, 150)
+                )
+                dice_y += 25
             
-            dice_y += 30
+            # Show other combat rolls (last 3)
+            visible_rolls = self.dice_rolls[-3:] if self.dice_rolls else []
+            if visible_rolls:
+                for roll_info in visible_rolls:
+                    action = roll_info.get('action', 'Unknown')
+                    dice = roll_info.get('dice', '?')
+                    result = roll_info.get('result', '?')
+                    
+                    roll_text = f"{action}: [{dice}] = {result}"
+                    self.draw_text(roll_text, dice_x, dice_y, self.font_small, color=(255, 255, 150))
+                    dice_y += 18
+            elif not (hasattr(self.game, 'turn_manager') and self.game.turn_manager.last_ap_roll):
+                self.draw_text("No rolls yet", dice_x, dice_y, self.font_small, color=(120, 120, 120))
             
-            # Result breakdown
-            result_text = f"Highest: {highest}"
-            if roll_info['captain_bonus'] > 0:
-                result_text += f" +{roll_info['captain_bonus']} (Captain)"
-            result_text += f" = {roll_info['total_ap']} AP"
-            
-            self.draw_text(
-                result_text,
-                dice_x,
-                dice_y,
-                self.font_small,
-                color=(100, 255, 150)
+            # Separator line
+            pygame.draw.line(
+                self.screen,
+                (50, 70, 100),
+                (x, queue_area_y),
+                (x + width, queue_area_y),
+                2
             )
-            dice_y += 25
-        
-        # Show other combat rolls (last 3)
-        visible_rolls = self.dice_rolls[-3:] if self.dice_rolls else []
-        if visible_rolls:
-            for roll_info in visible_rolls:
-                action = roll_info.get('action', 'Unknown')
-                dice = roll_info.get('dice', '?')
-                result = roll_info.get('result', '?')
-                
-                roll_text = f"{action}: [{dice}] = {result}"
-                self.draw_text(roll_text, dice_x, dice_y, self.font_small, color=(255, 255, 150))
-                dice_y += 18
-        elif not (hasattr(self.game, 'turn_manager') and self.game.turn_manager.last_ap_roll):
-            self.draw_text("No rolls yet", dice_x, dice_y, self.font_small, color=(120, 120, 120))
-        
-        # Separator line
-        pygame.draw.line(
-            self.screen,
-            (50, 70, 100),
-            (x, queue_area_y),
-            (x + width, queue_area_y),
-            2
-        )
         
         # === ACTION QUEUE SECTION (only during U-Boat phase) ===
         from ..models import GamePhase
@@ -3015,10 +3062,13 @@ class UnifiedGameScreen(BaseScreen):
             queue_x = x + 10
             
             if self.game.action_queue.actions:
+                # Calculate costs with simulated depth changes
+                simulated_costs = self._calculate_action_costs_with_simulation()
+                
                 for idx, action in enumerate(self.game.action_queue.actions, 1):
                     # Action description
                     action_name = self._get_action_description(action)
-                    action_cost = action.get_cost(self.game.u_boat)
+                    action_cost = simulated_costs[idx - 1] if idx - 1 < len(simulated_costs) else action.get_cost(self.game.u_boat)
                     
                     action_text = f"{idx}. {action_name} ({action_cost} AP)"
                     self.draw_text(
@@ -4134,7 +4184,8 @@ class UnifiedGameScreen(BaseScreen):
                 'result': damage_result
             }
             
-            state['results'].append((ship, distance, True, damage_result.roll))
+            # Store the full damage_result object to avoid re-rolling damage
+            state['results'].append((ship, distance, True, damage_result))
             self.add_event(f"  Damage roll: {damage_desc}")
             
             # If this was the last target, finish automatically
@@ -4177,17 +4228,17 @@ class UnifiedGameScreen(BaseScreen):
             result_msgs: list[str] = []
             
             # Process each target sequentially, removing sunk ships immediately
-            for ship, distance, hit, damage_result_die in results:
+            for ship, distance, hit, damage_result in results:
                 # Skip if ship was already sunk by a previous attack in this volley
                 if ship not in self.game.ships:
                     continue
                 
                 if hit:
-                    # Get the damage die from the results (4th element of tuple)
-                    damage_die = damage_result_die
+                    # Use the stored damage_result from earlier (don't reroll!)
+                    damage_die = damage_result.roll
                     
-                    # Apply proper damage using ShipDamageResolver
-                    damage_result = damage_resolver.apply_damage(ship, "deck_gun")
+                    # Damage was already applied during the interactive roll,
+                    # but we need to handle ship removal for sunk ships here
                     
                     # Log the damage result with the actual rolled die value
                     if damage_result.is_now_sunk:
@@ -4199,8 +4250,7 @@ class UnifiedGameScreen(BaseScreen):
                             self.game.ships.remove(ship)
                             self.add_event(f"💀 {ship.ship_type.title()} SUNK and removed from map")
                     elif damage_result.effect == "damaged":
-                        # Apply damage marker immediately
-                        ship.damaged = True
+                        # Damage marker was already applied by apply_damage() earlier
                         result_msgs.append(
                             f"HIT {ship.ship_type} at range {distance} - DAMAGED (die: {damage_die})"
                         )
@@ -4217,12 +4267,12 @@ class UnifiedGameScreen(BaseScreen):
             
             message = f"Deck gun fired at {len(results)} ship(s): {hits} hit(s). " + "; ".join(result_msgs)
             
-            # Set detection level to 3 if any hits (or keep if already higher)
+            # Set detection level to 3 if any hits
             if hits > 0:
                 old_dl = self.game.detection_level
-                self.game.detection_level = max(3, self.game.detection_level)  # Set to 3 or keep higher
-                if old_dl < 3:
-                    message += " (DL set to 3)"
+                self.game.detection_level = 3  # Always set to 3 on hit
+                if old_dl != 3:
+                    message += f" (DL set to 3)"
             
             # Get cost and apply
             cost = action.get_cost(self.game.u_boat)
@@ -4690,7 +4740,7 @@ class UnifiedGameScreen(BaseScreen):
         # Apply DL increase (show actual increase after cap)
         if dl_increase > 0:
             old_dl = self.game.detection_level
-            self.game.detection_level = min(self.game.detection_level + dl_increase, 5)
+            self.game.detection_level = min(self.game.detection_level + dl_increase, 3)  # Cap at 3
             actual_increase = self.game.detection_level - old_dl
             if actual_increase > 0:
                 self.add_event(f"Detection Level +{actual_increase} (now {self.game.detection_level})")

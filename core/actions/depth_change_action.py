@@ -71,10 +71,13 @@ class DepthChangeAction(Action):
     def execute(self, game_state: Any) -> ActionResult:
         """Execute the depth change."""
         old_depth = game_state.u_boat.depth
+        
+        # Calculate cost BEFORE changing depth (cost is based on CURRENT depth)
+        ap_cost = self.get_cost(game_state.u_boat)
+        
+        # Now perform the depth change
         game_state.u_boat.depth = self.new_depth
         game_state.turn_manager.depth_changed_this_turn = True
-        
-        ap_cost = self.get_cost(game_state.u_boat)
         
         # Depth names for better messages
         depth_names = {

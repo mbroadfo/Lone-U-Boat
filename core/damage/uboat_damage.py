@@ -477,18 +477,14 @@ class UBoatDamageResolver:
         if attack_type == "gunfire":
             # Gunfire is automatic critical hit (roll 1 on chart)
             chart_roll = 1
-            print(f"[DAMAGE] Gunfire attack: automatic critical hit (chart roll = 1)")
         elif ship_type == "destroyer" and attack_type == "depth_charge":
             # Destroyer rolls 2d6, takes lowest
             roll1 = self.dice.roll_1d6()
             roll2 = self.dice.roll_1d6()
             chart_roll = min(roll1, roll2)
-            print(f"[DAMAGE] Destroyer depth charge: rolled {roll1}, {roll2} -> chart roll = {chart_roll}")
         else:
             # Corvette or other: roll 1d6
             chart_roll = self.dice.roll_1d6()
-            ship_name = ship_type.capitalize() if ship_type else "B24"
-            print(f"[DAMAGE] {ship_name} {attack_type}: chart roll = {chart_roll}")
         
         hull_damage = 0
         systems_damaged: List[str] = []
@@ -500,7 +496,6 @@ class UBoatDamageResolver:
         if chart_roll == 1:
             # Critical Hit!
             crit_roll = self.dice.roll_1d6()
-            print(f"[DAMAGE] Critical hit sub-table: rolled {crit_roll} (1=destroyed, 2=+2 hull, 3-4=torps, 5-6=double)")
             
             if crit_roll == 1:
                 # U-Boat Destroyed
@@ -545,9 +540,7 @@ class UBoatDamageResolver:
         elif chart_roll == 2:
             # Hull Damage +1
             hull_damage = 1
-            old_hull = u_boat.hull_damage
             u_boat.hull_damage = min(4, u_boat.hull_damage + hull_damage)
-            print(f"[DAMAGE] Hull damage: {old_hull} -> {u_boat.hull_damage}")
             effect = f"+1 Hull Damage (total: {u_boat.hull_damage})"
             description = f"Hull Damage! {effect}"
             if u_boat.hull_damage >= 4:
@@ -673,10 +666,8 @@ class UBoatDamageResolver:
             List of tube indices that were damaged
         """
         damaged: List[int] = []
-        rolls: List[int] = []
         for _ in range(num_dice):
             roll = self.dice.roll_1d6()
-            rolls.append(roll)
             if roll <= 5:  # Valid tube number (1-5)
                 tube_index = roll - 1
                 # Only damage if not already damaged
@@ -684,6 +675,4 @@ class UBoatDamageResolver:
                     u_boat.torpedo_tubes[tube_index] = TubeState.DAMAGED
                     damaged.append(tube_index)
         
-        # Log the actual dice rolls for clarity
-        print(f"[DAMAGE] Torpedo tube damage: rolled {num_dice}d6 = {rolls}, tubes damaged: {[t+1 for t in damaged]}")
         return damaged

@@ -8,8 +8,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pygame
-import sys
 from io import StringIO
+from typing import Dict, Any, List
 from contextlib import contextmanager
 from core.game_state import Game
 from core.uboat_ai import UBoatAI
@@ -27,7 +27,7 @@ def capture_output():
         sys.stdout = old_stdout
 
 
-def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
+def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False) -> Dict[str, Any]:
     """
     Run the game with AI captain for specified number of turns.
     
@@ -35,6 +35,9 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
         num_turns: Number of turns to simulate
         delay_ms: Delay between phases in milliseconds (for readability)
         verbose: If True, show detailed AI action messages
+    
+    Returns:
+        Dictionary with test statistics
     """
     print("="*80)
     print("AI U-BOAT CAPTAIN TEST")
@@ -54,7 +57,7 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
     print(f"Initial merchant position: {initial_merchant_pos}\n")
     
     # Track statistics
-    stats = {
+    stats: Dict[str, Any] = {
         'turns_completed': 0,
         'total_actions': 0,
         'phases_executed': 0,
@@ -115,7 +118,7 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
                 
                 # Parse action messages - format is "[OK] Rotated..." or "[OK] Moved..."
                 # Infer AP costs based on action type and changes
-                action_details = []
+                action_details: List[str] = []
                 total_ap_used = 0
                 
                 for msg in messages:
@@ -137,7 +140,7 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
                             total_ap_used += 2
                 
                 # Show what changed for confirmation
-                changes = []
+                changes: List[str] = []
                 if game.u_boat.position != old_pos:
                     changes.append(f"->{game.u_boat.position}")
                 if game.u_boat.depth != old_depth:
@@ -177,7 +180,7 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
             ]
             
             phase_num = 2
-            for current_phase_label, executing_phase_label, expected_next_phase in phases_to_execute:
+            for _current_phase_label, executing_phase_label, _expected_next_phase in phases_to_execute:
                 pygame.time.wait(delay_ms // 2)
                 
                 # Capture state BEFORE advancing
@@ -194,7 +197,7 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
                 sys.stdout = suppressed_output
                 
                 try:
-                    game._advance_to_next_phase()
+                    game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
                     sys.stdout = old_stdout
                     
                     stats['phases_executed'] += 1
@@ -264,7 +267,7 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
                         actions = [line for line in output_lines if any(x in line for x in ['MOVE:', 'TURN:', 'FIRE:', 'DEPTH CHARGE:'])]
                         
                         # Extract damage results (look for indented result lines after attacks)
-                        damage_lines = []
+                        damage_lines: List[str] = []
                         for i, line in enumerate(output_lines):
                             stripped = line.replace('[EVENT]', '').strip()
                             # Look for result lines (indented, contain damage keywords)
@@ -278,7 +281,7 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
                             print(dice_roll[0].replace('[EVENT]', '').strip(), end="")
                             if actions:
                                 # Clean up actions - remove [EVENT] and extra whitespace, abbreviate
-                                clean_actions = []
+                                clean_actions: List[str] = []
                                 for a in actions[:5]:  # Show up to 5 actions
                                     action = a.replace('[EVENT]', '').split(':')[0].strip()
                                     # Abbreviate for readability
@@ -313,7 +316,7 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
                     elif executing_phase_label == "B-24 Aircraft":
                         print(f"Phase {phase_num} ({executing_phase_label}):", end=" ")
                         # Check if B-24 is active
-                        if hasattr(game, 'b24') and game.b24:
+                        if hasattr(game, 'b24') and game.b24:  # type: ignore[reportAttributeAccessIssue]
                             print("B-24 active")
                         else:
                             print("No B-24 present")
@@ -378,7 +381,7 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
             suppressed_output = StringIO()
             old_stdout = sys.stdout
             sys.stdout = suppressed_output
-            game._advance_to_next_phase()
+            game._advance_to_next_phase()  # type: ignore[reportPrivateUsage]
             sys.stdout = old_stdout
             
             # Show turn summary with prominent DL display

@@ -81,6 +81,7 @@ class ActionQueue:
     def get_total_cost(self, game_state: Any) -> int:
         """
         Calculate total AP cost of all queued actions.
+        Simulates depth changes to calculate accurate costs.
         
         Args:
             game_state: Current game state (depth affects costs)
@@ -88,7 +89,30 @@ class ActionQueue:
         Returns:
             Total AP cost
         """
-        return sum(action.get_cost(game_state.u_boat) for action in self.actions)
+        from .depth_change_action import DepthChangeAction
+        from ..models import UBoat
+        
+        total_cost = 0
+        simulated_depth = game_state.u_boat.depth
+        
+        for action in self.actions:
+            # Create temporary u_boat with simulated depth for cost calculation
+            temp_uboat = UBoat(
+                position=game_state.u_boat.position,
+                facing=game_state.u_boat.facing,
+                depth=simulated_depth,
+                action_points=game_state.u_boat.action_points
+            )
+            
+            # Get cost based on simulated state
+            cost = action.get_cost(temp_uboat)
+            total_cost += cost
+            
+            # Update simulated depth if this is a depth change action
+            if isinstance(action, DepthChangeAction):
+                simulated_depth = action.new_depth
+        
+        return total_cost
     
     def get_remaining_ap(self, game_state: Any) -> int:
         """

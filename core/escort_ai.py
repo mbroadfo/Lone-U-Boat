@@ -560,7 +560,9 @@ class EscortAI:
                     if current_dl >= 1 and current_dl <= 3:
                         # Try FIRE first
                         if self.can_use_fire(escort, u_boat, current_dl, land_hexes, hex_grid):
-                            messages.append(f"    FIRE: Critical Hit on U-boat! (DL -> 3)")
+                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                            has_los = self._check_line_of_sight(escort.position, u_boat.position, land_hexes, hex_grid)
+                            messages.append(f"    FIRE: Critical Hit on U-boat! (Range {distance}, LOS: {'Yes' if has_los else 'No'}, DL -> 3)")
                             current_dl = 3
                             
                             # Apply gunfire damage (automatic critical hit)
@@ -577,7 +579,7 @@ class EscortAI:
                         # Otherwise try DEPTH CHARGE
                         elif self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
                             distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {distance}")
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat (Range {distance}, same hex or adjacent)")
                             
                             # Apply depth charge damage
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
@@ -746,7 +748,9 @@ class EscortAI:
                     # Die 5: If DL=1-3, FIRE
                     if current_dl >= 1 and current_dl <= 3:
                         if self.can_use_fire(escort, u_boat, current_dl, land_hexes, hex_grid):
-                            messages.append(f"    FIRE: Critical Hit on U-boat! (DL -> 3)")
+                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                            has_los = self._check_line_of_sight(escort.position, u_boat.position, land_hexes, hex_grid)
+                            messages.append(f"    FIRE: Critical Hit on U-boat! (Range {distance}, LOS: {'Yes' if has_los else 'No'}, DL -> 3)")
                             current_dl = 3
                             
                             # Apply gunfire damage (automatic critical hit)
