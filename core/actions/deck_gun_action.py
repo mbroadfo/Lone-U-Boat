@@ -104,8 +104,8 @@ class DeckGunAction(Action):
         
         # Attack each active target in order (closest to furthest)
         for ship, distance in active_targets:
-            # Resolve attack (returns 4 values: hit, roll_result, description, dice_values)
-            hit, roll_result, description, dice_values = self.combat_resolver.resolve_deck_gun_attack(
+            # Resolve attack (returns 3 values: hit, roll_result, description)
+            hit, roll_result, description = self.combat_resolver.resolve_deck_gun_attack(
                 distance
             )
             

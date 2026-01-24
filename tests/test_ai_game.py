@@ -424,7 +424,9 @@ def run_ai_test(num_turns: int = 5, delay_ms: int = 500, verbose: bool = False):
         print(f"  Depth: {game.u_boat.depth.name}")
         print(f"  Facing: {game.u_boat.facing.name}")
         print(f"  Hull Damage: {game.u_boat.hull_damage}/3")
-        print(f"  Torpedoes: {sum(game.u_boat.torpedo_tubes)}/5 loaded")
+        from core.models import TubeState
+        loaded_tubes = sum(1 for tube in game.u_boat.torpedo_tubes if tube == TubeState.LOADED)
+        print(f"  Torpedoes: {loaded_tubes}/5 loaded")
         print(f"  Deck Gun: {'Damaged' if game.u_boat.deck_gun_damaged else 'Ready'}")
         print(f"Ships remaining: {len(game.ships)}")
         

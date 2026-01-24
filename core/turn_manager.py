@@ -383,6 +383,7 @@ class TurnManager:
             GamePhase.DETECTION_PHASE: "Detection Phase",
             GamePhase.ESCORT_PHASE: "Escort Phase",
             GamePhase.B24_PHASE: "B24 Aircraft Phase",
+            GamePhase.END_TURN_EVENTS: "End Turn Events",
             GamePhase.END_TURN_PHASE: "End Turn Phase",
         }
         return phase_names.get(self.current_phase, "Unknown Phase")

@@ -45,7 +45,28 @@ python main.py
 
 **The game is now fully playable!** All enemy behaviors are automated.
 
-### Recent Updates (January 17, 2026)
+### Recent Updates (January 24, 2026)
+
+#### User Experience Improvements
+Critical UI/UX fixes based on manual gameplay testing:
+
+**HIGH PRIORITY FIXES:**
+- ✅ **Torpedo Reload System** - Fixed TubeState enum checks that were treating enum values as booleans, preventing torpedo reloading
+- ✅ **AP Confirmation Dialog** - Added double-click requirement when committing turn with unspent action points to prevent accidental turn ends
+- ✅ **Event Log Display** - Fixed AI phase messages (Merchant/Detection/Escort/B24) not appearing in event panel by capturing phase logs before phase transition
+
+**MEDIUM PRIORITY FIXES:**
+- ✅ **Context-Sensitive Button Text** - "Next Phase ►" button now shows "Next Step ►" when stepping through action execution
+- ✅ **Phase Advance Button** - Added visible button for non-U-Boat phases (replaced "Observing..." text), fixing disappearing button issue
+
+**LOW PRIORITY FIXES:**
+- ✅ **Mission Selection Text** - Updated Mission 1 name from "First Blood" to "Supply Ship Attack: North of Scotland" to match mission briefing
+
+**Technical fixes:**
+- Combat resolver return signature standardized (3 values instead of 4)
+- Phase name display fixed for END_TURN_EVENTS phase
+
+### Previous Updates (January 17, 2026)
 
 #### Torpedo Tube State System
 Torpedo tubes now track **three distinct states** instead of just loaded/unloaded:
@@ -61,12 +82,6 @@ Torpedo tubes now track **three distinct states** instead of just loaded/unloade
 - **Firing** empties the tube (LOADED → EMPTY)
 
 This properly reflects the game rules where damaged tubes must be repaired separately from the loading process.
-
-#### Gameplay Fixes
-- **Detection Level** now capped at maximum of 3 (was incorrectly going higher)
-- **Torpedo Loading** limited to once per turn (load button disabled after queuing load action)
-- **Repair Button** only enabled when systems are actually damaged (not just empty tubes)
-- **Deck Gun Damage Display** now shows the correct damage die roll value
 
 See [docs/PHASE_1_AUDIT.md](docs/PHASE_1_AUDIT.md) for comprehensive Phase 3 completion audit.
 

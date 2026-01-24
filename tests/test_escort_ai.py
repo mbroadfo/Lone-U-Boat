@@ -537,13 +537,16 @@ def test_execute_escort_phase_forced_dive(escort_ai, mock_dice, destroyer, u_boa
         damaged=False
     )
     
-    # Roll [3, 1]: 3 = MOVE (into U-boat), 1 = FIRE/DC (can't at DL 0)
-    mock_dice.set_roll_sequence([3, 1])
+    # Roll [2, 1]: 
+    # Die 1 (result 2): MOVE into U-boat hex, triggers forced dive (DL 0->1), then depth charge
+    # Die 2 (result 1): FIRE/DEPTH CHARGE only (no additional movement)
+    # Need to provide dice for damage rolls from depth charges: [2, dmg1, dmg2, 1, dmg3, dmg4]
+    mock_dice.set_roll_sequence([2, 4, 4, 1, 3, 3])
     
     ships = [corvette]
     current_dl, messages = escort_ai.execute_escort_phase(ships, u_boat, 0, set(), hex_grid)
     
-    # Corvette should have moved into U-boat hex on first MOVE action
+    # Corvette should have moved into U-boat hex and stayed there
     assert corvette.position == u_boat.position, f"Expected corvette at {u_boat.position}, got {corvette.position}"
     
     # U-boat should be forced to medium depth

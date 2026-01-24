@@ -446,7 +446,7 @@ def test_no_flak_if_not_surfaced():
 def test_b24_attack_hull_damage_on_1_2():
     """B-24 attack roll 1-2 causes +2 hull damage."""
     dice = MockDice()
-    dice.set_roll_sequence([6, 1])  # Flak fails (6), attack roll (1)
+    dice.set_roll_sequence([3, 3, 1])  # Flak fails (3+3=6 < 7), attack roll (1)
     grid = create_test_hex_grid()
     ai = B24AI(dice, grid)
     
@@ -465,7 +465,7 @@ def test_b24_attack_hull_damage_on_1_2():
 def test_b24_attack_damage_chart_on_3_4():
     """B-24 attack roll 3-4 uses damage chart."""
     dice = MockDice()
-    dice.set_roll_sequence([6, 3, 2])  # Flak fails, attack roll, chart roll
+    dice.set_roll_sequence([3, 3, 3, 2])  # Flak fails (3+3=6), attack roll (3), chart roll (2)
     grid = create_test_hex_grid()
     ai = B24AI(dice, grid)
     
@@ -483,7 +483,7 @@ def test_b24_attack_damage_chart_on_3_4():
 def test_b24_attack_miss_on_5_6():
     """B-24 attack roll 5-6 misses."""
     dice = MockDice()
-    dice.set_roll_sequence([6, 5])  # Flak fails, attack miss
+    dice.set_roll_sequence([3, 3, 5])  # Flak fails (3+3=6), attack miss (5)
     grid = create_test_hex_grid()
     ai = B24AI(dice, grid)
     

@@ -354,6 +354,9 @@ class UnifiedGameScreen(BaseScreen):
                             if undone_action:
                                 action_name = type(undone_action).__name__.replace('Action', '')
                                 self.add_event(f"Undone: {action_name}")
+                                # Reset commit confirmation when undoing
+                                if hasattr(self, '_commit_confirmation_needed'):
+                                    self._commit_confirmation_needed = False
                     
                     elif self.action_continue_button_rect and self.action_continue_button_rect.collidepoint(mouse_pos):
                         # Continue button clicked
@@ -396,6 +399,26 @@ class UnifiedGameScreen(BaseScreen):
                             from ..models import GamePhase
                             if current_phase == GamePhase.UBOAT_PHASE:
                                 if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
+                                    # Check if there are unspent action points
+                                    total_ap = self.game.u_boat.action_points
+                                    spent_ap = sum(action.get_cost(self.game.u_boat) for action in self.game.action_queue.actions)
+                                    remaining_ap = total_ap - spent_ap
+                                    
+                                    # If there are unspent AP that could be used, show confirmation
+                                    if remaining_ap > 0:
+                                        # Check if any actions are still possible with remaining AP
+                                        # (This is a simple check - could be more sophisticated)
+                                        self.add_event(f"⚠ WARNING: You have {remaining_ap} AP remaining!")
+                                        self.add_event("Click COMMIT again to confirm, or add more actions")
+                                        
+                                        # Set a flag to confirm next click
+                                        if not hasattr(self, '_commit_confirmation_needed'):
+                                            self._commit_confirmation_needed = True
+                                            return
+                                        else:
+                                            # Second click - proceed with commit
+                                            self._commit_confirmation_needed = False
+                                    
                                     # Mark queue as committed
                                     self.game.action_queue._committed = True  # type: ignore[attr-defined]
                                     
@@ -486,20 +509,24 @@ class UnifiedGameScreen(BaseScreen):
         if not self.game.running:
             return
         
+        # Capture the phase that's about to execute BEFORE advancing
+        old_phase_name = self.game.turn_manager.get_current_phase_name()
+        
         # Forward phase advancement to game
         self.game._advance_to_next_phase()  # type: ignore[attr-defined]
         
         # Sync UI depth with actual U-boat depth (in case escorts forced a dive)
         self.selected_depth = self.game.u_boat.depth
         
-        # Add visual feedback
-        phase_name = self.game.turn_manager.get_current_phase_name()
-        self.add_event(f"→ {phase_name}")
+        # Show logs from the phase that just executed
+        phase_logs = self.game.turn_manager.get_phase_log(old_phase_name)
+        if phase_logs:
+            for log_msg in phase_logs:
+                self.add_event(f"  {log_msg}")
         
-        # Show phase log messages in event log
-        phase_logs = self.game.turn_manager.get_phase_log(phase_name)
-        for log_msg in phase_logs:
-            self.add_event(f"  {log_msg}")
+        # Add visual feedback for NEW phase
+        new_phase_name = self.game.turn_manager.get_current_phase_name()
+        self.add_event(f"→ {new_phase_name}")
         
         # If we just started U-Boat phase (new turn), prompt for AP roll
         from ..models import GamePhase
@@ -2856,15 +2883,8 @@ class UnifiedGameScreen(BaseScreen):
             if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
                 self._draw_game_controls(x, controls_area_y, width, controls_area_height)
             else:
-                # Show "Waiting for phase to complete" message
-                self.draw_text(
-                    "Observing...",
-                    x + width // 2,
-                    controls_area_y + 20,
-                    self.font_small,
-                    color=(150, 150, 150),
-                    center=True
-                )
+                # Show phase advancement button for AI phases
+                self._draw_phase_advance_button(x, controls_area_y, width, controls_area_height)
     
     def _draw_bottom_panel(self, x: int, y: int, width: int, height: int) -> None:
         """Draw the bottom panel (currently empty - controls moved to right panel)."""
@@ -3349,6 +3369,51 @@ class UnifiedGameScreen(BaseScreen):
         
         return False
     
+    def _draw_phase_advance_button(self, x: int, y: int, width: int, height: int) -> None:
+        """Draw button to advance to next phase (for AI phases)."""
+        # Determine if we're stepping through action execution or advancing phases
+        is_executing = self.action_execution_state and self.action_execution_state.get('waiting_for_continue', False)
+        
+        button_text = "NEXT STEP ►" if is_executing else "NEXT PHASE ►"
+        
+        # Center the button in the controls area
+        button_width = width - 40
+        button_height = 50
+        button_x = x + 20
+        button_y = y + height // 2 - button_height // 2
+        
+        button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+        
+        # Button styling
+        button_color = (50, 100, 150)
+        border_color = (100, 180, 255)
+        text_color = (220, 240, 255)
+        
+        pygame.draw.rect(self.screen, button_color, button_rect)
+        pygame.draw.rect(self.screen, border_color, button_rect, 2)
+        self.draw_text(
+            button_text,
+            button_rect.centerx,
+            button_rect.centery,
+            self.font_medium,
+            color=text_color,
+            center=True
+        )
+        
+        # Store rect for click detection (reuse action_continue_button_rect)
+        self.action_continue_button_rect = button_rect
+        
+        # Show hint
+        hint_y = button_rect.bottom + 15
+        self.draw_text(
+            "(or press SPACE)",
+            x + width // 2,
+            hint_y,
+            self.font_small,
+            color=(120, 140, 160),
+            center=True
+        )
+    
     def _draw_dice_roll_button(self, x: int, y: int, width: int) -> None:
         """Draw the dice roll button."""
         button_width = width - 40
@@ -3633,15 +3698,19 @@ class UnifiedGameScreen(BaseScreen):
         
         for tube_num in range(1, 6):
             tube_idx = tube_num - 1  # 0-based index
-            is_loaded = u_boat.torpedo_tubes[tube_idx]
+            tube_state = u_boat.torpedo_tubes[tube_idx]
+            is_loaded = (tube_state == TubeState.LOADED)
             is_selected = tube_num in selected_tubes
-            is_available = not is_loaded
+            is_available = (tube_state == TubeState.EMPTY)  # Can only load empty tubes
             
             # Tube label
             tube_type = "Front" if tube_num <= 4 else "Rear"
-            if is_loaded:
+            if tube_state == TubeState.LOADED:
                 status = "Loaded"
                 status_color = (100, 255, 100)
+            elif tube_state == TubeState.DAMAGED:
+                status = "Damaged"
+                status_color = (255, 100, 100)
             elif is_selected:
                 status = "Selected"
                 status_color = (255, 220, 100)
@@ -3784,13 +3853,17 @@ class UnifiedGameScreen(BaseScreen):
         
         for tube_num in range(1, 6):
             tube_idx = tube_num - 1  # 0-based index
-            is_loaded = u_boat.torpedo_tubes[tube_idx]
+            tube_state = u_boat.torpedo_tubes[tube_idx]
+            is_loaded = (tube_state == TubeState.LOADED)
             is_selected = tube_num in selected_tubes
-            is_available = is_loaded
+            is_available = (tube_state == TubeState.LOADED)  # Can only fire loaded tubes
             
             # Tube label
             tube_type = "Front" if tube_num <= 4 else "Rear"
-            if not is_loaded:
+            if tube_state == TubeState.DAMAGED:
+                status = "Damaged"
+                status_color = (255, 100, 100)
+            elif tube_state == TubeState.EMPTY:
                 status = "Empty"
                 status_color = (150, 150, 150)
             elif is_selected:
@@ -3952,6 +4025,9 @@ class UnifiedGameScreen(BaseScreen):
                 success, message = self.game.action_queue.add_action(action, self.game)
                 if success:
                     self.add_event(f"Queued: Fire Tubes {', '.join(str(t) for t in tube_indices)}")
+                    # Reset commit confirmation when adding new actions
+                    if hasattr(self, '_commit_confirmation_needed'):
+                        self._commit_confirmation_needed = False
                 else:
                     self.add_event(f"✗ Failed: {message}")
                 
@@ -3989,7 +4065,12 @@ class UnifiedGameScreen(BaseScreen):
             from ..combat_resolver import CombatResolver
             resolver = CombatResolver(self.game.turn_manager.dice, self.game.mission_rules)
             
-            hit, roll_total, description, dice_values = resolver.resolve_deck_gun_attack(distance)
+            hit, roll_total, description = resolver.resolve_deck_gun_attack(distance)
+            
+            # Extract dice values from description (format: "Range X: rolled [d1][d2] = total")
+            import re
+            dice_match = re.search(r'\[(\d+)\]\[(\d+)\]', description)
+            dice_values = [int(dice_match.group(1)), int(dice_match.group(2))] if dice_match else [0, 0]
             
             state['last_hit_roll'] = {
                 'total': roll_total,
@@ -4877,6 +4958,9 @@ class UnifiedGameScreen(BaseScreen):
                 success, message = self.game.action_queue.add_action(action, self.game)
                 if success:
                     self.add_event(f"Queued: Load Tubes {', '.join(str(t) for t in tube_indices)}")
+                    # Reset commit confirmation when adding new actions
+                    if hasattr(self, '_commit_confirmation_needed'):
+                        self._commit_confirmation_needed = False
                 else:
                     self.add_event(f"✗ Failed: {message}")
                 
@@ -5120,6 +5204,9 @@ class UnifiedGameScreen(BaseScreen):
                     remaining = self.game.action_queue.get_remaining_ap(self.game)
                     action_desc = self._get_action_description(action)
                     self.add_event(f"Queued: {action_desc} (AP: {remaining}/{self.game.action_queue.max_ap})")
+                    # Reset commit confirmation when adding new actions
+                    if hasattr(self, '_commit_confirmation_needed'):
+                        self._commit_confirmation_needed = False
                 else:
                     remaining = self.game.action_queue.get_remaining_ap(self.game)
                     self.add_event(f"Cannot queue: {message} (AP: {remaining}/{self.game.action_queue.max_ap})")

@@ -18,7 +18,7 @@ class MainMenuScreen(BaseScreen):
         self.missions: List[Dict[str, Any]] = [
             {
                 'number': 1,
-                'name': 'First Blood',
+                'name': 'Supply Ship Attack: North of Scotland',
                 'unlocked': True,
                 'description': 'Destroy the merchant ship and escape'
             },
