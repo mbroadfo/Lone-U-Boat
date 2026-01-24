@@ -68,6 +68,38 @@ class MainMenuScreen(BaseScreen):
         """Update menu state."""
         pass  # Static menu, no updates needed
     
+    def _wrap_text(self, text: str, max_width: int, font: pygame.font.Font) -> List[str]:
+        """
+        Wrap text to fit within max_width.
+        
+        Args:
+            text: Text to wrap
+            max_width: Maximum width in pixels
+            font: Font to use for measuring
+            
+        Returns:
+            List of wrapped lines
+        """
+        words = text.split(' ')
+        lines = []
+        current_line = []
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            width, _ = font.size(test_line)
+            
+            if width <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return lines if lines else [text]
+    
     def render(self) -> None:
         """Render the main menu."""
         # Clear screen with dark blue background
@@ -154,24 +186,31 @@ class MainMenuScreen(BaseScreen):
             )
             pygame.draw.rect(self.screen, text_color, button_rect, 2, border_radius=5)
             
-            # Draw mission number and name
+            # Draw mission number and name (wrap if too long)
             mission_text = f"Mission {mission['number']}: {mission['name']}"
             text_y = button_y + 15
             
-            self.draw_text(
-                mission_text,
-                button_x + 20,
-                text_y,
-                self.font_medium,
-                color=text_color
-            )
+            # Wrap long mission names
+            max_width = button_width - 40
+            wrapped_lines = self._wrap_text(mission_text, max_width, self.font_medium)
             
-            # Draw description
+            for line in wrapped_lines[:2]:  # Max 2 lines for mission name
+                self.draw_text(
+                    line,
+                    button_x + 20,
+                    text_y,
+                    self.font_medium,
+                    color=text_color
+                )
+                text_y += 20
+            
+            # Draw description (adjust y position based on wrapped title)
             desc_color = (150, 150, 170) if not is_unlocked else (180, 200, 220)
+            desc_y = text_y + 10  # Small gap after title
             self.draw_text(
                 mission['description'],
                 button_x + 20,
-                text_y + 30,
+                desc_y,
                 self.font_small,
                 color=desc_color
             )

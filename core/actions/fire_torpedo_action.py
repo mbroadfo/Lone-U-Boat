@@ -169,43 +169,27 @@ class FireTorpedoAction(Action):
         """
         Get the target number needed on 1d6 to hit.
         
-        Torpedo To-Hit Table:
-        Range | Side Aspect | Front/Rear Aspect
-        1-2   | 5+          | 6+
-        3-4   | 6+          | 7+ (impossible)
-        5-6   | 7+ (imp.)   | 8+ (impossible)
-        7-8   | 8+ (imp.)   | 9+ (impossible)
-        9     | 9+ (imp.)   | 10+ (impossible)
+        Uses combat resolver's torpedo hit table loaded from mission rules.
         
         Args:
             distance: Range to target in hexes (1-9)
             aspect: 'side' or 'front_rear'
             
         Returns:
-            Target number (5-10)
+            Target number (3-6)
         """
-        if aspect == 'side':
-            if distance <= 2:
-                return 5
-            elif distance <= 4:
-                return 6
-            elif distance <= 6:
-                return 7
-            elif distance <= 8:
-                return 8
-            else:  # distance == 9
-                return 9
-        else:  # front_rear
-            if distance <= 2:
-                return 6
-            elif distance <= 4:
-                return 7
-            elif distance <= 6:
-                return 8
-            elif distance <= 8:
-                return 9
-            else:  # distance == 9
-                return 10
+        # Determine range key based on distance
+        if distance <= 2:
+            range_key = "range_1_2"
+        elif distance <= 4:
+            range_key = "range_3_4"
+        elif distance <= 6:
+            range_key = "range_5_6"
+        else:  # 7-9
+            range_key = "range_7_9"
+        
+        # Get target from combat resolver's table
+        return self.combat_resolver.torpedo_hit_table[range_key][aspect]
     
     def execute(self, game_state: Any) -> ActionResult:
         """

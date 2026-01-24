@@ -2742,6 +2742,10 @@ class UnifiedGameScreen(BaseScreen):
         queue_area_y = y + dice_area_height
         controls_area_y = y + dice_area_height + action_queue_height
         
+        # Don't show dice rolls during setup
+        if self.awaiting_initial_setup:
+            return
+        
         # === DICE ROLL SECTION ===
         self.draw_text(
             "DICE ROLLS",
@@ -2851,10 +2855,10 @@ class UnifiedGameScreen(BaseScreen):
         
         # === ACTION QUEUE SECTION (only during U-Boat phase) ===
         from ..models import GamePhase
-        if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
+        if not self.awaiting_initial_setup and self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
             self._draw_action_queue(x, queue_area_y, width, action_queue_height)
-        else:
-            # Show current phase info during other phases
+        elif not self.awaiting_initial_setup:
+            # Show current phase info during other phases (but not during setup)
             phase_name = self.game.turn_manager.get_current_phase_name()
             self.draw_text(
                 phase_name.upper(),
@@ -2894,14 +2898,9 @@ class UnifiedGameScreen(BaseScreen):
     
     def _draw_setup_controls(self, x: int, y: int, width: int, height: int) -> None:
         """Draw initial setup controls (now in right panel)."""
-        # Get mission info
-        mission_info = self.game.mission_config.MISSION_INFO
-        mission_name = mission_info.get('name', f'Mission {self.mission_number}')
-        mission_desc = mission_info.get('description', 'Complete the mission objectives')
-        
-        # Draw mission title
+        # Draw simple setup title
         self.draw_text(
-            mission_name,
+            "MISSION SETUP",
             x + width // 2,
             y + 10,
             self.font_medium,
@@ -2909,56 +2908,77 @@ class UnifiedGameScreen(BaseScreen):
             center=True
         )
         
-        # Draw mission description
+        # Draw setup instructions
         self.draw_text(
-            mission_desc,
+            "Position your U-Boat",
             x + width // 2,
-            y + 35,
+            y + 40,
             self.font_small,
             color=(180, 200, 220),
             center=True
         )
         
         # Depth selection
-        depth_y = y + 65
+        depth_y = y + 75
         self.draw_text(
-            f"Depth [1-4]:",
-            x + 10,
+            "DEPTH:",
+            x + width // 2,
             depth_y,
             self.font_small,
-            color=(180, 200, 220)
+            color=(200, 220, 255),
+            center=True
         )
         self.draw_text(
             self.selected_depth.name,
-            x + 10,
-            depth_y + 20,
+            x + width // 2,
+            depth_y + 25,
+            self.font_medium,
+            color=(255, 255, 150),
+            center=True
+        )
+        self.draw_text(
+            "[Keys 1-4]",
+            x + width // 2,
+            depth_y + 50,
             self.font_small,
-            color=(255, 255, 150)
+            color=(120, 140, 160),
+            center=True
         )
         
         # Facing selection
-        facing_y = y + 115
+        facing_y = y + 160
         self.draw_text(
-            f"Facing [Q/E]:",
-            x + 10,
+            "FACING:",
+            x + width // 2,
             facing_y,
             self.font_small,
-            color=(180, 200, 220)
+            color=(200, 220, 255),
+            center=True
         )
         self.draw_text(
             self.selected_facing.name,
-            x + 10,
-            facing_y + 20,
+            x + width // 2,
+            facing_y + 25,
+            self.font_medium,
+            color=(255, 255, 150),
+            center=True
+        )
+        self.draw_text(
+            "[Keys Q/E]",
+            x + width // 2,
+            facing_y + 50,
             self.font_small,
-            color=(255, 255, 150)
+            color=(120, 140, 160),
+            center=True
         )
         
         # Confirm button hint
+        confirm_y = y + height - 80
         self.draw_text(
-            "Press ENTER",
+            "Press ENTER to Begin",
             x + width // 2,
-            y + 175,
-            self.font_small,
+            confirm_y,
+            self.font_medium,
             color=(100, 255, 100),
             center=True
         )

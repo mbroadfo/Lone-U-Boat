@@ -53,6 +53,7 @@ class CombatResolver:
         # Load from JSON if mission rules provided
         if mission_rules:
             self._load_combat_tables()
+
     
     def _parse_dice_requirement(self, requirement_str: str) -> int:
         """

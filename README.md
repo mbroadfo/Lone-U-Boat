@@ -41,11 +41,20 @@ python main.py
 - ✅ **Refactoring**: All game rules moved to JSON (zero redundancy)
 - ✅ **Phase 4**: All enemy AI complete - Merchants, Detection, Escorts (with depth charges), B-24 Aircraft, Event System
 
-**Test Coverage**: 232 tests across 18 test files, **all passing** ✓
+**Test Coverage**: 233 tests across 19 test files, **all passing** ✓
 
 **The game is now fully playable!** All enemy behaviors are automated.
 
 ### Recent Updates (January 24, 2026)
+
+#### Critical Bug Fixes
+**GAMEPLAY-BREAKING BUG FIXED:**
+- 🐛 **Torpedo Hit Mechanics** - Fixed hardcoded torpedo hit targets that didn't match game rules
+  - Range 1-2 side aspect was requiring 5+ instead of correct 3+ (60% harder than intended!)
+  - Range 1-2 front/rear was requiring 6+ instead of correct 4+ 
+  - All other ranges similarly incorrect
+  - FireTorpedoAction now uses CombatResolver's table loaded from JSON rules
+  - Added regression test (test_fire_torpedo_action.py) to catch this in future
 
 #### User Experience Improvements
 Critical UI/UX fixes based on manual gameplay testing:
