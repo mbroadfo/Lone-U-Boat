@@ -289,6 +289,7 @@ STATUS_BOXES: dict[str, StatusBoxConfig] = {
 ASSETS: dict[str, str] = {
     'detection_marker': 'assets/Detection.png',
     'damaged_marker': 'assets/Damaged.png',
+    'destroyed_marker': 'assets/Destroyed.png',
     'kia_marker': 'assets/kia.png',
     'torpedo_marker': 'assets/Torpedo.png',
     'u_boat_surfaced': 'assets/UB-Surfaced.png',

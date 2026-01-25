@@ -265,15 +265,15 @@ class GameRenderer:
         rect = rotated_image.get_rect(center=(int(center[0]), int(center[1])))
         self.screen.blit(rotated_image, rect)
         
-        # If U-boat is destroyed, overlay damaged icon
+        # If U-boat is destroyed, overlay destroyed icon
         if u_boat.hull_damage >= 4:
-            damaged_image = self.marker_images.get('damaged')
-            if damaged_image:
-                # Scale damaged icon to fit inside hex (about 80% of hex size)
+            destroyed_image = self.marker_images.get('destroyed')
+            if destroyed_image:
+                # Scale destroyed icon to fit inside hex (about 80% of hex size)
                 target_size = int(self.hex_grid.size * 1.6)  # diameter = size * 2, use 80%
-                scaled_damaged = pygame.transform.scale(damaged_image, (target_size, target_size))
-                damaged_rect = scaled_damaged.get_rect(center=(int(center[0]), int(center[1])))
-                self.screen.blit(scaled_damaged, damaged_rect)
+                scaled_destroyed = pygame.transform.scale(destroyed_image, (target_size, target_size))
+                destroyed_rect = scaled_destroyed.get_rect(center=(int(center[0]), int(center[1])))
+                self.screen.blit(scaled_destroyed, destroyed_rect)
     
     def render_ship(self, ship: Ship) -> None:
         """Render an allied ship using PNG images.

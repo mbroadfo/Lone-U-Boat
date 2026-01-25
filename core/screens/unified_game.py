@@ -313,6 +313,11 @@ class UnifiedGameScreen(BaseScreen):
                 if self.alignment_mode:
                     self.handle_mouse_click_alignment(mouse_pos)
                 
+                # Handle repair submenu clicks (priority over other UI)
+                if self.repair_selection_state:
+                    if self._handle_repair_submenu_click(mouse_pos):
+                        return
+                
                 # Check if clicking on a phase header in left panel
                 for phase_num, rect in self.phase_header_rects.items():
                     if rect.collidepoint(mouse_pos):
@@ -332,7 +337,7 @@ class UnifiedGameScreen(BaseScreen):
                             ap = self.game.turn_manager.roll_action_points_only(self.game.u_boat)
                             self.game.u_boat.action_points = ap
                             # Reset action queue for new turn
-                            self.game.action_queue.reset_for_new_turn(ap)
+                            self.game.action_queue.reset_for_new_turn(ap, self.game)
                             
                             # Clear dice button rect so it doesn't interfere with action button clicks
                             self.dice_roll_button_rect = None
@@ -455,16 +460,20 @@ class UnifiedGameScreen(BaseScreen):
                     
                     # Check if clicking action selection buttons
                     elif not self.load_torpedo_selection_state and not self.fire_torpedo_selection_state:  # Only allow if not in torpedo selection
+                        # Check on-map buttons (repair, deck gun, etc.)
+                        if self._handle_on_map_button_clicks(mouse_pos):
+                            pass  # Button was handled
                         # Only process action button clicks during U-Boat phase
-                        from ..models import GamePhase
-                        if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
-                            for action_id, button_data in self.action_button_rects.items():
-                                rect: pygame.Rect
-                                is_clickable: bool
-                                rect, is_clickable = button_data
-                                if rect.collidepoint(mouse_pos) and is_clickable:
-                                    self._queue_action(action_id)
-                                    break
+                        else:
+                            from ..models import GamePhase
+                            if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
+                                for action_id, button_data in self.action_button_rects.items():
+                                    rect: pygame.Rect
+                                    is_clickable: bool
+                                    rect, is_clickable = button_data
+                                    if rect.collidepoint(mouse_pos) and is_clickable:
+                                        self._queue_action(action_id)
+                                        break
                 
                 if self.awaiting_initial_setup:
                     # Handle setup clicks
@@ -2343,6 +2352,8 @@ class UnifiedGameScreen(BaseScreen):
         # Always draw during gameplay, even if status box outlines are hidden
         if not self.awaiting_initial_setup:
             self._draw_status_values()
+            # Draw on-map action buttons (repair button, etc.)
+            self._draw_on_map_action_buttons()
         
         # Draw border
         pygame.draw.rect(self.screen, (50, 70, 100), board_rect, 2)
@@ -2572,7 +2583,6 @@ class UnifiedGameScreen(BaseScreen):
     
     def _draw_on_map_action_buttons(self) -> None:
         """Draw action buttons on the map near relevant status boxes."""
-        return  # DISABLED - using submenu approach instead
         # Get status box rectangles from layout
         layout = self.game.layout
         if not layout or not hasattr(layout, 'status_box_rects'):
@@ -2694,30 +2704,9 @@ class UnifiedGameScreen(BaseScreen):
             border_color = (255, 100, 100) if enabled else (80, 80, 80)
             pygame.draw.rect(self.screen, border_color, self.fire_deck_gun_button_rect, 1)
         
-        # === REPAIR BUTTON (under engine damage box or another central location) ===
-        if 'engine_damaged' in layout.status_box_rects and self.repair_button_image:
-            engine_rect = layout.status_box_rects['engine_damaged']
-            
-            # Check if anything can be repaired
-            enabled = (u_boat.engine_damaged or u_boat.deck_gun_damaged or 
-                      u_boat.flak_gun_damaged or not all(u_boat.torpedo_tubes))
-            
-            # Position button centered under engine box
-            button_x = engine_rect.centerx - repair_button_size // 2
-            button_y = engine_rect.bottom + padding
-            
-            scaled_button = pygame.transform.scale(self.repair_button_image, (repair_button_size, repair_button_size))
-            
-            if enabled:
-                self.screen.blit(scaled_button, (button_x, button_y))
-            else:
-                scaled_button.set_alpha(80)
-                self.screen.blit(scaled_button, (button_x, button_y))
-                scaled_button.set_alpha(255)
-            
-            self.repair_button_rect = pygame.Rect(button_x, button_y, repair_button_size, repair_button_size)
-            border_color = (255, 200, 100) if enabled else (80, 80, 80)
-            pygame.draw.rect(self.screen, border_color, self.repair_button_rect, 1)
+        # Repair button is handled as a regular action button in the action panel
+        # (not drawn on the map)
+
     
     def _render_action_preview(self) -> None:
         """Render an outline showing where the u-boat will be after all queued actions."""
@@ -3223,6 +3212,11 @@ class UnifiedGameScreen(BaseScreen):
             self._draw_torpedo_firing_selection(x, y + 35, width)
             return
         
+        # Check if in repair selection mode
+        if self.repair_selection_state:
+            self._draw_repair_selection(x, y + 35, width)
+            return
+        
         # Clear button rects
         self.action_button_rects.clear()
         
@@ -3396,6 +3390,8 @@ class UnifiedGameScreen(BaseScreen):
         elif action_type == "MoveAction":
             return "Move Forward"
         elif action_type == "RepairAction":
+            if action.repair_target == "Torpedo Tubes" and hasattr(action, 'tube_number') and action.tube_number:
+                return f"Repair Torpedo {action.tube_number}"
             return f"Repair {action.repair_target.replace('_', ' ').title()}"
         elif action_type == "DeckGunAction":
             return "Fire Deck Gun"
@@ -4049,7 +4045,7 @@ class UnifiedGameScreen(BaseScreen):
                 tube_idx = tube_num - 1  # Convert to 0-based
                 
                 # Check if tube is loaded
-                if not u_boat.torpedo_tubes[tube_idx]:
+                if u_boat.torpedo_tubes[tube_idx] != TubeState.LOADED:
                     self.add_event(f"Tube {tube_num} is empty")
                     return
                 
@@ -4954,6 +4950,7 @@ class UnifiedGameScreen(BaseScreen):
                 # Show detailed message from action result
                 from ..actions.move_action import MoveAction
                 from ..actions.rotate_action import RotateAction
+                from ..actions.repair_action import RepairAction
                 
                 if isinstance(action, MoveAction):
                     # Show move with position info
@@ -4965,6 +4962,9 @@ class UnifiedGameScreen(BaseScreen):
                     old_facing = result.state_changes.get('old_facing')
                     new_facing = result.state_changes.get('new_facing')
                     self.add_event(f"✓ Rotate: {old_facing.name} → {new_facing.name}")
+                elif isinstance(action, RepairAction):
+                    # Show repair with specific message from action
+                    self.add_event(f"✓ {result.message}")
                 else:
                     # Other actions - use action_name
                     action_name = result.state_changes.get('action_name', type(action).__name__.replace('Action', ''))
@@ -4999,13 +4999,15 @@ class UnifiedGameScreen(BaseScreen):
                 else:
                     # Check if we can add more
                     if len(state['selected_tubes']) < state['max_tubes']:
-                        # Check if tube is available (not already loaded)
+                        # Check if tube is available (empty and can be loaded)
                         u_boat = state['u_boat']
-                        if not u_boat.torpedo_tubes[tube_num - 1]:  # Convert to 0-based
+                        if u_boat.torpedo_tubes[tube_num - 1] == TubeState.EMPTY:
                             state['selected_tubes'].append(tube_num)
                             self.add_event(f"Selected Tube {tube_num}")
-                        else:
+                        elif u_boat.torpedo_tubes[tube_num - 1] == TubeState.LOADED:
                             self.add_event(f"Tube {tube_num} is already loaded")
+                        else:
+                            self.add_event(f"Tube {tube_num} is damaged")
                     else:
                         max_tubes = state['max_tubes']
                         self.add_event(f"Can only load {max_tubes} tube(s) per action")
@@ -5048,12 +5050,11 @@ class UnifiedGameScreen(BaseScreen):
     
     def _handle_on_map_button_clicks(self, mouse_pos: Tuple[int, int]) -> bool:
         """
-        Handle clicks on on-map action buttons.
+        Handle clicks on on-map action buttons (repair, deck gun, etc.).
         
         Returns:
             True if a button was clicked (even if disabled)
         """
-        return False  # DISABLED - using submenu approach instead
         u_boat = self.game.u_boat
         
         # Check torpedo tube buttons (each tube has its own button)
@@ -5089,17 +5090,466 @@ class UnifiedGameScreen(BaseScreen):
                     self.add_event("✗ No valid targets in range for deck gun")
             return True
         
-        # Repair button
-        if hasattr(self, 'repair_button_rect') and self.repair_button_rect and self.repair_button_rect.collidepoint(mouse_pos):
-            can_repair = (u_boat.engine_damaged or u_boat.deck_gun_damaged or 
-                         u_boat.flak_gun_damaged or not all(u_boat.torpedo_tubes))
-            if can_repair:
-                self._queue_action("repair")
-            else:
-                self.add_event("✗ Nothing to repair")
+        # Repair is handled as a regular action button, not an on-map button
+        return False
+    
+    def _open_repair_submenu(self) -> None:
+        """Open submenu to select what system to repair."""
+        from ..repair_validator import RepairValidator
+        from ..models import TubeState
+        
+        print("[DEBUG] _open_repair_submenu called")
+        validator = RepairValidator()
+        u_boat = self.game.u_boat
+        
+        # Get preview depth (in case depth change is queued)
+        _, _, preview_depth = self._get_preview_state()
+        
+        # Get remaining AP after queued actions
+        remaining_ap = self.game.action_queue.get_remaining_ap(self.game)
+        
+        # Track which components are already queued for repair
+        queued_repairs = set()
+        for action in self.game.action_queue.actions:
+            if hasattr(action, 'repair_target'):
+                if action.repair_target == "Torpedo Tubes" and hasattr(action, 'tube_number') and action.tube_number:
+                    queued_repairs.add(f"Torpedo {action.tube_number}")
+                else:
+                    queued_repairs.add(action.repair_target)
+        
+        # Get all repairable components with their status
+        components: List[Dict[str, Any]] = []
+        
+        # Check individual components (Engine, Deck Gun, Flak Gun)
+        for component in ["Engine", "Deck Gun", "Flak Gun"]:
+            if validator._is_component_damaged(u_boat, component):
+                can_repair, reason = validator.can_repair_component(u_boat, component)
+                ap_cost = validator.get_repair_ap_cost(component, preview_depth, u_boat.engineer_alive)
+                
+                # Check if already queued
+                if component in queued_repairs:
+                    can_repair = False
+                    reason = "Already queued"
+                
+                components.append({
+                    'name': component,
+                    'can_repair': can_repair,
+                    'reason': reason,
+                    'ap_cost': ap_cost,
+                    'selected': False,
+                    'is_tube': False
+                })
+        
+        # Check individual torpedo tubes
+        for tube_num in range(1, 6):
+            if u_boat.torpedo_tubes[tube_num - 1] == TubeState.DAMAGED:
+                can_repair, reason = validator.can_repair_component(u_boat, "Torpedo Tubes")
+                ap_cost = validator.get_repair_ap_cost("Torpedo Tubes", preview_depth, u_boat.engineer_alive)
+                
+                tube_name = f"Torpedo {tube_num}"
+                # Check if already queued
+                if tube_name in queued_repairs:
+                    can_repair = False
+                    reason = "Already queued"
+                
+                components.append({
+                    'name': tube_name,
+                    'can_repair': can_repair,
+                    'reason': reason,
+                    'ap_cost': ap_cost,
+                    'selected': False,
+                    'tube_number': tube_num,
+                    'is_tube': True
+                })
+        
+        if not components:
+            self.add_event("No damaged systems to repair")
+            return
+        
+        # Store repair selection state
+        self.repair_selection_state = {
+            'components': components,
+            'preview_depth': preview_depth,
+            'remaining_ap': remaining_ap
+        }
+    
+    def _close_repair_submenu(self) -> None:
+        """Close the repair submenu."""
+        self.repair_selection_state = None
+        self.repair_checkbox_rects = {}
+        self.confirm_repair_button_rect = None
+        self.cancel_repair_button_rect = None
+    
+    def _handle_repair_submenu_click(self, mouse_pos: tuple[int, int]) -> bool:
+        """
+        Handle clicks in the repair submenu.
+        
+        Returns:
+            True if click was handled (don't process other UI)
+        """
+        if not self.repair_selection_state:
+            return False
+        
+        # Check checkboxes
+        components = self.repair_selection_state['components']
+        remaining_ap = self.repair_selection_state['remaining_ap']
+        
+        for component in components:
+            rect = self.repair_checkbox_rects.get(component['name'])
+            if rect and rect.collidepoint(mouse_pos):
+                # Can't select if not repairable or insufficient AP
+                if not component['can_repair']:
+                    return True
+                
+                current_selection = component.get('selected', False)
+                is_tube = component.get('is_tube', False)
+                
+                if is_tube:
+                    # Torpedo tubes: can select multiple (modulo cost applies)
+                    selected_tubes = [c for c in components if c.get('selected', False) and c.get('is_tube', False)]
+                    
+                    if current_selection:
+                        # Deselect this tube
+                        component['selected'] = False
+                    else:
+                        # Select this tube
+                        component['selected'] = True
+                else:
+                    # Regular component: only one non-tube can be selected at a time
+                    # Clear all non-tube selections
+                    for c in components:
+                        if not c.get('is_tube', False):
+                            c['selected'] = False
+                    # Clear all tube selections too (can't mix tubes with other components)
+                    for c in components:
+                        if c.get('is_tube', False):
+                            c['selected'] = False
+                    # Toggle this one
+                    component['selected'] = not current_selection
+                
+                return True
+        
+        # Check confirm button
+        if self.confirm_repair_button_rect and self.confirm_repair_button_rect.collidepoint(mouse_pos):
+            self._confirm_repair_selection()
             return True
         
-        return False
+        # Check cancel button
+        if self.cancel_repair_button_rect and self.cancel_repair_button_rect.collidepoint(mouse_pos):
+            self._close_repair_submenu()
+            return True
+        
+        # Click was in submenu area but not on any interactive element
+        return True  # Still consume the click to prevent underlying UI interactions
+    
+    def _confirm_repair_selection(self) -> None:
+        """Confirm repair selection and queue the action."""
+        if not self.repair_selection_state:
+            return
+        
+        components = self.repair_selection_state['components']
+        selected = [c for c in components if c.get('selected', False)]
+        remaining_ap = self.repair_selection_state['remaining_ap']
+        
+        if not selected:
+            self.add_event("✗ No system selected for repair")
+            return
+        
+        # Check if all selected are tubes
+        selected_tubes = [c for c in selected if c.get('is_tube', False)]
+        selected_non_tubes = [c for c in selected if not c.get('is_tube', False)]
+        
+        # Calculate AP cost
+        if selected_tubes and selected_non_tubes:
+            self.add_event("✗ Cannot mix torpedo tubes with other systems")
+            return
+        
+        if selected_non_tubes:
+            # Single component repair
+            if len(selected_non_tubes) > 1:
+                self.add_event("✗ Can only repair one system at a time")
+                return
+            
+            component_data = selected_non_tubes[0]
+            ap_cost = component_data['ap_cost']
+            
+            if ap_cost > remaining_ap:
+                self.add_event(f"✗ Not enough AP ({ap_cost} needed, {remaining_ap} available)")
+                return
+            
+            # Queue repair action
+            self._queue_action_with_target("repair", component_data['name'])
+            
+            # Remove from list and update remaining AP
+            components.remove(component_data)
+            remaining_ap -= ap_cost
+            
+        elif selected_tubes:
+            # Torpedo tube repairs with modulo cost (odd tubes cost 2 AP, even tubes free)
+            num_tubes = len(selected_tubes)
+            ap_cost = ((num_tubes + 1) // 2) * 2  # Total cost: each odd tube costs 2 AP
+            
+            if ap_cost > remaining_ap:
+                self.add_event(f"✗ Not enough AP ({ap_cost} needed, {remaining_ap} available)")
+                return
+            
+            # Log which tubes are being queued
+            tube_numbers = [str(t.get('tube_number')) for t in selected_tubes]
+            tubes_str = ", ".join(tube_numbers)
+            
+            # Queue repair for each tube with modulo cost
+            for i, tube_data in enumerate(selected_tubes, start=1):
+                tube_number = tube_data.get('tube_number')
+                # Odd tubes (1st, 3rd, 5th) cost 2 AP, even tubes (2nd, 4th) are free
+                tube_cost = 2 if (i % 2) == 1 else 0
+                self._queue_action_with_target("repair", "Torpedo Tubes", tube_number=tube_number, ap_cost=tube_cost)
+                components.remove(tube_data)
+            
+            # Log summary
+            if num_tubes == 1:
+                self.add_event(f"✓ Queued repair: Torpedo {tubes_str} ({ap_cost} AP)")
+            else:
+                self.add_event(f"✓ Queued repairs: Torpedoes {tubes_str} ({ap_cost} AP)")
+            
+            remaining_ap -= ap_cost
+        
+        # Update state with new remaining AP
+        self.repair_selection_state['remaining_ap'] = remaining_ap
+        
+        # If no more components to repair or no AP left, close submenu
+        available_repairs = [c for c in components if c['can_repair'] and c['ap_cost'] <= remaining_ap]
+        if not components or not available_repairs:
+            if not components:
+                self.add_event("All systems repaired")
+            else:
+                self.add_event("No more repairs affordable")
+            self._close_repair_submenu()
+        # Otherwise, keep submenu open for more repairs
+    
+    def _draw_repair_selection(self, x: int, y: int, width: int) -> None:
+        """Draw repair component selection UI."""
+        state = self.repair_selection_state
+        if not state:
+            return
+        
+        self.repair_checkbox_rects = {}
+        
+        components = state['components']
+        remaining_ap = state['remaining_ap']
+        
+        # Calculate current selection cost
+        selected = [c for c in components if c.get('selected', False)]
+        selected_tubes = [c for c in selected if c.get('is_tube', False)]
+        selected_non_tubes = [c for c in selected if not c.get('is_tube', False)]
+        
+        current_cost = 0
+        if selected_tubes:
+            # Modulo cost: odd tubes (1st, 3rd, 5th) cost 2 AP, even tubes (2nd, 4th) are free
+            num_tubes = len(selected_tubes)
+            current_cost = ((num_tubes + 1) // 2) * 2  # Each odd tube costs 2 AP
+        elif selected_non_tubes:
+            current_cost = sum(c['ap_cost'] for c in selected_non_tubes)
+        
+        # Title
+        info_y = y
+        self.draw_text(
+            "REPAIR SYSTEM",
+            x + width // 2,
+            info_y,
+            self.font_medium,
+            color=(255, 200, 100),
+            center=True
+        )
+        info_y += 30
+        
+        # Info text with AP budget
+        if selected:
+            if selected_tubes:
+                if len(selected_tubes) == 1:
+                    info_text = f"1 tube | {current_cost} AP | {remaining_ap} AP available"
+                else:
+                    info_text = f"{len(selected_tubes)} tubes | {current_cost} AP | {remaining_ap} AP available"
+            else:
+                info_text = f"Selected | {current_cost} AP | {remaining_ap} AP available"
+        else:
+            info_text = f"{remaining_ap} AP available"
+        
+        self.draw_text(
+            info_text,
+            x + width // 2,
+            info_y,
+            self.font_small,
+            color=(180, 180, 180),
+            center=True
+        )
+        info_y += 25
+        
+        # Component checkboxes
+        checkbox_size = 20
+        label_x = x + 20
+        checkbox_x = x + width - 40
+        
+        for component in components:
+            is_selected = component.get('selected', False)
+            is_available = component['can_repair']
+            component_name = component['name']
+            is_tube = component.get('is_tube', False)
+            
+            # For tubes, calculate if this would be an odd or even selection
+            if is_tube:
+                # Count how many tubes are currently selected
+                num_selected_tubes = len([c for c in components if c.get('selected', False) and c.get('is_tube', False)])
+                if is_selected:
+                    # This tube is already selected, show its cost status
+                    # Find position in selection (1-indexed)
+                    selected_tube_list = [c for c in components if c.get('selected', False) and c.get('is_tube', False)]
+                    position = selected_tube_list.index(component) + 1
+                    is_odd = (position % 2) == 1
+                else:
+                    # If we select this tube, it would be the next one
+                    would_be_position = num_selected_tubes + 1
+                    is_odd = (would_be_position % 2) == 1
+            
+            # Check if affordable
+            can_afford = component['ap_cost'] <= remaining_ap
+            if not can_afford and is_available:
+                is_available = False
+                component['can_repair'] = False
+                if not component.get('reason'):
+                    component['reason'] = f"Need {component['ap_cost']} AP"
+            
+            # Component label
+            self.draw_text(
+                component_name,
+                label_x,
+                info_y + checkbox_size // 2,
+                self.font_small,
+                color=(200, 200, 200)
+            )
+            
+            # Status
+            if is_available:
+                if is_tube:
+                    # Show cost based on modulo position
+                    if is_selected:
+                        selected_tube_list = [c for c in components if c.get('selected', False) and c.get('is_tube', False)]
+                        position = selected_tube_list.index(component) + 1
+                        is_odd = (position % 2) == 1
+                        if is_odd:
+                            status = "2 AP"
+                            status_color = (255, 220, 100)  # Yellow for selected odd
+                        else:
+                            status = "FREE"
+                            status_color = (100, 255, 100)  # Green for selected even (free)
+                    else:
+                        # Show what it would cost if selected next
+                        num_selected_tubes = len([c for c in components if c.get('selected', False) and c.get('is_tube', False)])
+                        would_be_position = num_selected_tubes + 1
+                        is_odd = (would_be_position % 2) == 1
+                        if is_odd:
+                            status = "2 AP"
+                            status_color = (150, 150, 150)  # Gray for unselected
+                        else:
+                            status = "FREE"
+                            status_color = (100, 200, 100)  # Light green for free option
+                else:
+                    # Non-tube component
+                    if is_selected:
+                        status = f"{component['ap_cost']} AP"
+                        status_color = (255, 220, 100)
+                    else:
+                        status = f"{component['ap_cost']} AP"
+                        status_color = (100, 255, 100)
+            else:
+                status = component['reason']
+                status_color = (255, 100, 100)
+            
+            self.draw_text(
+                status,
+                label_x + 120,
+                info_y + checkbox_size // 2,
+                self.font_small,
+                color=status_color
+            )
+            
+            # Checkbox
+            checkbox_rect = pygame.Rect(checkbox_x, info_y, checkbox_size, checkbox_size)
+            self.repair_checkbox_rects[component_name] = checkbox_rect
+            
+            # Checkbox appearance
+            if is_available:
+                if is_selected:
+                    pygame.draw.rect(self.screen, (255, 200, 100), checkbox_rect)
+                    pygame.draw.rect(self.screen, (255, 220, 150), checkbox_rect, 2)
+                    # Draw checkmark
+                    pygame.draw.line(self.screen, (255, 255, 255),
+                                   (checkbox_rect.left + 4, checkbox_rect.centery),
+                                   (checkbox_rect.centerx, checkbox_rect.bottom - 4), 2)
+                    pygame.draw.line(self.screen, (255, 255, 255),
+                                   (checkbox_rect.centerx, checkbox_rect.bottom - 4),
+                                   (checkbox_rect.right - 4, checkbox_rect.top + 4), 2)
+                else:
+                    pygame.draw.rect(self.screen, (60, 60, 60), checkbox_rect)
+                    pygame.draw.rect(self.screen, (120, 120, 120), checkbox_rect, 2)
+            else:
+                # Disabled (cannot repair)
+                pygame.draw.rect(self.screen, (40, 40, 40), checkbox_rect)
+                pygame.draw.rect(self.screen, (80, 80, 80), checkbox_rect, 1)
+            
+            info_y += checkbox_size + 8
+        
+        # Confirm and Cancel buttons
+        info_y += 10
+        button_height = 35
+        button_width = (width - 50) // 2
+        
+        # Confirm button
+        confirm_x = x + 15
+        self.confirm_repair_button_rect = pygame.Rect(confirm_x, info_y, button_width, button_height)
+        
+        can_confirm = any(c.get('selected', False) for c in components)
+        if can_confirm:
+            confirm_color = (120, 100, 60)
+            confirm_border = (200, 180, 100)
+            confirm_text_color = (255, 230, 200)
+        else:
+            confirm_color = (40, 40, 40)
+            confirm_border = (80, 80, 80)
+            confirm_text_color = (100, 100, 100)
+        
+        pygame.draw.rect(self.screen, confirm_color, self.confirm_repair_button_rect)
+        pygame.draw.rect(self.screen, confirm_border, self.confirm_repair_button_rect, 2)
+        self.draw_text(
+            "CONFIRM",
+            self.confirm_repair_button_rect.centerx,
+            self.confirm_repair_button_rect.centery,
+            self.font_small,
+            color=confirm_text_color,
+            center=True
+        )
+        
+        # Cancel button
+        cancel_x = x + 15 + button_width + 20
+        self.cancel_repair_button_rect = pygame.Rect(cancel_x, info_y, button_width, button_height)
+        
+        cancel_color = (80, 50, 50)
+        cancel_border = (150, 80, 80)
+        cancel_text_color = (200, 150, 150)
+        
+        pygame.draw.rect(self.screen, cancel_color, self.cancel_repair_button_rect)
+        pygame.draw.rect(self.screen, cancel_border, self.cancel_repair_button_rect, 2)
+        self.draw_text(
+            "CANCEL",
+            self.cancel_repair_button_rect.centerx,
+            self.cancel_repair_button_rect.centery,
+            self.font_small,
+            color=cancel_text_color,
+            center=True
+        )
+    
+    def _render_repair_submenu(self) -> None:
+        """Render the repair selection submenu - NO LONGER USED (inline rendering now)."""
+        pass
     
     def _queue_action(self, action_id: str) -> None:
         """Queue an action based on action ID."""
@@ -5145,22 +5595,11 @@ class UnifiedGameScreen(BaseScreen):
                 target_depth = Depth(u_boat.depth.value - 1) if u_boat.depth.value > 0 else u_boat.depth
                 validator = DepthValidator(self.game.shallow_hexes)
                 action = DepthChangeAction(target_depth, cost_lookup, validator)
+            
+            # Note: "repair" action_id is no longer handled here
+            # Repair now uses the submenu system via _open_repair_submenu()
+            # and then calls _queue_action_with_target() with the selected component
                 
-            elif action_id == "repair":
-                # For now, just pick first damaged system
-                validator = RepairValidator()
-                if u_boat.engine_damaged:
-                    action = RepairAction("Engine", cost_lookup, validator)
-                elif u_boat.deck_gun_damaged:
-                    action = RepairAction("Deck Gun", cost_lookup, validator)
-                elif u_boat.flak_gun_damaged:
-                    action = RepairAction("Flak Gun", cost_lookup, validator)
-                elif not all(u_boat.torpedo_tubes):
-                    action = RepairAction("Torpedo Tubes", cost_lookup, validator)
-                else:
-                    self.add_event("No damaged systems to repair")
-                    return
-                    
             elif action_id == "deck_gun":
                 # Calculate targets using PREVIEW position for validation
                 # Will be recalculated at execution time using actual position
@@ -5224,6 +5663,11 @@ class UnifiedGameScreen(BaseScreen):
                 }
                 self.add_event("Select torpedo tube(s) to fire")
                 return  # Don't queue yet - wait for user to select tubes
+            
+            elif action_id == "repair":
+                # Open repair submenu (select what system to repair)
+                self._open_repair_submenu()
+                return  # Don't queue yet - wait for user to select component
                 
             elif action_id.startswith("fire_torp_"):
                 # Fire individual torpedo tube
@@ -5285,3 +5729,60 @@ class UnifiedGameScreen(BaseScreen):
             import traceback
             self.add_event(f"Error queuing action: {e}")
             print(f"Full error: {traceback.format_exc()}")
+    
+    def _queue_action_with_target(self, action_id: str, target: str, tube_number: int = None, ap_cost: int = None) -> None:
+        """Queue an action with a specific target (e.g., repair with selected component)."""
+        from ..models import GamePhase
+        from ..action_costs import ActionCostLookup
+        from ..repair_validator import RepairValidator
+        
+        # Only queue during U-Boat phase
+        if self.game.turn_manager.current_phase != GamePhase.UBOAT_PHASE:
+            self.add_event("Can only queue actions during U-Boat Phase")
+            return
+        
+        u_boat = self.game.u_boat
+        cost_lookup = ActionCostLookup(self.game.mission_rules)
+        preview_position, preview_facing, preview_depth = self._get_preview_state()
+        
+        action = None
+        
+        try:
+            if action_id == "repair":
+                validator = RepairValidator()
+                action = RepairAction(target, cost_lookup, validator, tube_number=tube_number, ap_cost_override=ap_cost)
+            
+            # Add action to queue
+            if action:
+                # Temporarily set u_boat to preview state for validation
+                original_position = u_boat.position
+                original_facing = u_boat.facing
+                original_depth = u_boat.depth
+                
+                u_boat.position = preview_position
+                u_boat.facing = preview_facing
+                u_boat.depth = preview_depth
+                
+                success, message = self.game.action_queue.add_action(action, self.game)
+                
+                # Restore original state
+                u_boat.position = original_position
+                u_boat.facing = original_facing
+                u_boat.depth = original_depth
+                
+                if success:
+                    remaining = self.game.action_queue.get_remaining_ap(self.game)
+                    action_desc = self._get_action_description(action)
+                    self.add_event(f"Queued: {action_desc} (AP: {remaining}/{self.game.action_queue.max_ap})")
+                    # Reset commit confirmation
+                    if hasattr(self, '_commit_confirmation_needed'):
+                        self._commit_confirmation_needed = False
+                else:
+                    remaining = self.game.action_queue.get_remaining_ap(self.game)
+                    self.add_event(f"Cannot queue: {message} (AP: {remaining}/{self.game.action_queue.max_ap})")
+                    
+        except Exception as e:
+            import traceback
+            self.add_event(f"Error queuing action: {e}")
+            print(f"Full error: {traceback.format_exc()}")
+

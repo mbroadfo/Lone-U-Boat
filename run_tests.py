@@ -26,6 +26,7 @@ test_files = [
     "tests/test_movement_validator.py",
     "tests/test_phase2_subsystems.py",
     "tests/test_range_los.py",
+    "tests/test_repair_system.py",
     "tests/test_repair_validator.py",
     "tests/test_scripted_captain.py",
     "tests/test_torpedo_validator.py",

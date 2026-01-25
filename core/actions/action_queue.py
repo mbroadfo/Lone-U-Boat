@@ -31,6 +31,7 @@ class ActionQueue:
         self.spent_ap: int = 0  # Track total AP spent this turn
         self._committed = False
         self.action_history: List[Action] = []  # Track executed actions for statistics
+        self.original_depth = None  # Track depth at start of turn for accurate cost calculation
     
     @property
     def is_committed(self) -> bool:
@@ -56,8 +57,24 @@ class ActionQueue:
         if not can_perform:
             return False, f"Invalid action: {reason}"
         
-        # Check if we can afford it
-        action_cost = action.get_cost(game_state.u_boat)
+        # Calculate action cost using simulated depth (after queued depth changes)
+        from .depth_change_action import DepthChangeAction
+        from copy import copy
+        
+        # Simulate depth to get accurate cost
+        # Use saved original depth, fallback to current if not set
+        simulated_depth = self.original_depth if self.original_depth is not None else game_state.u_boat.depth
+        for queued_action in self.actions:
+            if isinstance(queued_action, DepthChangeAction):
+                simulated_depth = queued_action.new_depth
+        
+        # Use temporary u_boat copy for cost calculation (don't modify game state)
+        temp_uboat = copy(game_state.u_boat)
+        temp_uboat.depth = simulated_depth
+        
+        # Get cost based on simulated depth
+        action_cost = action.get_cost(temp_uboat)
+        
         total_cost = self.get_total_cost(game_state) + action_cost
         
         if total_cost > self.max_ap:
@@ -90,21 +107,20 @@ class ActionQueue:
             Total AP cost
         """
         from .depth_change_action import DepthChangeAction
-        from ..models import UBoat
+        from copy import copy
         
         total_cost = 0
-        simulated_depth = game_state.u_boat.depth
+        # Use saved original depth, fallback to current if not set
+        simulated_depth = self.original_depth if self.original_depth is not None else game_state.u_boat.depth
+        
+        # Create temporary u_boat for cost calculations
+        temp_uboat = copy(game_state.u_boat)
         
         for action in self.actions:
-            # Create temporary u_boat with simulated depth for cost calculation
-            temp_uboat = UBoat(
-                position=game_state.u_boat.position,
-                facing=game_state.u_boat.facing,
-                depth=simulated_depth,
-                action_points=game_state.u_boat.action_points
-            )
+            # Set simulated depth
+            temp_uboat.depth = simulated_depth
             
-            # Get cost based on simulated state
+            # Get cost based on simulated depth
             cost = action.get_cost(temp_uboat)
             total_cost += cost
             
@@ -138,21 +154,28 @@ class ActionQueue:
         """
         return self.get_total_cost(game_state) <= self.max_ap
     
-    def clear(self):
+    def clear(self, game_state: Any = None):
         """Clear all queued actions without marking as committed."""
         self.actions.clear()
+        # Save original depth at start of turn if provided
+        if game_state and hasattr(game_state, 'u_boat'):
+            self.original_depth = game_state.u_boat.depth
     
-    def reset_for_new_turn(self, new_max_ap: int):
+    def reset_for_new_turn(self, new_max_ap: int, game_state: Any = None):
         """Reset queue for a new turn with new AP allocation.
         
         Args:
             new_max_ap: Action points for the new turn
+            game_state: Game state to capture original depth
         """
         self.actions.clear()
         self.action_history.clear()  # Clear history for new turn
         self.max_ap = new_max_ap
         self.spent_ap = 0
         self._committed = False
+        # Save original depth at start of turn
+        if game_state and hasattr(game_state, 'u_boat'):
+            self.original_depth = game_state.u_boat.depth
     
     def commit_all(self, game_state: Any) -> List[ActionResult]:
         """

@@ -44,7 +44,7 @@ class UBoatAI:
         if self.game.turn_manager.ap_tracker is None:
             ap = self.game.turn_manager.roll_action_points_only(self.game.u_boat)
             self.game.u_boat.action_points = ap
-            self.game.action_queue.reset_for_new_turn(ap)
+            self.game.action_queue.reset_for_new_turn(ap, self.game)
             messages.append(f"AI rolled {ap} AP")
         
         # Plan and queue actions

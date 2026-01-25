@@ -378,15 +378,6 @@ class Game:
                 else:
                     self.turn_manager.add_phase_log("U-Boat Phase", 
                         f"✗ Action failed: {result.message}")
-        else:
-            self.turn_manager.add_phase_log("U-Boat Phase", 
-                "Actions already executed")
-        
-        # Log remaining AP
-        remaining = self.action_queue.get_remaining_ap(self)
-        if remaining > 0:
-            self.turn_manager.add_phase_log("U-Boat Phase",
-                f"Ended with {remaining} AP remaining")
     
     def _execute_merchant_phase(self):
         """Execute merchant ship movements."""
@@ -605,7 +596,7 @@ class Game:
         
         # Reset action queue for new turn (0 AP until dice are rolled)
         if hasattr(self, 'action_queue'):
-            self.action_queue.reset_for_new_turn(0)
+            self.action_queue.reset_for_new_turn(0, self)
         else:
             self.action_queue = ActionQueue(max_ap=0)
         self.selected_target = None

@@ -115,6 +115,7 @@ class AssetManager:
         marker_files: Dict[str, str] = {
             'detection': self.config.ASSETS['detection_marker'],
             'damaged': self.config.ASSETS['damaged_marker'],
+            'destroyed': self.config.ASSETS['destroyed_marker'],
             'kia': self.config.ASSETS['kia_marker'],
             'torpedo': self.config.ASSETS['torpedo_marker']
         }

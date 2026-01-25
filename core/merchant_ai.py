@@ -174,8 +174,15 @@ class MerchantAI:
         if next_waypoint is None:
             return None, None, f"Merchant has reached end of path"
         
-        # Calculate facing for next waypoint
-        new_facing = path.get_facing_for_next_waypoint(ship.position, next_waypoint)
+        # Calculate facing for the OUTBOUND direction (from next_waypoint to the waypoint after that)
+        # This way, when the ship arrives at next_waypoint, it's already facing the right direction
+        waypoint_after_next = path.get_next_waypoint(next_waypoint)
+        if waypoint_after_next:
+            # Face the direction for the next move
+            new_facing = path.get_facing_for_next_waypoint(next_waypoint, waypoint_after_next)
+        else:
+            # This is the last waypoint, face the direction we're moving
+            new_facing = path.get_facing_for_next_waypoint(ship.position, next_waypoint)
         
         # Determine movement rules based on damage status
         condition = "DAMAGED" if ship.damaged else "UNDAMAGED"
@@ -223,13 +230,32 @@ class MerchantAI:
                 continue
             
             new_position, new_facing, message = self.get_merchant_movement(ship, ship_index)
-            messages.append(message)
             
-            # Apply movement
+            # Check if destination is blocked by another ship
             if new_position:
-                ship.position = new_position
-            if new_facing:
-                ship.facing = new_facing
+                blocked = False
+                for other_ship in ships:
+                    if other_ship is not ship and other_ship.position == new_position:
+                        blocked = True
+                        messages.append(f"Merchant cannot move to {new_position.q},{new_position.r} - blocked by {other_ship.ship_type}")
+                        break
+                
+                if not blocked:
+                    messages.append(message)
+                    # Apply movement
+                    ship.position = new_position
+                    if new_facing:
+                        ship.facing = new_facing
+                else:
+                    # Can't move but can still turn
+                    if new_facing:
+                        ship.facing = new_facing
+                        messages.append(f"Merchant turns to face {new_facing.name}")
+            else:
+                messages.append(message)
+                # Apply facing change even if not moving
+                if new_facing:
+                    ship.facing = new_facing
         
         return messages
     
