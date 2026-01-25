@@ -292,12 +292,14 @@ def run_scripted_test(num_turns: int = 10):
         print(f"Current turn: {game.turn_manager.turn_number}")
         print(f"Current phase: {game.turn_manager.current_phase.name}")
         print(f"Detection Level: {game.detection_level}")
+        from core.models import TubeState
         print(f"U-Boat status:")
         print(f"  Position: {game.u_boat.position}")
         print(f"  Depth: {game.u_boat.depth.name}")
         print(f"  Facing: {game.u_boat.facing.name}")
         print(f"  Hull Damage: {game.u_boat.hull_damage}/3")
-        print(f"  Torpedoes: {sum(game.u_boat.torpedo_tubes)}/{len(game.u_boat.torpedo_tubes)} loaded")
+        loaded_tubes = sum(1 for tube in game.u_boat.torpedo_tubes if tube == TubeState.LOADED)
+        print(f"  Torpedoes: {loaded_tubes}/{len(game.u_boat.torpedo_tubes)} loaded")
         deck_gun_status = 'Unknown'
         if hasattr(game.u_boat, 'deck_gun_loaded'):
             deck_gun_status = 'Ready' if game.u_boat.deck_gun_loaded else 'Fired'  # type: ignore
