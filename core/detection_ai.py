@@ -245,7 +245,7 @@ class DetectionAI:
             threshold_details.append(f"{self.modifier_engine_damaged} (Engine damaged)")
         threshold_calc = " ".join(threshold_details) + f" = {threshold}"
         
-        messages.append(f"Detection Phase: U-boat at {u_boat.depth.name}, need {threshold}+ on 1d6 [{threshold_calc}]")
+        messages.append(f"Detection Phase: U-boat at {u_boat.depth.name}, rolling 1d6, need {threshold}+ [{threshold_calc}]")
         
         # Find escorts that can attempt detection
         detecting_escorts: List[Tuple[Ship, str]] = []
@@ -274,12 +274,12 @@ class DetectionAI:
                 detection_successes += 1
                 messages.append(
                     f"  {escort.ship_type.capitalize()} ({reason}): "
-                    f"rolled {roll} - SUCCESS! (+1 DL)"
+                    f"rolled 1d6 [{roll}] - SUCCESS! (+1 DL)"
                 )
             else:
                 messages.append(
                     f"  {escort.ship_type.capitalize()} ({reason}): "
-                    f"rolled {roll} - failed (need {threshold}+)"
+                    f"rolled 1d6 [{roll}] - failed (need {threshold}+)"
                 )
         
         # Calculate new detection level

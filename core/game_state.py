@@ -578,6 +578,11 @@ class Game:
     
     def _start_new_turn(self):
         """Start a new turn - reset state and wait for player to roll AP."""
+        # Log turn separator
+        print("[TURN] " + "-" * 60)
+        print(f"[TURN] Turn {self.turn_manager.turn_number + 1} Beginning")
+        print("[TURN] " + "-" * 60)
+        
         # Apply depth detection modifier before rolling AP
         self.detection_level = self.turn_manager.apply_depth_detection_modifier(
             self.detection_level,

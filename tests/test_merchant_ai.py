@@ -180,10 +180,10 @@ def test_merchant_damaged_movement_success():
     )
     
     new_pos, new_facing, message = ai.get_merchant_movement(merchant, 0)
-    
+
     assert new_pos == HexCoord(1, 5)
     assert new_facing == Facing.SOUTH
-    assert "rolled 4" in message
+    assert "[4]" in message  # Check for bracketed roll format
     assert "moves to 1,5" in message
     print("✓ Damaged merchant with roll 4+ moves")
 
@@ -207,10 +207,10 @@ def test_merchant_damaged_movement_fail():
     )
     
     new_pos, new_facing, message = ai.get_merchant_movement(merchant, 0)
-    
+
     assert new_pos is None
     assert new_facing == Facing.SOUTH  # Still updates facing
-    assert "rolled 3" in message
+    assert "[3]" in message  # Check for bracketed roll format
     assert "cannot move" in message
     print("✓ Damaged merchant with roll 1-3 doesn't move but updates facing")
 

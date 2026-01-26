@@ -92,17 +92,36 @@ class EventSystem:
         # Roll 2d6 for event
         roll = self.dice.roll_2d6()
         
+        # Get individual dice from roll history (if available)
+        if hasattr(self.dice, 'roll_history') and len(self.dice.roll_history) > 0:
+            last_record = self.dice.roll_history[-1]
+            if hasattr(last_record, 'rolls') and len(last_record.rolls) == 2:
+                self.last_roll_dice = (last_record.rolls[0], last_record.rolls[1])
+            else:
+                # Fallback: split evenly (for MockDice that doesn't track individual rolls)
+                self.last_roll_dice = (roll // 2, roll - roll // 2)
+        else:
+            # Fallback for test mocks without roll_history
+            self.last_roll_dice = (roll // 2, roll - roll // 2)
+        
         # Get event from table
         event_config = self._get_event_for_roll(roll, turn_number)
         
         if event_config is None:
+            # Format dice roll message for no-event
+            if hasattr(self, 'last_roll_dice'):
+                die1, die2 = self.last_roll_dice
+                roll_msg = f"End Turn Event: rolled 2d6 [{die1},{die2}] = {roll} - No event"
+            else:
+                roll_msg = f"End Turn Event Roll: {roll} - No event"
+            
             return EventResult(
                 event_name="No Event",
                 description=f"Rolled {roll}: No event occurs",
                 spawned_ships=[],
                 spawned_aircraft=[],
                 special_effects=[],
-                messages=[f"End Turn Event Roll: {roll} - No event"],
+                messages=[roll_msg],
                 condition_met=False
             )
         
@@ -149,8 +168,15 @@ class EventSystem:
         description = event_config.get('description', '')
         condition_str = event_config.get('condition', None)
         
+        # Format dice roll message
+        if hasattr(self, 'last_roll_dice'):
+            die1, die2 = self.last_roll_dice
+            roll_msg = f"End Turn Event: rolled 2d6 [{die1},{die2}] = {roll}"
+        else:
+            roll_msg = f"End Turn Event Roll: {roll}"
+        
         messages = [
-            f"End Turn Event Roll: {roll}",
+            roll_msg,
             f"Event: {event_name}"
         ]
         

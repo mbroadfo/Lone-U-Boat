@@ -281,8 +281,8 @@ class TurnManager:
             'engine_damaged': u_boat.engine_damaged
         }
         
-        # Log the roll
-        roll_str = ", ".join(str(r) for r in rolls)
+        # Log the roll with proper dice formatting
+        roll_str = ",".join(str(r) for r in rolls)
         self.add_phase_log("U-Boat Phase", 
                          f"AP Roll: [{roll_str}] → Highest: {highest}")
         if u_boat.captain_alive:

@@ -205,9 +205,9 @@ class MerchantAI:
             
             roll = self.dice.roll_1d6()
             if roll >= success_threshold:
-                return next_waypoint, new_facing, f"Merchant (damaged) rolled {roll}, moves to {next_waypoint.q},{next_waypoint.r}"
+                return next_waypoint, new_facing, f"Merchant (damaged) rolled 1d6 [{roll}], moves to {next_waypoint.q},{next_waypoint.r}"
             else:
-                return None, new_facing, f"Merchant (damaged) rolled {roll}, cannot move but faces {new_facing.name}"
+                return None, new_facing, f"Merchant (damaged) rolled 1d6 [{roll}], cannot move but faces {new_facing.name}"
         
         else:
             # Unknown action, default to move

@@ -52,21 +52,49 @@ class ActionQueue:
         if self._committed:
             return False, "Turn already committed"
         
-        # Validate action
-        can_perform, reason = action.validate(game_state)
-        if not can_perform:
-            return False, f"Invalid action: {reason}"
-        
-        # Calculate action cost using simulated depth (after queued depth changes)
+        # Create preview state that simulates effects of queued actions
         from .depth_change_action import DepthChangeAction
-        from copy import copy
+        from .fire_torpedo_action import FireTorpedoAction
+        from .load_torpedo_action import LoadTorpedoAction
+        from copy import copy, deepcopy
+        from ..models import TubeState
         
-        # Simulate depth to get accurate cost
-        # Use saved original depth, fallback to current if not set
+        # Create a preview u_boat that simulates queued action effects
+        preview_uboat = deepcopy(game_state.u_boat)
+        
+        # Simulate depth changes
         simulated_depth = self.original_depth if self.original_depth is not None else game_state.u_boat.depth
         for queued_action in self.actions:
             if isinstance(queued_action, DepthChangeAction):
                 simulated_depth = queued_action.new_depth
+            elif isinstance(queued_action, FireTorpedoAction):
+                # Simulate firing torpedoes (empty those tubes)
+                for tube_idx in queued_action.tube_indices:
+                    preview_uboat.torpedo_tubes[tube_idx - 1] = TubeState.EMPTY
+            elif isinstance(queued_action, LoadTorpedoAction):
+                # Simulate loading torpedoes (load those tubes)
+                for tube_idx in queued_action.tube_indices:
+                    preview_uboat.torpedo_tubes[tube_idx - 1] = TubeState.LOADED
+        
+        preview_uboat.depth = simulated_depth
+        
+        # Create preview game state with all necessary attributes
+        from types import SimpleNamespace
+        preview_game_state = SimpleNamespace(
+            u_boat=preview_uboat,
+            ships=getattr(game_state, 'ships', []),
+            hex_grid=getattr(game_state, 'hex_grid', None),
+            board_layout=getattr(game_state, 'board_layout', None),
+            turn_manager=getattr(game_state, 'turn_manager', None)
+        )
+        
+        # Validate action using preview state
+        can_perform, reason = action.validate(preview_game_state)
+        if not can_perform:
+            return False, f"Invalid action: {reason}"
+        
+        # Calculate action cost using simulated depth (after queued depth changes)
+        from copy import copy
         
         # Use temporary u_boat copy for cost calculation (don't modify game state)
         temp_uboat = copy(game_state.u_boat)

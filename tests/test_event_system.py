@@ -26,7 +26,19 @@ class MockDice:
     
     def roll_2d6(self) -> int:
         """Return predetermined 2d6 roll."""
-        self.roll_history.append(self.predetermined_roll)
+        # Create a fake roll record that mimics real DiceRoller
+        from dataclasses import dataclass
+        @dataclass
+        class FakeRecord:
+            rolls: list
+            result: int
+        
+        # Split the roll into two dice that sum to predetermined_roll
+        die1 = min(6, self.predetermined_roll - 1)  # At least 1, at most 6
+        die2 = self.predetermined_roll - die1
+        
+        record = FakeRecord(rolls=[die1, die2], result=self.predetermined_roll)
+        self.roll_history.append(record)
         return self.predetermined_roll
     
     def roll_1d6(self) -> int:
@@ -512,7 +524,7 @@ def test_event_messages_include_roll_and_name():
     
     result = event_system.execute_end_turn_events(turn_number=1)
     
-    assert any("Roll: 7" in msg for msg in result.messages)
+    assert any("= 7" in msg for msg in result.messages)  # Check for roll sum
     assert any("Test Event" in msg for msg in result.messages)
 
 

@@ -59,11 +59,25 @@ class UnifiedGameScreen(BaseScreen):
         self.selected_depth = Depth.SURFACED
         self.selected_facing = Facing.NORTH
         
+        # Track if mission has been started before (for restart detection)
+        self.mission_has_started_once = False
+        
         # Event log for play-by-play commentary
         self.event_log: List[str] = []
         self.event_log_scroll = 0  # Scroll position (0 = bottom/latest, positive = scroll up)
         self.debug_print_events = True  # Set to False to disable console event printing
+        
+        # Check if this is a mission restart
+        if self.mission_has_started_once:
+            # Add restart marker
+            self.add_event("")
+            print("="*64)
+            print("[MISSION RESTARTED]")
+            print("="*64)
+            print("")
+        
         self.add_event(f"Mission {mission_number} started")
+        self.mission_has_started_once = True
         
         # Dice roll history
         self.dice_rolls: List[Dict[str, Any]] = []
@@ -5285,9 +5299,11 @@ class UnifiedGameScreen(BaseScreen):
             remaining_ap -= ap_cost
             
         elif selected_tubes:
-            # Torpedo tube repairs with modulo cost (odd tubes cost 2 AP, even tubes free)
+            # Torpedo tube repairs with modulo cost (odd tubes cost base AP, even tubes free)
             num_tubes = len(selected_tubes)
-            ap_cost = ((num_tubes + 1) // 2) * 2  # Total cost: each odd tube costs 2 AP
+            # Get base cost from first tube (all tubes have same base cost)
+            base_cost = selected_tubes[0]['ap_cost']
+            ap_cost = ((num_tubes + 1) // 2) * base_cost  # Total cost: each odd tube costs base AP
             
             if ap_cost > remaining_ap:
                 self.add_event(f"✗ Not enough AP ({ap_cost} needed, {remaining_ap} available)")
@@ -5300,8 +5316,8 @@ class UnifiedGameScreen(BaseScreen):
             # Queue repair for each tube with modulo cost
             for i, tube_data in enumerate(selected_tubes, start=1):
                 tube_number = tube_data.get('tube_number')
-                # Odd tubes (1st, 3rd, 5th) cost 2 AP, even tubes (2nd, 4th) are free
-                tube_cost = 2 if (i % 2) == 1 else 0
+                # Odd tubes (1st, 3rd, 5th) cost base AP, even tubes (2nd, 4th) are free
+                tube_cost = base_cost if (i % 2) == 1 else 0
                 self._queue_action_with_target("repair", "Torpedo Tubes", tube_number=tube_number, ap_cost=tube_cost)
                 components.remove(tube_data)
             
@@ -5344,9 +5360,10 @@ class UnifiedGameScreen(BaseScreen):
         
         current_cost = 0
         if selected_tubes:
-            # Modulo cost: odd tubes (1st, 3rd, 5th) cost 2 AP, even tubes (2nd, 4th) are free
+            # Modulo cost: odd tubes (1st, 3rd, 5th) cost base AP, even tubes (2nd, 4th) are free
             num_tubes = len(selected_tubes)
-            current_cost = ((num_tubes + 1) // 2) * 2  # Each odd tube costs 2 AP
+            base_cost = selected_tubes[0]['ap_cost']  # Get base cost from first tube
+            current_cost = ((num_tubes + 1) // 2) * base_cost  # Each odd tube costs base AP
         elif selected_non_tubes:
             current_cost = sum(c['ap_cost'] for c in selected_non_tubes)
         
@@ -5435,8 +5452,9 @@ class UnifiedGameScreen(BaseScreen):
                         selected_tube_list = [c for c in components if c.get('selected', False) and c.get('is_tube', False)]
                         position = selected_tube_list.index(component) + 1
                         is_odd = (position % 2) == 1
+                        base_cost = component['ap_cost']
                         if is_odd:
-                            status = "2 AP"
+                            status = f"{base_cost} AP"
                             status_color = (255, 220, 100)  # Yellow for selected odd
                         else:
                             status = "FREE"
@@ -5446,8 +5464,9 @@ class UnifiedGameScreen(BaseScreen):
                         num_selected_tubes = len([c for c in components if c.get('selected', False) and c.get('is_tube', False)])
                         would_be_position = num_selected_tubes + 1
                         is_odd = (would_be_position % 2) == 1
+                        base_cost = component['ap_cost']
                         if is_odd:
-                            status = "2 AP"
+                            status = f"{base_cost} AP"
                             status_color = (150, 150, 150)  # Gray for unselected
                         else:
                             status = "FREE"
