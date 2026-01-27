@@ -73,13 +73,17 @@ class MovementValidator:
         # Rule 2: Cannot enter Shallow unless Surfaced or Periscope
         if target_hex in self.shallow_hexes:
             if u_boat.depth not in [Depth.SURFACED, Depth.PERISCOPE]:
+                print(f"[MOVEMENT] Cannot move into shallow water: current depth={u_boat.depth.name}, target={target_hex}")
                 return False, f"Shallow water requires Surfaced or Periscope (currently {u_boat.depth.name})"
         
         # Rule 3: Cannot enter Ship hex unless Medium or Deep
         ship_at_target = self._get_ship_at_hex(target_hex, ships)
         if ship_at_target is not None:
             if u_boat.depth not in [Depth.MEDIUM, Depth.DEEP]:
+                print(f"[MOVEMENT] Cannot move to ship hex: u_boat.depth={u_boat.depth} ({u_boat.depth.name}), need MEDIUM or DEEP")
                 return False, f"Cannot enter ship hex unless Medium or Deep (currently {u_boat.depth.name})"
+            else:
+                print(f"[MOVEMENT] Can pass under ship: u_boat.depth={u_boat.depth} ({u_boat.depth.name})")
         
         # All checks passed
         return True, ""

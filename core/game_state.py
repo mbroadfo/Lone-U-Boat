@@ -432,7 +432,8 @@ class Game:
             land_hexes=self.land_hexes,
             hex_grid=self.hex_grid,
             mission_hexes=self.mission_hexes,
-            shallow_hexes=self.shallow_hexes
+            shallow_hexes=self.shallow_hexes,
+            turn_manager=self.turn_manager
         )
         
         # Log all escort action messages

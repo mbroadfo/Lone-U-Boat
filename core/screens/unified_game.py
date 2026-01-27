@@ -3271,7 +3271,7 @@ class UnifiedGameScreen(BaseScreen):
         # Format: (label, action_id, enabled, action_name_for_cost)
         # Use preview_depth and preview_position for depth-based validations
         actions: list[tuple[str, str, bool, str]] = [
-            ("MOVE FORWARD", "move", preview_depth != Depth.DEEP, "MOVE"),
+            ("MOVE FORWARD", "move", True, "MOVE"),  # Movement validation happens in MovementValidator
             ("ROTATE LEFT", "rotate_l", True, "TURN"),
             ("ROTATE RIGHT", "rotate_r", True, "TURN"),
             ("DIVE", "dive", preview_depth != Depth.DEEP, "CHANGE DEPTH"),

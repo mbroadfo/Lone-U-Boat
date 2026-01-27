@@ -500,7 +500,8 @@ class EscortAI:
         land_hexes: Set[HexCoord],
         hex_grid: HexGrid,
         mission_hexes: Optional[Set[HexCoord]] = None,
-        shallow_hexes: Optional[Set[HexCoord]] = None
+        shallow_hexes: Optional[Set[HexCoord]] = None,
+        turn_manager = None
     ) -> Tuple[int, List[str]]:
         """
         Execute the escort phase for all escort ships.
@@ -513,6 +514,7 @@ class EscortAI:
             hex_grid: Hex grid
             mission_hexes: Set of valid mission hexes (for off-map check)
             shallow_hexes: Set of shallow water hexes (for forced dive destruction check)
+            turn_manager: TurnManager instance for applying forced dive penalty
 
         Returns:
             Tuple of (new_detection_level, messages)
@@ -554,50 +556,55 @@ class EscortAI:
                 die_result = self.dice.roll_1d6()
                 messages.append(f"  Die {die_idx} (rolled {die_result}):")
                 
-                # Execute actions based on die result (correct rules)
+                # UNIFIED action table for both corvettes and destroyers (escort_ai_baseline.json lines 77-200)
+                # The only difference between ship types is dice count, not actions
+                
+                # Execute actions based on die result using unified table
                 if die_result == 1:
-                    # Die 1: If DL=1-3, FIRE or DEPTH CHARGE
+                    # Die 1: FIRE (if surfaced + DL 1-3) or DEPTH CHARGE (if submerged + DL 1-3)
+                    distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                    messages.append(f"    [Check: Range={distance}, U-boat depth={u_boat.depth.name}, DL={current_dl}]")
+                    
                     if current_dl >= 1 and current_dl <= 3:
-                        # Try FIRE first
+                        # Try FIRE first (if U-boat surfaced)
                         if self.can_use_fire(escort, u_boat, current_dl, land_hexes, hex_grid):
-                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
                             has_los = self._check_line_of_sight(escort.position, u_boat.position, land_hexes, hex_grid)
                             messages.append(f"    FIRE: Critical Hit on U-boat! (Range {distance}, LOS: {'Yes' if has_los else 'No'}, DL -> 3)")
                             current_dl = 3
                             
-                            # Apply gunfire damage (automatic critical hit)
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="gunfire", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
                             
-                            # Check if U-boat destroyed - stop processing remaining dice
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
                         
-                        # Otherwise try DEPTH CHARGE
+                        # Otherwise try DEPTH CHARGE (if U-boat submerged)
                         elif self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
-                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat (Range {distance}, same hex or adjacent)")
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat (Range {distance})")
                             
-                            # Apply depth charge damage
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
                             
-                            # Check if U-boat destroyed - stop processing remaining dice
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
                         else:
-                            messages.append(f"    No valid FIRE or DEPTH CHARGE targets")
+                            # Explain why no attack is possible
+                            if u_boat.depth == Depth.SURFACED:
+                                has_los = self._check_line_of_sight(escort.position, u_boat.position, land_hexes, hex_grid)
+                                messages.append(f"    FIRE not possible: Range={distance} (need ≤6), LOS={'Yes' if has_los else 'No'} (need Yes)")
+                            else:
+                                messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name} (need submerged)")
                     else:
                         messages.append(f"    No action (DL must be 1-3 for FIRE/DEPTH CHARGE)")
                 
                 elif die_result == 2:
-                    # Die 2: Move (if blocked turn), if DL=1-3 Depth Charge
+                    # Die 2: MOVE → (if blocked) TURN → (if DL 1-3) DEPTH CHARGE
                     next_hex = self.get_next_hex_toward_target(
                         escort, u_boat.position, land_hexes, ships, mission_hexes
                     )
@@ -605,20 +612,19 @@ class EscortAI:
                     if next_hex:
                         old_pos = escort.position
                         escort.position = next_hex
-                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r}")
+                        distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r} (Range to U-boat: {distance})")
                         
-                        # Check for forced dive
                         forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
                             messages.append(f"    {msg}")
                             if destroyed:
-                                # U-boat destroyed in shallow water
                                 u_boat.hull_damage = 4
                                 return current_dl, messages
                             u_boat.depth = Depth.MEDIUM
                             current_dl = min(3, current_dl + 1)
                     else:
-                        messages.append(f"    MOVE: Blocked")
+                        messages.append(f"    MOVE: Blocked (facing hex obstructed)")
                         # If blocked, turn
                         target = self.get_turn_target(escort, u_boat, current_dl)
                         new_facing = self.calculate_turn_direction(
@@ -627,149 +633,27 @@ class EscortAI:
                         if new_facing and new_facing != escort.facing:
                             old_facing = escort.facing
                             escort.facing = new_facing
-                            messages.append(f"    TURN: {old_facing.name} -> {new_facing.name}")
+                            messages.append(f"    TURN: {old_facing.name} -> {new_facing.name} (due to blocked movement)")
                     
                     # Then try depth charge if DL=1-3
+                    distance = hex_grid.hex_distance(escort.position, u_boat.position)
                     if current_dl >= 1 and current_dl <= 3:
                         if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
-                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {distance}")
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat (Range {distance}, Depth {u_boat.depth.name})")
                             
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
                             
-                            # Check if U-boat destroyed - stop processing remaining dice
-                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
-                            if is_destroyed:
-                                return current_dl, messages
-                
-                elif die_result == 3:
-                    # Die 3: Move, Turn, if DL=1-3 Depth Charge
-                    next_hex = self.get_next_hex_toward_target(
-                        escort, u_boat.position, land_hexes, ships, mission_hexes
-                    )
-                    
-                    if next_hex:
-                        old_pos = escort.position
-                        escort.position = next_hex
-                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r}")
-                        
-                        # Check for forced dive
-                        forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
-                        if forced:
-                            messages.append(f"    {msg}")
-                            if destroyed:
-                                # U-boat destroyed in shallow water
-                                u_boat.hull_damage = 4
-                                return current_dl, messages
-                            u_boat.depth = Depth.MEDIUM
-                            current_dl = min(3, current_dl + 1)
-                    else:
-                        messages.append(f"    MOVE: Blocked")
-                    
-                    # Always turn
-                    target = self.get_turn_target(escort, u_boat, current_dl)
-                    new_facing = self.calculate_turn_direction(
-                        escort, target, land_hexes, ships, mission_hexes
-                    )
-                    if new_facing and new_facing != escort.facing:
-                        old_facing = escort.facing
-                        escort.facing = new_facing
-                        messages.append(f"    TURN: {old_facing.name} -> {new_facing.name}")
-                    
-                    # Then try depth charge if DL=1-3
-                    if current_dl >= 1 and current_dl <= 3:
-                        if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
-                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {distance}")
-                            
-                            damage_result = self.damage_resolver.apply_escort_attack_damage(
-                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
-                            )
-                            messages.append(f"      {damage_result.description}")
-                            
-                            # Check if U-boat destroyed - stop processing remaining dice
-                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
-                            if is_destroyed:
-                                return current_dl, messages
-                
-                elif die_result == 4:
-                    # Die 4: Move (if blocked turn), if DL=1-3 Depth Charge
-                    next_hex = self.get_next_hex_toward_target(
-                        escort, u_boat.position, land_hexes, ships, mission_hexes
-                    )
-                    
-                    if next_hex:
-                        old_pos = escort.position
-                        escort.position = next_hex
-                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r}")
-                        
-                        # Check for forced dive
-                        forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
-                        if forced:
-                            messages.append(f"    {msg}")
-                            if destroyed:
-                                # U-boat destroyed in shallow water
-                                u_boat.hull_damage = 4
-                                return current_dl, messages
-                            u_boat.depth = Depth.MEDIUM
-                            current_dl = min(3, current_dl + 1)
-                    else:
-                        messages.append(f"    MOVE: Blocked")
-                        # If blocked, turn
-                        target = self.get_turn_target(escort, u_boat, current_dl)
-                        new_facing = self.calculate_turn_direction(
-                            escort, target, land_hexes, ships, mission_hexes
-                        )
-                        if new_facing and new_facing != escort.facing:
-                            old_facing = escort.facing
-                            escort.facing = new_facing
-                            messages.append(f"    TURN: {old_facing.name} -> {new_facing.name}")
-                    
-                    # Then try depth charge if DL=1-3
-                    if current_dl >= 1 and current_dl <= 3:
-                        if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
-                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {distance}")
-                            
-                            damage_result = self.damage_resolver.apply_escort_attack_damage(
-                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
-                            )
-                            messages.append(f"      {damage_result.description}")
-                            
-                            # Check if U-boat destroyed - stop processing remaining dice
-                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
-                            if is_destroyed:
-                                return current_dl, messages
-                
-                elif die_result == 5:
-                    # Die 5: If DL=1-3, FIRE
-                    if current_dl >= 1 and current_dl <= 3:
-                        if self.can_use_fire(escort, u_boat, current_dl, land_hexes, hex_grid):
-                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                            has_los = self._check_line_of_sight(escort.position, u_boat.position, land_hexes, hex_grid)
-                            messages.append(f"    FIRE: Critical Hit on U-boat! (Range {distance}, LOS: {'Yes' if has_los else 'No'}, DL -> 3)")
-                            current_dl = 3
-                            
-                            # Apply gunfire damage (automatic critical hit)
-                            damage_result = self.damage_resolver.apply_escort_attack_damage(
-                                u_boat, attack_type="gunfire", ship_type=escort.ship_type, ships=ships
-                            )
-                            messages.append(f"      {damage_result.description}")
-                            
-                            # Check if U-boat destroyed - stop processing remaining dice
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
                         else:
-                            messages.append(f"    FIRE: No valid target (must be surfaced, in LOS, range 1-3)")
-                    else:
-                        messages.append(f"    No action (DL must be 1-3 for FIRE)")
+                            messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
                 
-                elif die_result == 6:
-                    # Die 6: Move, Turn, if DL=1-3 Depth Charge
+                elif die_result == 3:
+                    # Die 3: MOVE → TURN → (if DL 1-3) DEPTH CHARGE
                     next_hex = self.get_next_hex_toward_target(
                         escort, u_boat.position, land_hexes, ships, mission_hexes
                     )
@@ -777,45 +661,201 @@ class EscortAI:
                     if next_hex:
                         old_pos = escort.position
                         escort.position = next_hex
-                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r}")
+                        distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r} (Range to U-boat: {distance})")
                         
-                        # Check for forced dive
                         forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
                             messages.append(f"    {msg}")
                             if destroyed:
-                                # U-boat destroyed in shallow water
                                 u_boat.hull_damage = 4
                                 return current_dl, messages
                             u_boat.depth = Depth.MEDIUM
                             current_dl = min(3, current_dl + 1)
+                            # Apply forced dive AP penalty
+                            if turn_manager:
+                                turn_manager.set_forced_dive_penalty()
                     else:
-                        messages.append(f"    MOVE: Blocked")
+                        messages.append(f"    MOVE: Blocked (facing hex obstructed)")
                     
                     # Always turn
                     target = self.get_turn_target(escort, u_boat, current_dl)
+                    target_name = "anchor" if current_dl <= 1 else "U-boat"
                     new_facing = self.calculate_turn_direction(
                         escort, target, land_hexes, ships, mission_hexes
                     )
                     if new_facing and new_facing != escort.facing:
                         old_facing = escort.facing
                         escort.facing = new_facing
-                        messages.append(f"    TURN: {old_facing.name} -> {new_facing.name}")
+                        messages.append(f"    TURN: {old_facing.name} -> {new_facing.name} (Die 3, turning toward {target_name})")
                     
                     # Then try depth charge if DL=1-3
+                    distance = hex_grid.hex_distance(escort.position, u_boat.position)
                     if current_dl >= 1 and current_dl <= 3:
                         if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
-                            distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                            messages.append(f"    DEPTH CHARGE: Attack U-boat at range {distance}")
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat (Range {distance}, Depth {u_boat.depth.name})")
                             
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
                             messages.append(f"      {damage_result.description}")
                             
-                            # Check if U-boat destroyed - stop processing remaining dice
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
+                        else:
+                            messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
+                
+                elif die_result == 4:
+                    # Die 4: MOVE → (if blocked) TURN → (if DL 1-3) DEPTH CHARGE
+                    next_hex = self.get_next_hex_toward_target(
+                        escort, u_boat.position, land_hexes, ships, mission_hexes
+                    )
+                    
+                    if next_hex:
+                        old_pos = escort.position
+                        escort.position = next_hex
+                        distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r} (Range to U-boat: {distance})")
+                        
+                        forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
+                        if forced:
+                            messages.append(f"    {msg}")
+                            if destroyed:
+                                u_boat.hull_damage = 4
+                                return current_dl, messages
+                            u_boat.depth = Depth.MEDIUM
+                            current_dl = min(3, current_dl + 1)
+                            # Apply forced dive AP penalty
+                            if turn_manager:
+                                turn_manager.set_forced_dive_penalty()
+                    else:
+                        messages.append(f"    MOVE: Blocked (facing hex obstructed)")
+                        # If blocked, turn
+                        target = self.get_turn_target(escort, u_boat, current_dl)
+                        target_name = "anchor" if current_dl <= 1 else "U-boat"
+                        new_facing = self.calculate_turn_direction(
+                            escort, target, land_hexes, ships, mission_hexes
+                        )
+                        if new_facing and new_facing != escort.facing:
+                            old_facing = escort.facing
+                            escort.facing = new_facing
+                            messages.append(f"    TURN: {old_facing.name} -> {new_facing.name} (blocked, turning toward {target_name})")
+                    
+                    # Then try depth charge if DL=1-3
+                    distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                    if current_dl >= 1 and current_dl <= 3:
+                        if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat (Range {distance}, Depth {u_boat.depth.name})")
+                            
+                            damage_result = self.damage_resolver.apply_escort_attack_damage(
+                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
+                            )
+                            messages.append(f"      {damage_result.description}")
+                            
+                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
+                            if is_destroyed:
+                                return current_dl, messages
+                        else:
+                            messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
+                
+                elif die_result == 5:
+                    # Die 5: MOVE → (if DL 1-3) DEPTH CHARGE
+                    next_hex = self.get_next_hex_toward_target(
+                        escort, u_boat.position, land_hexes, ships, mission_hexes
+                    )
+                    
+                    if next_hex:
+                        old_pos = escort.position
+                        escort.position = next_hex
+                        distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r} (Range to U-boat: {distance})")
+                        
+                        forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
+                        if forced:
+                            messages.append(f"    {msg}")
+                            if destroyed:
+                                u_boat.hull_damage = 4
+                                return current_dl, messages
+                            u_boat.depth = Depth.MEDIUM
+                            current_dl = min(3, current_dl + 1)
+                            # Apply forced dive AP penalty
+                            if turn_manager:
+                                turn_manager.set_forced_dive_penalty()
+                    else:
+                        distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                        messages.append(f"    MOVE: Blocked (facing hex obstructed, Range to U-boat: {distance})")
+                    
+                    # Then try depth charge if DL=1-3
+                    distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                    if current_dl >= 1 and current_dl <= 3:
+                        if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat (Range {distance}, Depth {u_boat.depth.name})")
+                            
+                            damage_result = self.damage_resolver.apply_escort_attack_damage(
+                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
+                            )
+                            messages.append(f"      {damage_result.description}")
+                            
+                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
+                            if is_destroyed:
+                                return current_dl, messages
+                        else:
+                            messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
+                
+                elif die_result == 6:
+                    # Die 6: MOVE → TURN → (if DL 1-3) DEPTH CHARGE
+                    next_hex = self.get_next_hex_toward_target(
+                        escort, u_boat.position, land_hexes, ships, mission_hexes
+                    )
+                    
+                    if next_hex:
+                        old_pos = escort.position
+                        escort.position = next_hex
+                        distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r} (Range to U-boat: {distance})")
+                        
+                        forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
+                        if forced:
+                            messages.append(f"    {msg}")
+                            if destroyed:
+                                u_boat.hull_damage = 4
+                                return current_dl, messages
+                            u_boat.depth = Depth.MEDIUM
+                            current_dl = min(3, current_dl + 1)
+                            # Apply forced dive AP penalty
+                            if turn_manager:
+                                turn_manager.set_forced_dive_penalty()
+                    else:
+                        messages.append(f"    MOVE: Blocked (facing hex obstructed)")
+                    
+                    # Always turn
+                    target = self.get_turn_target(escort, u_boat, current_dl)
+                    target_name = "anchor" if current_dl <= 1 else "U-boat"
+                    new_facing = self.calculate_turn_direction(
+                        escort, target, land_hexes, ships, mission_hexes
+                    )
+                    if new_facing and new_facing != escort.facing:
+                        old_facing = escort.facing
+                        escort.facing = new_facing
+                        messages.append(f"    TURN: {old_facing.name} -> {new_facing.name} (Die 6, turning toward {target_name})")
+                    
+                    # Then try depth charge if DL=1-3
+                    distance = hex_grid.hex_distance(escort.position, u_boat.position)
+                    if current_dl >= 1 and current_dl <= 3:
+                        if self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
+                            messages.append(f"    DEPTH CHARGE: Attack U-boat (Range {distance}, Depth {u_boat.depth.name})")
+                            
+                            damage_result = self.damage_resolver.apply_escort_attack_damage(
+                                u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
+                            )
+                            messages.append(f"      {damage_result.description}")
+                            
+                            is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
+                            if is_destroyed:
+                                return current_dl, messages
+                        else:
+                            messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
         
+        # All escorts activated - return final DL and messages
         return current_dl, messages

@@ -18,6 +18,7 @@ test_files = [
     "tests/test_detection_ai.py",
     "tests/test_detection_integration.py",
     "tests/test_escort_ai.py",
+    "tests/test_escort_ai_comprehensive.py",
     "tests/test_event_system.py",
     "tests/test_fire_torpedo_action.py",
     "tests/test_merchant_ai.py",
