@@ -16,7 +16,7 @@ from .conditions import ConditionFactory
 from .renderer import GameRenderer
 from .board_layout import BoardLayoutRuntime
 from .turn_manager import TurnManager
-from .actions import ActionQueue
+from .actions.action_history import ActionHistory
 from .merchant_ai import MerchantAI
 from .detection_ai import DetectionAI
 from .escort_ai import EscortAI
@@ -230,8 +230,9 @@ class Game:
         )
         self.u_boat.action_points = 0  # Will be set after dice roll
         
-        # Initialize action queue with 0 AP until dice are rolled
-        self.action_queue = ActionQueue(max_ap=0)
+        # Initialize action history for immediate execution with undo
+        self.action_history = ActionHistory()
+        self.turn_manager.action_history = self.action_history  # Connect to TurnManager
         self.selected_target: Optional[Ship] = None  # For combat actions
     
     def _load_mission_config(self, mission_number: int) -> Any:
@@ -359,26 +360,23 @@ class Game:
             self._start_new_turn()
     
     def _end_uboat_phase(self):
-        """Clean up U-Boat phase - commit queued actions if not already animated."""
-        # Check if actions were already executed via animation
-        # If queue is empty, actions were already animated
-        if self.action_queue and self.action_queue.actions:
-            # Actions not yet executed - do it now (for SPACE key advancement)
-            self.turn_manager.add_phase_log("U-Boat Phase", 
-                f"Committing {len(self.action_queue.actions)} queued action(s)...")
-            
-            # commit_all now clears the queue and deducts AP internally
-            results = self.action_queue.commit_all(self)
-            
-            # Log each action result
-            for result in results:
-                if result.success:
-                    action_name = result.state_changes.get('action_name', 'Action')
-                    self.turn_manager.add_phase_log("U-Boat Phase", 
-                        f"✓ {action_name}: {result.message}")
-                else:
-                    self.turn_manager.add_phase_log("U-Boat Phase", 
-                        f"✗ Action failed: {result.message}")
+        """Clean up U-Boat phase - clear action history (no undo across phases)."""
+        # Clear action history when phase ends (can't undo across phases)
+        self.action_history.clear()
+        self.turn_manager.clear_action_history()
+        
+        # TODO Phase 2: Remove old action_queue logic
+        # Old queue-based logic commented out for Phase 1
+        # if self.action_queue and self.action_queue.actions:
+        #     results = self.action_queue.commit_all(self)
+        #     for result in results:
+        #         if result.success:
+        #             action_name = result.state_changes.get('action_name', 'Action')
+        #             self.turn_manager.add_phase_log("U-Boat Phase", 
+        #                 f"✓ {action_name}: {result.message}")
+        #         else:
+        #             self.turn_manager.add_phase_log("U-Boat Phase", 
+        #                 f"✗ Action failed: {result.message}")
     
     def _execute_merchant_phase(self):
         """Execute merchant ship movements."""
@@ -622,11 +620,12 @@ class Game:
         # Reset AP to 0 until player rolls
         self.u_boat.action_points = 0
         
-        # Reset action queue for new turn (0 AP until dice are rolled)
-        if hasattr(self, 'action_queue'):
-            self.action_queue.reset_for_new_turn(0, self)
+        # Clear action history for new turn
+        if hasattr(self, 'action_history'):
+            self.action_history.clear()
         else:
-            self.action_queue = ActionQueue(max_ap=0)
+            self.action_history = ActionHistory()
+            self.turn_manager.action_history = self.action_history
         self.selected_target = None
     
     
@@ -668,10 +667,9 @@ class Game:
             return False, f"Wrong facing (currently {check_facing.name}, need {exit_facing.name})"
         
         # 3. Check AP - need remaining AP > 0
-        if hasattr(self, 'action_queue'):
-            remaining_ap = self.action_queue.get_remaining_ap(self)
-            if remaining_ap <= 0:
-                return False, "No movement points remaining"
+        remaining_ap = self.turn_manager.remaining_ap if hasattr(self.turn_manager, 'remaining_ap') else 0
+        if remaining_ap <= 0:
+            return False, "No movement points remaining"
         
         # 4. Check all merchants sunk
         merchant_count = sum(1 for ship in self.ships if ship.ship_type == "merchant")

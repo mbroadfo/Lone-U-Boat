@@ -120,6 +120,8 @@ class TurnManager:
         self.turn_number: int = 1
         self.current_phase: GamePhase = GamePhase.UBOAT_PHASE
         self.ap_tracker: Optional[ActionPointTracker] = None
+        self.remaining_ap: int = 0  # Track remaining AP for immediate execution
+        self.action_history = None  # Will be set to ActionHistory instance by GameState
         self.phase_logs: Dict[str, List[str]] = {}
         self.depth_changed_this_turn: bool = False
         self.forced_dive_penalty: int = 0  # -2 AP if forced to dive
@@ -204,6 +206,7 @@ class TurnManager:
         
         # Initialize AP tracker
         self.ap_tracker = ActionPointTracker(ap)
+        self.remaining_ap = ap  # Track remaining AP for immediate execution
         
         self.add_phase_log("U-Boat Phase", 
                          f"Turn {self.turn_number} started with {ap} AP")
@@ -238,6 +241,7 @@ class TurnManager:
         
         # Initialize AP tracker
         self.ap_tracker = ActionPointTracker(ap)
+        self.remaining_ap = ap  # Track remaining AP for immediate execution
         
         self.add_phase_log("U-Boat Phase", 
                          f"Turn {self.turn_number} started with {ap} AP")
@@ -399,3 +403,23 @@ class TurnManager:
     def set_forced_dive_penalty(self):
         """Set forced dive penalty for next turn (-2 AP)."""
         self.forced_dive_penalty = 2
+    
+    def clear_action_history(self):
+        """Clear action history when phase advances (can't undo across phases)."""
+        if self.action_history is not None:
+            self.action_history.clear()
+    
+    def execute_action_immediate(self, ap_cost: int) -> bool:
+        """
+        Execute action immediately and deduct AP.
+        
+        Args:
+            ap_cost: AP cost of the action
+            
+        Returns:
+            True if sufficient AP available, False otherwise
+        """
+        if self.remaining_ap >= ap_cost:
+            self.remaining_ap -= ap_cost
+            return True
+        return False
