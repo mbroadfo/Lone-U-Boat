@@ -2665,12 +2665,15 @@ class UnifiedGameScreen(BaseScreen):
         torpedo_boxes = ['torpedo_tube_1', 'torpedo_tube_2', 'torpedo_tube_3', 'torpedo_tube_4', 'torpedo_tube_5']
         self.torpedo_button_rects = {}  # Store as {tube_index: (rect, button_type, enabled)}
         
+        # Get preview tube states (simulates fire/load actions in queue)
+        preview_torpedo_tubes = self.game.action_queue.get_preview_torpedo_tubes(u_boat)
+        
         for i, box_name in enumerate(torpedo_boxes):
             if box_name not in layout.status_box_rects:
                 continue
             
             tube_rect = layout.status_box_rects[box_name]
-            is_loaded = u_boat.torpedo_tubes[i]
+            is_loaded = preview_torpedo_tubes[i]  # Use preview state instead of current state
             proper_depth = preview_depth in [Depth.SURFACED, Depth.PERISCOPE]  # Use preview depth
             
             button_image = None
@@ -3282,10 +3285,16 @@ class UnifiedGameScreen(BaseScreen):
         # Get preview state (position, facing, depth after all queued actions)
         preview_position, preview_facing, preview_depth = self._get_preview_state()
         
-        # Use preview depth for action validation and cost calculation
-        # but current u-boat for torpedo tube status
-        loaded_tubes = sum(1 for tube_state in u_boat.torpedo_tubes if tube_state == TubeState.LOADED)
-        empty_tubes = sum(1 for tube_state in u_boat.torpedo_tubes if tube_state == TubeState.EMPTY)
+        # Get preview torpedo tube states (simulates fire/load/repair actions)
+        preview_torpedo_tubes = self.game.action_queue.get_preview_torpedo_tubes(u_boat)
+        
+        # Get preview damage states (simulates repair actions)
+        preview_damage = self.game.action_queue.get_preview_damage_state(u_boat)
+        
+        # Use preview states for all button enablement logic
+        loaded_tubes = sum(1 for tube_state in preview_torpedo_tubes if tube_state == TubeState.LOADED)
+        empty_tubes = sum(1 for tube_state in preview_torpedo_tubes if tube_state == TubeState.EMPTY)
+        damaged_tubes = sum(1 for tube_state in preview_torpedo_tubes if tube_state == TubeState.DAMAGED)
         can_fire_depth = preview_depth == Depth.SURFACED or preview_depth == Depth.PERISCOPE
         
         # Check if load torpedo action already queued (can only load once per turn)
@@ -3299,22 +3308,23 @@ class UnifiedGameScreen(BaseScreen):
         # Get remaining AP from action queue
         remaining_ap = self.game.action_queue.get_remaining_ap(self.game)
         
-        # Check if anything needs repair (damaged systems or damaged torpedo tubes)
-        has_damaged_tubes = any(tube_state == TubeState.DAMAGED for tube_state in u_boat.torpedo_tubes)
-        has_damage = (u_boat.engine_damaged or u_boat.deck_gun_damaged or 
-                     u_boat.flak_gun_damaged or has_damaged_tubes)
+        # Check if anything needs repair (use PREVIEW damage states)
+        has_damage = (preview_damage['engine_damaged'] or 
+                     preview_damage['deck_gun_damaged'] or 
+                     preview_damage['flak_gun_damaged'] or 
+                     damaged_tubes > 0)
         
         # Define action buttons with cost info
         # Format: (label, action_id, enabled, action_name_for_cost)
-        # Use preview_depth and preview_position for depth-based validations
+        # Use preview_depth, preview_position, and preview_damage for all validations
         actions: list[tuple[str, str, bool, str]] = [
             ("MOVE FORWARD", "move", True, "MOVE"),  # Movement validation happens in MovementValidator
             ("ROTATE LEFT", "rotate_l", True, "TURN"),
             ("ROTATE RIGHT", "rotate_r", True, "TURN"),
             ("DIVE", "dive", preview_depth != Depth.DEEP, "CHANGE DEPTH"),
             ("SURFACE", "surface", preview_depth != Depth.SURFACED, "CHANGE DEPTH"),
-            ("REPAIR", "repair", has_damage, "REPAIR"),  # Only enabled if something is damaged
-            ("FIRE DECK GUN", "deck_gun", not u_boat.deck_gun_damaged and preview_depth == Depth.SURFACED and self._has_valid_deck_gun_targets(preview_position), "FIRE DECK GUN"),
+            ("REPAIR", "repair", has_damage, "REPAIR"),  # Enabled if something damaged in preview
+            ("FIRE DECK GUN", "deck_gun", not preview_damage['deck_gun_damaged'] and preview_depth == Depth.SURFACED and self._has_valid_deck_gun_targets(preview_position), "FIRE DECK GUN"),
             ("LOAD TORPEDOES", "load_torp", empty_tubes > 0 and not has_load_queued, "LOAD TORPS"),  # Disabled if already queued
             ("FIRE TORPEDOES", "fire_torp", loaded_tubes > 0 and can_fire_depth, "FIRE TORPS"),
         ]
@@ -3819,6 +3829,9 @@ class UnifiedGameScreen(BaseScreen):
         selected_tubes = state['selected_tubes']
         max_tubes = state['max_tubes']
         
+        # Get preview tube states (simulates queued fire/load actions)
+        preview_tubes = self.game.action_queue.get_preview_torpedo_tubes(u_boat)
+        
         # Title
         info_y = y
         self.draw_text(
@@ -3851,7 +3864,7 @@ class UnifiedGameScreen(BaseScreen):
         
         for tube_num in range(1, 6):
             tube_idx = tube_num - 1  # 0-based index
-            tube_state = u_boat.torpedo_tubes[tube_idx]
+            tube_state = preview_tubes[tube_idx]  # Use preview state!
             is_loaded = (tube_state == TubeState.LOADED)
             is_selected = tube_num in selected_tubes
             is_available = (tube_state == TubeState.EMPTY)  # Can only load empty tubes
@@ -3974,6 +3987,9 @@ class UnifiedGameScreen(BaseScreen):
         u_boat = state['u_boat']
         selected_tubes = state['selected_tubes']
         
+        # Get preview tube states (simulates queued fire/load actions)
+        preview_tubes = self.game.action_queue.get_preview_torpedo_tubes(u_boat)
+        
         # Title
         info_y = y
         self.draw_text(
@@ -4006,7 +4022,7 @@ class UnifiedGameScreen(BaseScreen):
         
         for tube_num in range(1, 6):
             tube_idx = tube_num - 1  # 0-based index
-            tube_state = u_boat.torpedo_tubes[tube_idx]
+            tube_state = preview_tubes[tube_idx]  # Use preview state!
             is_loaded = (tube_state == TubeState.LOADED)
             is_selected = tube_num in selected_tubes
             is_available = (tube_state == TubeState.LOADED)  # Can only fire loaded tubes

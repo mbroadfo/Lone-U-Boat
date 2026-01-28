@@ -4,7 +4,7 @@ Action queue system for planning and executing player actions.
 Allows players to plan multiple actions before committing the turn.
 """
 
-from typing import List, Tuple, Optional, Any
+from typing import List, Tuple, Optional, Any, Dict
 from .base_action import Action, ActionResult
 
 
@@ -266,6 +266,79 @@ class ActionQueue:
         self.actions.clear()
         
         return results
+    
+    def get_preview_torpedo_tubes(self, u_boat: Any) -> List[Any]:
+        """
+        Get preview of torpedo tube states after all queued actions execute.
+        
+        Simulates fire/load/repair actions to show what tubes will look like after commit.
+        
+        Args:
+            u_boat: Current u-boat state
+            
+        Returns:
+            List of TubeState values representing simulated tube states
+        """
+        from .fire_torpedo_action import FireTorpedoAction
+        from .load_torpedo_action import LoadTorpedoAction
+        from .repair_action import RepairAction
+        from ..models import TubeState
+        from copy import deepcopy
+        
+        # Start with current tube states
+        preview_tubes = deepcopy(u_boat.torpedo_tubes)
+        
+        # Simulate all queued fire/load/repair actions
+        for action in self.actions:
+            if isinstance(action, FireTorpedoAction):
+                # Firing empties tubes
+                for tube_idx in action.tube_indices:
+                    preview_tubes[tube_idx - 1] = TubeState.EMPTY
+            elif isinstance(action, LoadTorpedoAction):
+                # Loading fills tubes
+                for tube_idx in action.tube_indices:
+                    preview_tubes[tube_idx - 1] = TubeState.LOADED
+            elif isinstance(action, RepairAction):
+                # Repairing damaged tubes makes them empty
+                if action.repair_target == "Torpedo Tubes" and action.tube_number is not None:
+                    tube_idx = action.tube_number - 1
+                    if preview_tubes[tube_idx] == TubeState.DAMAGED:
+                        preview_tubes[tube_idx] = TubeState.EMPTY
+        
+        return preview_tubes
+    
+    def get_preview_damage_state(self, u_boat: Any) -> Dict[str, bool]:
+        """
+        Get preview of damage states after all queued repair actions.
+        
+        Simulates repair actions to show what will be fixed after commit.
+        
+        Args:
+            u_boat: Current u-boat state
+            
+        Returns:
+            Dict with keys: 'engine_damaged', 'deck_gun_damaged', 'flak_gun_damaged'
+        """
+        from .repair_action import RepairAction
+        
+        # Start with current damage states
+        preview_damage = {
+            'engine_damaged': u_boat.engine_damaged,
+            'deck_gun_damaged': u_boat.deck_gun_damaged,
+            'flak_gun_damaged': u_boat.flak_gun_damaged
+        }
+        
+        # Simulate all queued repair actions
+        for action in self.actions:
+            if isinstance(action, RepairAction):
+                if action.repair_target == "Engine":
+                    preview_damage['engine_damaged'] = False
+                elif action.repair_target == "Deck Gun":
+                    preview_damage['deck_gun_damaged'] = False
+                elif action.repair_target == "Flak Gun":
+                    preview_damage['flak_gun_damaged'] = False
+        
+        return preview_damage
     
     def get_action_summary(self, game_state: Any) -> List[str]:
         """
