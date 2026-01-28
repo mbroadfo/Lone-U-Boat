@@ -115,6 +115,9 @@ class UnifiedGameScreen(BaseScreen):
         # Action selection button rects
         self.action_button_rects: Dict[str, tuple[pygame.Rect, bool]] = {}
         
+        # Exit map button rect
+        self.exit_button_rect: Optional[tuple[pygame.Rect, bool]] = None
+        
         # Deck gun resolution state (for interactive combat)
         self.deck_gun_resolution_state: Optional[Dict[str, Any]] = None
         self.deck_gun_roll_button_rect: Optional[pygame.Rect] = None
@@ -473,21 +476,38 @@ class UnifiedGameScreen(BaseScreen):
                         self._handle_fire_torpedo_clicks(mouse_pos)
                     
                     # Check if clicking action selection buttons
-                    elif not self.load_torpedo_selection_state and not self.fire_torpedo_selection_state:  # Only allow if not in torpedo selection
+                    elif not self.load_torpedo_selection_state and not self.fire_torpedo_selection_state:
                         # Check on-map buttons (repair, deck gun, etc.)
                         if self._handle_on_map_button_clicks(mouse_pos):
                             pass  # Button was handled
-                        # Only process action button clicks during U-Boat phase
                         else:
-                            from ..models import GamePhase
-                            if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
-                                for action_id, button_data in self.action_button_rects.items():
-                                    rect: pygame.Rect
-                                    is_clickable: bool
-                                    rect, is_clickable = button_data
-                                    if rect.collidepoint(mouse_pos) and is_clickable:
-                                        self._queue_action(action_id)
-                                        break
+                            # Check EXIT MAP button first
+                            exit_button_clicked = False
+                            if hasattr(self, 'exit_button_rect') and self.exit_button_rect:
+                                exit_rect, can_exit = self.exit_button_rect
+                                if exit_rect.collidepoint(mouse_pos):
+                                    exit_button_clicked = True
+                                    if can_exit and self.game.running:  # Only trigger if game still running
+                                        self.add_event("=== EXITING MAP ===")
+                                        self.game.trigger_victory()
+                                    elif not self.game.running:
+                                        # Game already over, ignore clicks
+                                        pass
+                                    else:
+                                        _, reason = self.game.can_exit_map()
+                                        self.add_event(f"Cannot exit: {reason}")
+                            
+                            # If not exit button, check regular action buttons
+                            if not exit_button_clicked:
+                                from ..models import GamePhase
+                                if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
+                                    for action_id, button_data in self.action_button_rects.items():
+                                        rect: pygame.Rect
+                                        is_clickable: bool
+                                        rect, is_clickable = button_data
+                                        if rect.collidepoint(mouse_pos) and is_clickable:
+                                            self._queue_action(action_id)
+                                            break
                 
                 if self.awaiting_initial_setup:
                     # Handle setup clicks
@@ -751,6 +771,12 @@ class UnifiedGameScreen(BaseScreen):
     
     def update(self) -> None:
         """Update game state."""
+        # Check if game has ended
+        if not self.game.running:
+            # Game over - wait for ESC key to return to menu
+            # Don't end the screen immediately, let user see the victory/defeat message
+            return
+        
         if not self.awaiting_initial_setup:
             old_phase = self.game.turn_manager.current_phase if hasattr(self.game, 'turn_manager') else None
             self.game.update()
@@ -803,6 +829,10 @@ class UnifiedGameScreen(BaseScreen):
         # Draw right panel (event log + controls)
         self._draw_right_panel(left_width + board_width, top_height, right_width, board_height)
         
+        # Draw game over overlay if game has ended
+        if not self.game.running:
+            self._draw_game_over_overlay()
+        
         pygame.display.flip()
     
     def _draw_game_over_overlay(self) -> None:
@@ -810,9 +840,9 @@ class UnifiedGameScreen(BaseScreen):
         screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()
         
-        # Check if victory or defeat
-        merchant_count = sum(1 for ship in self.game.ships if ship.ship_type == "merchant")
-        is_victory = merchant_count == 0
+        # Check if victory or defeat based on defeat_reason flag
+        # If defeat_reason is set, it's a defeat. Otherwise it's victory.
+        is_victory = self.game.defeat_reason is None
         
         # Semi-transparent overlay
         overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
@@ -858,8 +888,15 @@ class UnifiedGameScreen(BaseScreen):
                 "Press ESC to return to menu"
             ]
         else:
-            # Check destruction reason
-            is_destroyed, reason = self.game.escort_ai.damage_resolver.check_destruction(self.game.u_boat)
+            # Defeat - check the reason
+            if self.game.defeat_reason == 'merchant_escaped':
+                reason = "Merchant ship escaped - Mission objective failed"
+            elif self.game.defeat_reason == 'destroyed':
+                is_destroyed, destruction_reason = self.game.escort_ai.damage_resolver.check_destruction(self.game.u_boat)
+                reason = destruction_reason if is_destroyed else "U-boat destroyed"
+            else:
+                reason = "Unknown"
+            
             details = [
                 f"Reason: {reason}",
                 "",
@@ -3243,7 +3280,7 @@ class UnifiedGameScreen(BaseScreen):
         u_boat = self.game.u_boat
         
         # Get preview state (position, facing, depth after all queued actions)
-        preview_position, _, preview_depth = self._get_preview_state()
+        preview_position, preview_facing, preview_depth = self._get_preview_state()
         
         # Use preview depth for action validation and cost calculation
         # but current u-boat for torpedo tube status
@@ -3332,6 +3369,42 @@ class UnifiedGameScreen(BaseScreen):
                           color=text_color, center=True)
             
             button_y += button_height + button_spacing
+        
+        # EXIT MAP button - add as last action button
+        # Use preview state to check if exit will be possible after queued actions
+        can_exit, _ = self.game.can_exit_map(preview_position, preview_facing)
+        exit_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+        
+        # Get mouse position for hover
+        mouse_pos = pygame.mouse.get_pos()
+        is_hover = exit_rect.collidepoint(mouse_pos)
+        
+        # Button appearance
+        if can_exit:
+            # Green - ready to exit
+            if is_hover:
+                color = (80, 180, 80)
+                border_color = (120, 255, 120)
+            else:
+                color = (60, 140, 60)
+                border_color = (100, 200, 100)
+            text_color = (255, 255, 255)
+        else:
+            # Gray - cannot exit yet
+            color = (40, 40, 40)
+            border_color = (80, 80, 80)
+            text_color = (120, 120, 120)
+        
+        # Draw button
+        pygame.draw.rect(self.screen, color, exit_rect)
+        pygame.draw.rect(self.screen, border_color, exit_rect, 1)
+        self.draw_text("EXIT MAP", exit_rect.centerx, exit_rect.centery, 
+                      self.font_small, color=text_color, center=True)
+        
+        # Store rect for click detection
+        self.exit_button_rect = (exit_rect, can_exit)
+        
+        button_y += button_height + button_spacing
         
         # Info section: Preview depth and cost info
         info_y = button_y + 10

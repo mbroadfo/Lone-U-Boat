@@ -111,6 +111,10 @@ ANCHOR_POSITIONS = [
 ]
 
 # Exit positions (hexes where units can exit mission)
+# U-boat exit: Must be ON this hex, facing this direction, with AP > 0, all merchants sunk
+U_BOAT_EXIT_HEX = (1, 7)
+U_BOAT_EXIT_FACING = 'SOUTHWEST'  # Must be facing toward (0,8) to exit
+
 EXIT_POSITIONS: dict[str, dict[str, Any]] = {
     'u_boat': {
         'position': (1, 7),

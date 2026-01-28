@@ -48,6 +48,7 @@ class Game:
         pygame.display.set_caption(f"Lone U-Boat - {self.mission_config.MISSION_INFO['name']}")
         self.clock = pygame.time.Clock()
         self.running = True
+        self.defeat_reason = None  # Track reason for defeat (None, 'destroyed', 'merchant_escaped')
         
         # Load mission rules from JSON
         self.mission_rules = load_mission_rules(mission_number)
@@ -390,11 +391,32 @@ class Game:
         for message in messages:
             self.turn_manager.add_phase_log("Merchant Phase", message)
         
-        # Check if any merchants have exited
+        # Check if any merchants have exited - this is a DEFEAT condition!
         exited = self.merchant_ai.check_merchant_exit(self.ships)
         if exited:
             msg = f"{len(exited)} merchant(s) exited map"
             self.turn_manager.add_phase_log("Merchant Phase", msg)
+            
+            # Remove exited merchants from the map
+            exited_indices = [idx for idx, _ in exited]
+            self.ships = [ship for i, ship in enumerate(self.ships) if i not in exited_indices]
+            
+            # Trigger defeat - mission objective failed
+            self._trigger_merchant_escape_defeat(len(exited))
+    
+    def _trigger_merchant_escape_defeat(self, merchant_count: int):
+        """Trigger defeat when merchant(s) escape."""
+        self.defeat_reason = 'merchant_escaped'
+        print(f"\n{'='*60}")
+        print("MISSION FAILED - MERCHANT ESCAPED!")
+        print(f"{'='*60}")
+        print(f"Reason: {merchant_count} merchant ship(s) reached exit hex")
+        print(f"Mission Objective: Destroy all merchants before they escape")
+        print(f"Turn: {self.turn_manager.turn_number}")
+        print(f"Final Position: {self.u_boat.position}")
+        print(f"Hull Damage: {self.u_boat.hull_damage}/4")
+        print(f"{'='*60}\n")
+        self.running = False
     
     def _execute_detection_phase(self):
         """Calculate detection level changes."""
@@ -607,11 +629,63 @@ class Game:
             self.action_queue = ActionQueue(max_ap=0)
         self.selected_target = None
     
+    
+    def can_exit_map(self, preview_position: Optional[HexCoord] = None, 
+                     preview_facing: Optional[Facing] = None) -> tuple[bool, str]:
+        """
+        Check if U-boat can exit the map.
+        
+        Args:
+            preview_position: Optional preview position (after queued actions)
+            preview_facing: Optional preview facing (after queued actions)
+        
+        Requirements:
+        1. U-boat ON the exit hex
+        2. Facing the correct direction
+        3. Has available movement points (AP > 0)
+        4. All merchants sunk
+        
+        Returns:
+            (can_exit, reason_if_not)
+        """
+        # Check if config has exit hex defined
+        if not hasattr(self.mission_config, 'U_BOAT_EXIT_HEX'):
+            return False, "No exit hex defined"
+        
+        exit_hex = HexCoord(*self.mission_config.U_BOAT_EXIT_HEX)
+        exit_facing = Facing[self.mission_config.U_BOAT_EXIT_FACING]
+        
+        # Use preview state if provided, otherwise use actual state
+        check_position = preview_position if preview_position is not None else self.u_boat.position
+        check_facing = preview_facing if preview_facing is not None else self.u_boat.facing
+        
+        # 1. Check if ON exit hex
+        if check_position != exit_hex:
+            return False, f"Not on exit hex (currently at {check_position}, need {exit_hex})"
+        
+        # 2. Check facing
+        if check_facing != exit_facing:
+            return False, f"Wrong facing (currently {check_facing.name}, need {exit_facing.name})"
+        
+        # 3. Check AP - need remaining AP > 0
+        if hasattr(self, 'action_queue'):
+            remaining_ap = self.action_queue.get_remaining_ap(self)
+            if remaining_ap <= 0:
+                return False, "No movement points remaining"
+        
+        # 4. Check all merchants sunk
+        merchant_count = sum(1 for ship in self.ships if ship.ship_type == "merchant")
+        if merchant_count > 0:
+            return False, f"{merchant_count} merchant(s) still alive"
+        
+        return True, "Can exit"
+    
     def _check_game_over_conditions(self):
         """Check if the game is over (victory or defeat)."""
         # Check U-boat destruction (defeat)
         is_destroyed, reason = self.escort_ai.damage_resolver.check_destruction(self.u_boat)
         if is_destroyed:
+            self.defeat_reason = 'destroyed'
             print(f"\n{'='*60}")
             print("MISSION FAILED - U-BOAT DESTROYED!")
             print(f"{'='*60}")
@@ -623,28 +697,21 @@ class Game:
             self.running = False
             return
         
-        # Check mission objectives (victory)
-        merchant_count = sum(1 for ship in self.ships if ship.ship_type == "merchant")
-        merchants_destroyed = merchant_count == 0
-        
-        # Check if U-boat reached exit hex
-        exit_position = self.mission_config.EXIT_POSITIONS['u_boat']['position']
-        exit_hex = HexCoord(exit_position[0], exit_position[1])
-        reached_exit = self.u_boat.position == exit_hex
-        
-        # Victory requires BOTH objectives
-        if merchants_destroyed and reached_exit:
-            print(f"\n{'='*60}")
-            print("MISSION SUCCESS!")
-            print(f"{'='*60}")
-            print(f"All merchant ships destroyed!")
-            print(f"U-boat escaped via exit hex!")
-            print(f"Turn: {self.turn_manager.turn_number}")
-            print(f"Final Position: {self.u_boat.position}")
-            print(f"Hull Damage: {self.u_boat.hull_damage}/{self.escort_ai.damage_resolver.max_hull_damage}")
-            print(f"{'='*60}\n")
-            self.running = False
-            return
+        # Note: Victory is now triggered by EXIT MAP button, not automatic
+        # This ensures all exit conditions are met: position, facing, AP, and merchants sunk
+    
+    def trigger_victory(self):
+        """Trigger victory when exiting via EXIT MAP button."""
+        print(f"\n{'='*60}")
+        print("MISSION SUCCESS!")
+        print(f"{'='*60}")
+        print(f"All merchant ships destroyed!")
+        print(f"U-boat escaped via exit hex!")
+        print(f"Turn: {self.turn_manager.turn_number}")
+        print(f"Final Position: {self.u_boat.position}")
+        print(f"Hull Damage: {self.u_boat.hull_damage}/{self.escort_ai.damage_resolver.max_hull_damage}")
+        print(f"{'='*60}\n")
+        self.running = False
     
     def update(self):
         """Update game state - NPC AI and game rules will go here."""

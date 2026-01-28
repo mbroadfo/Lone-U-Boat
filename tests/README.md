@@ -41,12 +41,23 @@ python -m pytest tests/
 - **test_action_system.py** - ActionQueue integration tests
 - **test_damage_resolution.py** - Damage application tests
 
-### Phase 4 Enemy AI (In Progress)
+### Phase 4 Enemy AI (100% Complete)
 
 - **test_merchant_ai.py** (14 tests) - Merchant movement along predefined paths, damage rules
 - **test_merchant_integration.py** (3 tests) - Merchant phase integration with game loop
 - **test_detection_ai.py** (16 tests) - Escort detection rolls, range/LOS checks, depth modifiers
 - **test_detection_integration.py** (5 tests) - Detection phase integration with game loop
+- **test_escort_ai.py** (39 tests) - Escort ship behaviors, movement, and attack logic
+- **test_escort_ai_comprehensive.py** (26 tests) - Comprehensive escort AI die roll scenarios
+- **test_b24_ai.py** - B-24 Liberator aircraft AI tests
+
+### Game Victory/Loss Conditions (100% Complete)
+
+- **test_victory_loss_conditions.py** (13 tests) - Victory and defeat condition validation
+  - Loss: U-boat destroyed (hull damage 4/4)
+  - Loss: Merchant escapes map (mission objective failure)
+  - Victory: EXIT MAP button (position + facing + AP + merchants destroyed)
+  - Defeat reason tracking system
 
 All tests validate against JSON rule definitions from `missions/u_boat_ruleset_default.json`.
 

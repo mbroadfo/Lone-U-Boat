@@ -31,6 +31,7 @@ test_files = [
     "tests/test_repair_validator.py",
     "tests/test_scripted_captain.py",
     "tests/test_torpedo_validator.py",
+    "tests/test_victory_loss_conditions.py",
 ]
 
 if __name__ == "__main__":
