@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 test_files = [
+    "tests/test_action_stacking.py",
     "tests/test_action_system.py",
     "tests/test_ai_game.py",
     "tests/test_b24_ai.py",

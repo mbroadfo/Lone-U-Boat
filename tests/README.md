@@ -36,6 +36,7 @@ python -m pytest tests/
 
 ### Phase 3 Actions (100% Complete)
 
+- **test_action_stacking.py** - Action stacking and queueing validation per RULES.md line 215
 - **test_movement_actions.py** - MoveAction, RotateAction tests
 - **test_combat_actions.py** - RepairAction, DeckGunAction tests
 - **test_action_system.py** - ActionQueue integration tests

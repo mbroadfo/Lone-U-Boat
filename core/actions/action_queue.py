@@ -62,11 +62,15 @@ class ActionQueue:
         # Create a preview u_boat that simulates queued action effects
         preview_uboat = deepcopy(game_state.u_boat)
         
+        # Track if depth has been changed in queued actions
+        depth_changed_in_queue = False
+        
         # Simulate depth changes
         simulated_depth = self.original_depth if self.original_depth is not None else game_state.u_boat.depth
         for queued_action in self.actions:
             if isinstance(queued_action, DepthChangeAction):
                 simulated_depth = queued_action.new_depth
+                depth_changed_in_queue = True  # Mark that depth was changed in queue
             elif isinstance(queued_action, FireTorpedoAction):
                 # Simulate firing torpedoes (empty those tubes)
                 for tube_idx in queued_action.tube_indices:
@@ -78,6 +82,13 @@ class ActionQueue:
         
         preview_uboat.depth = simulated_depth
         
+        # Create preview turn_manager with updated depth_changed flag
+        preview_turn_manager = copy(game_state.turn_manager) if hasattr(game_state, 'turn_manager') and game_state.turn_manager else None
+        if preview_turn_manager:
+            # If depth was changed in queue OR already changed this turn, mark it
+            original_depth_changed = getattr(game_state.turn_manager, 'depth_changed_this_turn', False)
+            preview_turn_manager.depth_changed_this_turn = original_depth_changed or depth_changed_in_queue
+        
         # Create preview game state with all necessary attributes
         from types import SimpleNamespace
         preview_game_state = SimpleNamespace(
@@ -85,7 +96,7 @@ class ActionQueue:
             ships=getattr(game_state, 'ships', []),
             hex_grid=getattr(game_state, 'hex_grid', None),
             board_layout=getattr(game_state, 'board_layout', None),
-            turn_manager=getattr(game_state, 'turn_manager', None)
+            turn_manager=preview_turn_manager
         )
         
         # Validate action using preview state
