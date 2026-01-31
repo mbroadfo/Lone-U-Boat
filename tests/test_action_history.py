@@ -9,7 +9,8 @@ Tests verify:
 - Helper functions for U-boat state snapshots
 """
 
-import pytest
+from typing import Any
+
 from core.actions.action_history import (
     ActionHistory,
     create_u_boat_snapshot,
@@ -44,14 +45,14 @@ class TestActionHistory:
         action = FireTorpedoAction(
             tube_indices=[1],
             fire_direction=Facing.NORTH,
-            cost_lookup=None,
-            validator=None,
-            los_calculator=None,
-            combat_resolver=None
+            cost_lookup=None,  # type: ignore[arg-type]
+            validator=None,  # type: ignore[arg-type]
+            los_calculator=None,  # type: ignore[arg-type]
+            combat_resolver=None  # type: ignore[arg-type]
         )
         
         # Record action
-        snapshot = {
+        snapshot: dict[str, Any] = {
             'u_boat_state': create_u_boat_snapshot(self.u_boat),
             'remaining_ap': 7
         }
@@ -66,14 +67,14 @@ class TestActionHistory:
     def test_undo_returns_snapshot(self):
         """Test that undo returns the recorded state snapshot."""
         # Record action with snapshot
-        original_snapshot = {
+        original_snapshot: dict[str, Any] = {
             'u_boat_state': create_u_boat_snapshot(self.u_boat),
             'remaining_ap': 5
         }
         action = LoadTorpedoAction(
             tube_indices=[1, 2],
-            cost_lookup=None,
-            validator=None
+            cost_lookup=None,  # type: ignore[arg-type]
+            validator=None  # type: ignore[arg-type]
         )
         self.history.record_action(action, ap_cost=1, state_snapshot=original_snapshot)
         
@@ -82,15 +83,15 @@ class TestActionHistory:
         
         # Verify snapshot returned
         assert restored is not None, "Undo should return snapshot"
-        assert restored['remaining_ap'] == 5, "Should restore AP"
+        assert restored['snapshot']['remaining_ap'] == 5, "Should restore AP"
         assert restored['ap_refund'] == 1, "Should include AP refund"
-        assert 'u_boat_state' in restored, "Should include U-boat state"
+        assert 'u_boat_state' in restored['snapshot'], "Should include U-boat state"
     
     def test_undo_clears_history(self):
         """Test that undo clears history (can't undo twice)."""
         # Record and undo
         snapshot = {'remaining_ap': 7}
-        action = LoadTorpedoAction(tube_indices=[1], cost_lookup=None, validator=None)
+        action = LoadTorpedoAction(tube_indices=[1], cost_lookup=None, validator=None)  # type: ignore[arg-type]
         self.history.record_action(action, ap_cost=1, state_snapshot=snapshot)
         
         first_undo = self.history.undo_last_action()
@@ -105,7 +106,7 @@ class TestActionHistory:
         """Test that clear() removes undo capability."""
         # Record action
         snapshot = {'remaining_ap': 6}
-        action = LoadTorpedoAction(tube_indices=[1], cost_lookup=None, validator=None)
+        action = LoadTorpedoAction(tube_indices=[1], cost_lookup=None, validator=None)  # type: ignore[arg-type]
         self.history.record_action(action, ap_cost=1, state_snapshot=snapshot)
         
         assert self.history.can_undo(), "Should have undo before clear"
@@ -120,7 +121,7 @@ class TestActionHistory:
     def test_recording_new_action_replaces_old(self):
         """Test that recording new action replaces previous undo."""
         # Record first action
-        action1 = LoadTorpedoAction(tube_indices=[1], cost_lookup=None, validator=None)
+        action1 = LoadTorpedoAction(tube_indices=[1], cost_lookup=None, validator=None)  # type: ignore[arg-type]
         snapshot1 = {'remaining_ap': 7}
         self.history.record_action(action1, ap_cost=1, state_snapshot=snapshot1)
         
@@ -128,10 +129,10 @@ class TestActionHistory:
         action2 = FireTorpedoAction(
             tube_indices=[1],
             fire_direction=Facing.NORTH,
-            cost_lookup=None,
-            validator=None,
-            los_calculator=None,
-            combat_resolver=None
+            cost_lookup=None,  # type: ignore[arg-type]
+            validator=None,  # type: ignore[arg-type]
+            los_calculator=None,  # type: ignore[arg-type]
+            combat_resolver=None  # type: ignore[arg-type]
         )
         snapshot2 = {'remaining_ap': 6}
         self.history.record_action(action2, ap_cost=2, state_snapshot=snapshot2)
@@ -141,7 +142,8 @@ class TestActionHistory:
             "Should show most recent action"
         
         restored = self.history.undo_last_action()
-        assert restored['remaining_ap'] == 6, "Should restore second action's AP"
+        assert restored is not None
+        assert restored['snapshot']['remaining_ap'] == 6, "Should restore second action's AP"
         assert restored['ap_refund'] == 2, "Should refund second action's cost"
     
     def test_undo_when_no_action_recorded(self):
@@ -284,7 +286,7 @@ class TestActionHistoryIntegration:
         self.u_boat.torpedo_tubes[0] = TubeState.LOADED
         
         # Create snapshot before action
-        snapshot = {
+        snapshot: dict[str, Any] = {
             'u_boat_state': create_u_boat_snapshot(self.u_boat),
             'remaining_ap': initial_ap
         }
@@ -293,16 +295,15 @@ class TestActionHistoryIntegration:
         action = FireTorpedoAction(
             tube_indices=[1],
             fire_direction=Facing.NORTH,
-            cost_lookup=None,
-            validator=None,
-            los_calculator=None,
-            combat_resolver=None
+            cost_lookup=None,  # type: ignore[arg-type]
+            validator=None,  # type: ignore[arg-type]
+            los_calculator=None,  # type: ignore[arg-type]
+            combat_resolver=None  # type: ignore[arg-type]
         )
         self.history.record_action(action, ap_cost=2, state_snapshot=snapshot)
         
         # Simulate action effect (tube now empty)
         self.u_boat.torpedo_tubes[0] = TubeState.EMPTY
-        ap_after_action = 5
         
         # Player clicks undo
         restored = self.history.undo_last_action()
@@ -321,7 +322,7 @@ class TestActionHistoryIntegration:
         """Test that advancing phase clears undo (can't undo across phases)."""
         # Record action
         snapshot = {'remaining_ap': 5}
-        action = LoadTorpedoAction(tube_indices=[1], cost_lookup=None, validator=None)
+        action = LoadTorpedoAction(tube_indices=[1], cost_lookup=None, validator=None)  # type: ignore[arg-type]
         self.history.record_action(action, ap_cost=1, state_snapshot=snapshot)
         
         assert self.history.can_undo(), "Should have undo in same phase"
@@ -336,14 +337,14 @@ class TestActionHistoryIntegration:
         # Execute 3 actions
         for i in range(3):
             snapshot = {'remaining_ap': 7 - i, 'action_num': i}
-            action = LoadTorpedoAction(tube_indices=[i+1], cost_lookup=None, validator=None)
+            action = LoadTorpedoAction(tube_indices=[i+1], cost_lookup=None, validator=None)  # type: ignore[arg-type]
             self.history.record_action(action, ap_cost=1, state_snapshot=snapshot)
         
         # Only last action (i=2) should be undoable
         restored = self.history.undo_last_action()
         assert restored is not None, "Should be able to undo"
-        assert restored['action_num'] == 2, "Should undo last action only"
-        assert restored['remaining_ap'] == 5, "Should restore AP from last action"
+        assert restored['snapshot']['action_num'] == 2, "Should undo last action only"
+        assert restored['snapshot']['remaining_ap'] == 5, "Should restore AP from last action"
         
         # Can't undo again
         second_undo = self.history.undo_last_action()

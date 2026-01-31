@@ -129,6 +129,141 @@ class ActionHistory:
 
 ## Phase 2: UI Changes - Action Execution
 
+**Status**: ✅ Phase 2A COMPLETE - Simple actions using immediate execution
+            ✅ Phase 2B COMPLETE - Complex actions using immediate execution
+
+### Phase 2A: Simple Actions (COMPLETE ✅)
+
+**Completed**: Simple actions now execute immediately without queueing:
+- ✅ Move forward/reverse
+- ✅ Rotate left/right  
+- ✅ Dive/surface
+
+**Implementation Details**:
+- Added `_execute_action_immediate()` method (96 lines)
+- Updated button click handler to route simple actions to new method
+- Actions validate against current state (no preview needed)
+- AP deducted immediately via `turn_manager.execute_action_immediate()`
+- State snapshot created before execution for undo
+- Action recorded in `action_history` for undo capability
+- Complex actions (torpedoes, repair, deck gun) still use queue temporarily
+
+**Code Changes**:
+- `unified_game.py`: +96 lines (_execute_action_immediate method)
+- `unified_game.py`: Modified button handler to route simple vs complex actions
+- `game_state.py`: Re-added action_queue temporarily for complex actions
+
+**Testing**: Game runs successfully, simple actions execute immediately with proper AP deduction
+
+### Phase 2B: Complex Actions (COMPLETE ✅)
+
+**Completed**: All complex actions now execute immediately:
+- ✅ Fire torpedoes - executes immediately after tube selection
+- ✅ Load torpedoes - executes immediately after tube selection
+- ✅ Repair systems - executes immediately after component selection
+- ✅ Deck gun - executes immediately when clicked
+
+**Implementation Details**:
+- Updated `_handle_fire_torpedo_clicks()` to execute FireTorpedoAction immediately
+- Updated `_handle_load_torpedo_clicks()` to execute LoadTorpedoAction immediately
+- Updated `_confirm_repair_selection()` to execute RepairAction immediately
+- Added deck_gun to `_execute_action_immediate()` method
+- Removed all action_queue.add_action() calls from torpedo/repair handlers
+- Dialogs still shown for tube/component selection, but execution is immediate on confirm
+- All actions use current state (no preview state calculations)
+
+**Code Changes**:
+- `unified_game.py`: Modified fire torpedo handler (~60 lines)
+- `unified_game.py`: Modified load torpedo handler (~50 lines)
+- `unified_game.py`: Modified repair confirmation (~80 lines)
+- `unified_game.py`: Added deck_gun to immediate execution (~35 lines)
+- `unified_game.py`: Updated button handler to route deck_gun to immediate execution
+
+**Testing**: Game runs successfully, all actions execute immediately with proper AP tracking
+
+**Next**: Phase 2C - Add undo button UI
+
+### Phase 2C: Undo Button (COMPLETE ✅)
+
+**Completed**: Undo button with turn-based restrictions:
+- ✅ Undo button shown only when action_history.can_undo() is true
+- ✅ Displays last action name and AP refund
+- ✅ Click to restore U-boat state and refund AP
+- ✅ Action history cleared when dice are rolled (no undoing after dice roll)
+- ✅ Undo clears history (can't undo twice - one-level undo only)
+
+**Implementation Details**:
+- Added `_undo_last_action()` method to restore snapshot and refund AP
+- Undo button rendered in `_draw_game_controls()` below AP display
+- Button shows "↶ UNDO: {action_name} (refund {ap} AP)"
+- Click handler integrated into mouse event handling
+- Action history cleared on dice roll (enforces turn boundary)
+- Updated `ActionHistory.undo_last_action()` to return dict with snapshot, ap_refund, and action_name
+
+**Code Changes**:
+- `unified_game.py`: +45 lines (undo button rendering and click handling)
+- `unified_game.py`: Added `_undo_last_action()` method
+- `unified_game.py`: Clear history on dice roll
+- `action_history.py`: Modified undo_last_action() to return structured data
+
+**Testing**: Game runs successfully, undo button appears after actions, disappears after dice roll
+
+**Undo Rules**:
+- Can undo any action during U-boat phase
+- Once dice are rolled for a turn, all undo history is cleared
+- After undoing, cannot undo again (one-level undo)
+- Undo restores position, facing, depth, torpedo tubes, damage states, hull damage
+- AP is refunded immediately
+
+**Next**: Phase 2D - Remove queue display, clean up UI
+
+### Phase 2D: UI Cleanup (COMPLETE ✅)
+
+**Completed**: Removed queue-based UI elements:
+- ✅ Removed `_draw_action_queue()` method (~145 lines)
+- ✅ Removed blue queue box display
+- ✅ Updated button enablement to use CURRENT state instead of preview state
+- ✅ Simplified AP display to show remaining/max from turn_manager
+- ✅ Removed preview state calculations from button logic
+- ✅ No more "queued actions" list display
+
+**Implementation Details**:
+- Removed entire `_draw_action_queue()` method that drew queue box with queued actions
+- Updated `_draw_game_controls()` to use current U-boat state for all validations
+- Button enablement now checks `current_depth`, `current_position`, `u_boat.damage` directly
+- AP display shows `turn_manager.remaining_ap` instead of `action_queue.get_remaining_ap()`
+- Cost calculations use current depth, not preview depth
+- EXIT MAP button uses current position/facing, not preview
+- Removed all `_get_preview_state()` calls from button logic
+- Removed preview torpedo tubes and preview damage state calculations
+
+**Code Changes**:
+- `unified_game.py`: Removed queue display call from right panel rendering
+- `unified_game.py`: Commented out `_draw_action_queue()` method
+- `unified_game.py`: Updated `_draw_game_controls()` to use current state (~50 lines modified)
+- `unified_game.py`: Simplified button logic (no preview calculations)
+
+**Testing**: Game runs successfully, queue box is gone, buttons respond to current state
+
+**Fixes Applied**:
+- ✅ Added "NEXT PHASE ►" button to U-boat controls for phase advancement
+- ✅ Fixed button click handling order (exit → undo → phase → actions)
+- ✅ Added phase_advance_button_rect initialization and click detection
+
+**UI Improvements**:
+- Cleaner interface - no confusing "queued actions" display
+- Buttons always show current state requirements
+- AP remaining prominently displayed
+- Undo button shows when available
+- **NEXT PHASE button available during U-boat phase to continue game**
+- Immediate visual feedback on all actions
+
+**Next**: Phase 2E - Delete old queue code completely
+
+---
+
+### Original Phase 2 Plan
+
 ### 2.1 Modify Action Button Handler
 **File**: `core/screens/unified_game.py`
 

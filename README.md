@@ -12,7 +12,7 @@ Lone U-Boat is a hex-based tactical game where you control a U-boat navigating t
 - **Detection mechanics** based on depth and enemy proximity
 - **Mission-based gameplay** with unique objectives and map layouts
 - **JSON-driven rules engine** with zero hardcoded game rules
-- **Action queue system** for planning and executing turns
+- **Immediate execution** with multi-level undo for forgiving gameplay
 - **Comprehensive damage system** for ships and U-boats
 
 ## Quick Start
@@ -29,25 +29,44 @@ python main.py
 
 ## Development Status
 
-**Current Phase**: Phase 4 - Enemy AI & Automation ✅ **COMPLETE**  
-**Next Phase**: Phase 5 - Polish, Save/Load, and Mission Expansion
+**Current Phase**: Phase 5 - Polish, Save/Load, and Mission Expansion  
+**Latest Completion**: Phase 2 - Immediate Execution UI ✅ **COMPLETE**
 
 ### Completed Phases
 
 - ✅ **Phase 1**: Turn system with 6-phase cycle and AP rolling
-- ✅ **Phase 2**: Validators (LOS, range, movement, torpedoes, repairs, combat, depth)  
+- ✅ **Phase 2**: Immediate execution UI with multi-level undo (January 2026)
+- ✅ **Phase 2 (Validators)**: LOS, range, movement, torpedoes, repairs, combat, depth  
 - ✅ **Phase 3**: All 7 U-boat actions (Move, Rotate, DepthChange, Repair, DeckGun, LoadTorpedo, FireTorpedo)
 - ✅ **Phase 3.6**: Complete damage resolution system
 - ✅ **Refactoring**: All game rules moved to JSON (zero redundancy)
 - ✅ **Phase 4**: All enemy AI complete - Merchants, Detection, Escorts (with depth charges), B-24 Aircraft, Event System
 
-**Test Coverage**: 233 tests across 19 test files, **all passing** ✓
+**Test Coverage**: 336 tests across 24 test files, **all passing** ✓
 
 **The game is now fully playable!** All enemy behaviors are automated.
 
-### Recent Updates (January 24, 2026)
+### Recent Updates (January 2026)
 
-#### Critical Bug Fixes
+#### Phase 2: Immediate Execution UI ✅ Complete
+Converted from queue-based action system to immediate execution with undo:
+
+**New Features:**
+- ✅ **Immediate Execution** - Actions execute instantly when clicked (no commit step)
+- ✅ **Multi-Level Undo** - UNDO button appears after actions, restores state with AP refund
+- ✅ **Cleaner UI** - Removed queue preview box and commit button
+- ✅ **Better Flow** - NEXT PHASE button consistently available at bottom of control panel
+- ✅ **Type Safety** - All type hint errors resolved
+
+**User Experience:**
+- Click action → Executes immediately → See results instantly
+- Made a mistake? Click UNDO to revert with full AP refund
+- Multiple undos available within phase (clears on phase advance)
+- More intuitive and forgiving gameplay
+
+See [docs/PHASE_2_COMPLETION.md](docs/PHASE_2_COMPLETION.md) for detailed implementation notes.
+
+#### Critical Bug Fixes (January 24, 2026)
 **GAMEPLAY-BREAKING BUG FIXED:**
 - 🐛 **Torpedo Hit Mechanics** - Fixed hardcoded torpedo hit targets that didn't match game rules
   - Range 1-2 side aspect was requiring 5+ instead of correct 3+ (60% harder than intended!)

@@ -1,33 +1,37 @@
 """
-Action History - Track executed actions for single-level undo.
+Action History - Track executed actions for multi-level undo.
 
 This replaces the ActionQueue preview system with immediate execution.
-Only the most recent action can be undone.
+All actions in the current turn can be undone until a dice roll is committed.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from copy import deepcopy
 from .base_action import Action
+
+if TYPE_CHECKING:
+    from ..models import UBoat
+
 
 
 class ActionHistory:
     """
     Track executed actions for undo functionality.
-    Only stores the most recent action for single-level undo.
+    Stores all actions in the current turn for multi-level undo.
     
     The immediate execution system:
     1. Player clicks action button
     2. Action executes immediately
     3. AP deducted immediately
     4. State snapshot saved for undo
-    5. Only most recent action can be undone
+    5. Can undo back to start of turn (until dice are rolled)
     """
     
     def __init__(self):
         """Initialize empty action history."""
-        self.last_action: Optional[Action] = None
-        self.last_action_cost: int = 0
-        self.last_state_snapshot: Optional[Dict[str, Any]] = None
+        self.actions: List[Action] = []
+        self.action_costs: List[int] = []
+        self.state_snapshots: List[Dict[str, Any]] = []
     
     def record_action(self, action: Action, ap_cost: int, state_snapshot: Dict[str, Any]) -> None:
         """
@@ -42,18 +46,18 @@ class ActionHistory:
                 - 'remaining_ap': AP before action
                 - Any action-specific state needed for undo
         """
-        self.last_action = action
-        self.last_action_cost = ap_cost
-        self.last_state_snapshot = deepcopy(state_snapshot)
+        self.actions.append(action)
+        self.action_costs.append(ap_cost)
+        self.state_snapshots.append(deepcopy(state_snapshot))
     
     def can_undo(self) -> bool:
         """
         Check if there's an action available to undo.
         
         Returns:
-            True if last_action exists, False otherwise
+            True if actions list is not empty, False otherwise
         """
-        return self.last_action is not None
+        return len(self.actions) > 0
     
     def get_undo_action_name(self) -> str:
         """
@@ -62,9 +66,9 @@ class ActionHistory:
         Returns:
             Action type name or empty string if no undo available
         """
-        if self.last_action is None:
+        if len(self.actions) == 0:
             return ""
-        return self.last_action.action_type
+        return self.actions[-1].action_type
     
     def undo_last_action(self) -> Optional[Dict[str, Any]]:
         """
@@ -77,29 +81,30 @@ class ActionHistory:
         if not self.can_undo():
             return None
         
-        snapshot = self.last_state_snapshot
-        ap_refund = self.last_action_cost
+        # Pop the last action from history
+        action = self.actions.pop()
+        ap_refund = self.action_costs.pop()
+        snapshot = self.state_snapshots.pop()
+        action_name = action.get_description() if action else "Action"
         
-        # Clear history after undo (can't undo twice)
-        self.clear()
-        
-        # Return snapshot with AP refund info
-        if snapshot is not None:
-            snapshot['ap_refund'] = ap_refund
-        
-        return snapshot
+        # Return snapshot with AP refund info and action name
+        return {
+            'snapshot': snapshot,
+            'ap_refund': ap_refund,
+            'action_name': action_name
+        }
     
     def clear(self) -> None:
         """
         Clear action history.
         Called when:
         - Phase advances (can't undo across phases)
-        - After undo (can't undo twice)
+        - Dice are rolled (can't undo after dice roll)
         - New turn starts
         """
-        self.last_action = None
-        self.last_action_cost = 0
-        self.last_state_snapshot = None
+        self.actions.clear()
+        self.action_costs.clear()
+        self.state_snapshots.clear()
     
     def get_last_action_cost(self) -> int:
         """
@@ -108,10 +113,19 @@ class ActionHistory:
         Returns:
             AP cost, or 0 if no action recorded
         """
-        return self.last_action_cost if self.last_action is not None else 0
+        return self.action_costs[-1] if len(self.action_costs) > 0 else 0
+    
+    def get_action_count(self) -> int:
+        """
+        Get the number of actions in history.
+        
+        Returns:
+            Number of actions that can be undone
+        """
+        return len(self.actions)
 
 
-def create_u_boat_snapshot(u_boat) -> Dict[str, Any]:
+def create_u_boat_snapshot(u_boat: 'UBoat') -> Dict[str, Any]:
     """
     Helper function to create a snapshot of U-boat state.
     
@@ -121,8 +135,6 @@ def create_u_boat_snapshot(u_boat) -> Dict[str, Any]:
     Returns:
         Dict with deep copies of mutable state
     """
-    from ..models import TubeState
-    
     return {
         'position': (u_boat.position.q, u_boat.position.r),
         'facing': u_boat.facing.value,
@@ -135,7 +147,7 @@ def create_u_boat_snapshot(u_boat) -> Dict[str, Any]:
     }
 
 
-def restore_u_boat_snapshot(u_boat, snapshot: Dict[str, Any]) -> None:
+def restore_u_boat_snapshot(u_boat: 'UBoat', snapshot: Dict[str, Any]) -> None:
     """
     Helper function to restore U-boat state from snapshot.
     

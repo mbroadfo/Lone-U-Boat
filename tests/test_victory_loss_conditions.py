@@ -101,8 +101,8 @@ class TestVictoryConditions:
         game.u_boat.position = HexCoord(1, 7)  # Exit hex for mission 1
         game.u_boat.facing = Facing.SOUTHWEST   # Exit facing for mission 1
         
-        # Ensure we have AP
-        game.action_queue.reset_for_new_turn(5, game)
+        # Ensure we have AP (use turn_manager for immediate execution)
+        game.turn_manager.remaining_ap = 5
         
         # Destroy all merchants
         game.ships = [ship for ship in game.ships if ship.ship_type != 'merchant']
@@ -188,8 +188,8 @@ class TestVictoryConditions:
         game.u_boat.position = HexCoord(1, 7)
         game.u_boat.facing = Facing.SOUTHWEST
         
-        # Ensure we have AP
-        game.action_queue.reset_for_new_turn(5, game)
+        # Ensure we have AP (use turn_manager for immediate execution)
+        game.turn_manager.remaining_ap = 5
         
         # Keep merchants alive (don't remove them)
         merchant_count = sum(1 for ship in game.ships if ship.ship_type == 'merchant')
@@ -213,8 +213,8 @@ class TestVictoryConditions:
         preview_position = HexCoord(1, 7)
         preview_facing = Facing.SOUTHWEST
         
-        # Ensure we have AP
-        game.action_queue.reset_for_new_turn(5, game)
+        # Ensure we have AP (use turn_manager for immediate execution)
+        game.turn_manager.remaining_ap = 5
         
         # Destroy all merchants
         game.ships = [ship for ship in game.ships if ship.ship_type != 'merchant']

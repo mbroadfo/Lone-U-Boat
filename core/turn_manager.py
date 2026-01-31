@@ -342,6 +342,11 @@ class TurnManager:
         # Check if we wrapped back to U-Boat Phase (new turn)
         turn_wrapped = (next_index == 0)
         
+        # Clear AP state when entering new U-Boat phase (before dice roll)
+        if turn_wrapped:
+            self.last_ap_roll = None
+            self.remaining_ap = 0
+        
         return self.current_phase, turn_wrapped
     
     def can_advance_phase(self, u_boat: Optional[UBoat] = None) -> Tuple[bool, str]:

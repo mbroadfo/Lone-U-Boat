@@ -4,7 +4,7 @@ Repair action - Fix damaged U-boat systems.
 Integrates with RepairValidator from Phase 2.
 """
 
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional
 from .base_action import Action, ActionResult
 from ..models import UBoat, TubeState
 from ..repair_validator import RepairValidator
@@ -22,7 +22,7 @@ class RepairAction(Action):
     Restrictions enforced by RepairValidator.
     """
     
-    def __init__(self, repair_target: str, cost_lookup: ActionCostLookup, validator: RepairValidator, tube_number: int = None, ap_cost_override: int = None):
+    def __init__(self, repair_target: str, cost_lookup: ActionCostLookup, validator: RepairValidator, tube_number: Optional[int] = None, ap_cost_override: Optional[int] = None):
         """
         Initialize repair action.
         

@@ -17,6 +17,7 @@ from .renderer import GameRenderer
 from .board_layout import BoardLayoutRuntime
 from .turn_manager import TurnManager
 from .actions.action_history import ActionHistory
+from .actions.action_queue import ActionQueue  # Phase 2A: Keep for complex actions temporarily
 from .merchant_ai import MerchantAI
 from .detection_ai import DetectionAI
 from .escort_ai import EscortAI
@@ -233,6 +234,10 @@ class Game:
         # Initialize action history for immediate execution with undo
         self.action_history = ActionHistory()
         self.turn_manager.action_history = self.action_history  # Connect to TurnManager
+        
+        # Phase 2A: Keep action_queue for complex actions (torpedoes, repair, deck gun) temporarily
+        self.action_queue = ActionQueue()
+        
         self.selected_target: Optional[Ship] = None  # For combat actions
     
     def _load_mission_config(self, mission_number: int) -> Any:
@@ -364,6 +369,9 @@ class Game:
         # Clear action history when phase ends (can't undo across phases)
         self.action_history.clear()
         self.turn_manager.clear_action_history()
+        
+        # Phase 2A: Clear action_queue for complex actions
+        self.action_queue.clear()
         
         # TODO Phase 2: Remove old action_queue logic
         # Old queue-based logic commented out for Phase 1
