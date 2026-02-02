@@ -236,16 +236,19 @@ class DetectionAI:
         # Calculate detection threshold
         threshold = self.calculate_detection_threshold(u_boat)
         
-        # Build detailed threshold calculation message
+        # Build concise threshold calculation message
         base_threshold = self.base_thresholds.get(u_boat.depth, 4)
-        threshold_details = [f"base={base_threshold}"]
+        modifiers = []
         if u_boat.sonar_operator_alive:
-            threshold_details.append(f"+{self.modifier_sonar_operator} (Sonar Operator)")
+            modifiers.append(f"+{self.modifier_sonar_operator} Sonar")
         if u_boat.engine_damaged:
-            threshold_details.append(f"{self.modifier_engine_damaged} (Engine damaged)")
-        threshold_calc = " ".join(threshold_details) + f" = {threshold}"
+            modifiers.append(f"{self.modifier_engine_damaged} Engine")
         
-        messages.append(f"Detection Phase: U-boat at {u_boat.depth.name}, rolling 1d6, need {threshold}+ [{threshold_calc}]")
+        if modifiers:
+            mod_str = ", ".join(modifiers)
+            messages.append(f"U-boat at {u_boat.depth.name}, need {threshold}+ [base {base_threshold}, {mod_str}]")
+        else:
+            messages.append(f"U-boat at {u_boat.depth.name}, need {threshold}+")
         
         # Find escorts that can attempt detection
         detecting_escorts: List[Tuple[Ship, str]] = []

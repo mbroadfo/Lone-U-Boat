@@ -47,7 +47,7 @@ def test_merchant_phase_integration():
         print(f"  {log}")
     
     assert len(logs) >= 2  # Should have "Merchant ships acting..." and movement message
-    assert any("moves to 1,5" in log for log in logs)
+    assert any("moves to [1,5]" in log for log in logs)
     
     print("✓ Merchant phase executed correctly")
 

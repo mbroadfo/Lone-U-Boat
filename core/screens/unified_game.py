@@ -406,7 +406,7 @@ class UnifiedGameScreen(BaseScreen):
                                     # Only allow phase advance if dice have been rolled (or not U-Boat phase)
                                     from ..models import GamePhase
                                     if self.game.turn_manager.current_phase != GamePhase.UBOAT_PHASE or self.game.turn_manager.last_ap_roll is not None:
-                                        self.game._advance_to_next_phase()  # type: ignore[attr-defined]
+                                        self._advance_phase_and_update_ui()  # Fixed: Use UI method to show logs
                                     else:
                                         self.add_event("Must roll dice first (click ROLL DICE)")
                             
@@ -475,24 +475,26 @@ class UnifiedGameScreen(BaseScreen):
         if not self.game.running:
             return
         
-        # Capture the phase that's about to execute BEFORE advancing
+        # Capture the phase name BEFORE advancing
+        # NOTE: Phase logic executes when LEAVING a phase, so logs will be added for the current phase
         old_phase_name = self.game.turn_manager.get_current_phase_name()
         
-        # Forward phase advancement to game
+        # Forward phase advancement to game (this executes the phase logic for old phase)
         self.game._advance_to_next_phase()  # type: ignore[attr-defined]
         
         # Sync UI depth with actual U-boat depth (in case escorts forced a dive)
         self.selected_depth = self.game.u_boat.depth
         
         # Show logs from the phase that just executed
+        # Phase logs should have been added during _advance_to_next_phase() execution
         phase_logs = self.game.turn_manager.get_phase_log(old_phase_name)
+        
         if phase_logs:
+            # Phase had logs - show them with phase name header
+            self.add_event(f"→ {old_phase_name}")
             for log_msg in phase_logs:
                 self.add_event(f"  {log_msg}")
-        
-        # Add visual feedback for NEW phase
-        new_phase_name = self.game.turn_manager.get_current_phase_name()
-        self.add_event(f"→ {new_phase_name}")
+        # Don't show anything if no logs - the next phase will announce itself when it has logs
         
         # If we just started U-Boat phase (new turn), prompt for AP roll
         from ..models import GamePhase

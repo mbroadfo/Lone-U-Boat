@@ -62,9 +62,9 @@ class HexGrid:
         r = (-1/3 * x + math.sqrt(3)/3 * y) / self.size
         
         # Round to nearest hex using cube coordinate rounding
-        return self._round_hex(q, r)
+        return self.round_hex(q, r)
     
-    def _round_hex(self, q: float, r: float) -> HexCoord:
+    def round_hex(self, q: float, r: float) -> HexCoord:
         """Round fractional axial coordinates to nearest integer hex using cube rounding.
         
         Converts axial (q,r) to cube (q,r,s) where s = -q-r, rounds all three,

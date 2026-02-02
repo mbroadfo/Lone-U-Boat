@@ -196,7 +196,7 @@ class MerchantAI:
         
         if action == "MOVE":
             # Undamaged: Always move
-            return next_waypoint, new_facing, f"Merchant moves to {next_waypoint.q},{next_waypoint.r}"
+            return next_waypoint, new_facing, f"Merchant moves to [{next_waypoint.q},{next_waypoint.r}]"
         
         elif action == "ROLL_TO_MOVE":
             # Damaged: Roll to see if can move
@@ -205,13 +205,13 @@ class MerchantAI:
             
             roll = self.dice.roll_1d6()
             if roll >= success_threshold:
-                return next_waypoint, new_facing, f"Merchant (damaged) rolled 1d6 [{roll}], moves to {next_waypoint.q},{next_waypoint.r}"
+                return next_waypoint, new_facing, f"Merchant (damaged) rolled 1d6 [{roll}], moves to [{next_waypoint.q},{next_waypoint.r}]"
             else:
                 return None, new_facing, f"Merchant (damaged) rolled 1d6 [{roll}], cannot move but faces {new_facing.name}"
         
         else:
             # Unknown action, default to move
-            return next_waypoint, new_facing, f"Merchant moves to {next_waypoint.q},{next_waypoint.r}"
+            return next_waypoint, new_facing, f"Merchant moves to [{next_waypoint.q},{next_waypoint.r}]"
     
     def execute_merchant_phase(self, ships: List[Ship]) -> List[str]:
         """
@@ -237,7 +237,7 @@ class MerchantAI:
                 for other_ship in ships:
                     if other_ship is not ship and other_ship.position == new_position:
                         blocked = True
-                        messages.append(f"Merchant cannot move to {new_position.q},{new_position.r} - blocked by {other_ship.ship_type}")
+                        messages.append(f"Merchant cannot move to [{new_position.q},{new_position.r}] - blocked by {other_ship.ship_type}")
                         break
                 
                 if not blocked:

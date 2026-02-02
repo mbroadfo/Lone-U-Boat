@@ -2,12 +2,15 @@
 Escort Phase AI - handles escort movement and combat actions.
 """
 
-from typing import List, Tuple, Set, Optional, Any
+from typing import List, Tuple, Set, Optional, Any, Dict, TYPE_CHECKING
 from enum import Enum
 from .models import Ship, UBoat, HexCoord, Facing, Depth
 from .hex_grid import HexGrid
 from .dice import DiceRoller
 from .damage.uboat_damage import UBoatDamageResolver
+
+if TYPE_CHECKING:
+    from .turn_manager import TurnManager
 
 
 class EscortAction(Enum):
@@ -79,7 +82,7 @@ class EscortAI:
                         continue
                     
                     # Extract primary actions from sequence
-                    actions = []
+                    actions: List[EscortAction] = []
                     sequence = result.get("sequence", [])
                     for step in sequence:
                         action_str = step.get("action", "")
@@ -368,9 +371,12 @@ class EscortAI:
         
         # Check U-boat depth
         if u_boat.depth in [Depth.SURFACED, Depth.PERISCOPE]:
-            # Check if in shallow water - cannot dive below Periscope
-            if new_position in shallow_hexes and u_boat.depth == Depth.PERISCOPE:
-                # U-boat is destroyed - cannot dive to Medium in shallow water
+            # Check if in shallow water
+            # Forced dive sets depth to MEDIUM
+            # In shallow water, max depth is PERISCOPE, so MEDIUM is not allowed
+            # U-boat is destroyed if forced to dive to MEDIUM in shallow water
+            if new_position in shallow_hexes:
+                # U-boat is destroyed - cannot dive to MEDIUM in shallow water (max depth PERISCOPE)
                 return True, "Escort forces U-boat to dive in shallow water - U-BOAT DESTROYED!", True
             
             return True, f"Escort forces U-boat to dive from {u_boat.depth.name} to MEDIUM (+1 DL, -2 AP next turn)", False
@@ -484,7 +490,7 @@ class EscortAI:
             lerp_r = from_hex.r + (to_hex.r - from_hex.r) * t
             
             # Round to nearest hex
-            hex_coord = hex_grid._round_hex(lerp_q, lerp_r)
+            hex_coord = hex_grid.round_hex(lerp_q, lerp_r)
             
             # Check if this hex blocks LOS
             if hex_coord in land_hexes:
@@ -501,7 +507,7 @@ class EscortAI:
         hex_grid: HexGrid,
         mission_hexes: Optional[Set[HexCoord]] = None,
         shallow_hexes: Optional[Set[HexCoord]] = None,
-        turn_manager = None
+        turn_manager: Optional['TurnManager'] = None
     ) -> Tuple[int, List[str]]:
         """
         Execute the escort phase for all escort ships.
@@ -537,7 +543,7 @@ class EscortAI:
         
         # Activate each escort
         for escort in escorts:
-            messages.append(f"\n{escort.ship_type.upper()} at {escort.position.q},{escort.position.r} activates:")
+            messages.append(f"\n{escort.ship_type.upper()} at [{escort.position.q},{escort.position.r}] activates:")
             
             # Calculate and show dice count
             dice_count = self.calculate_dice_count(escort, current_dl)
@@ -575,7 +581,8 @@ class EscortAI:
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="gunfire", ship_type=escort.ship_type, ships=ships
                             )
-                            messages.append(f"      {damage_result.description}")
+                            for line in damage_result.description.split('\n'):
+                                messages.append(f"      {line}")
                             
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
@@ -588,7 +595,8 @@ class EscortAI:
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
-                            messages.append(f"      {damage_result.description}")
+                            for line in damage_result.description.split('\n'):
+                                messages.append(f"      {line}")
                             
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
@@ -613,7 +621,7 @@ class EscortAI:
                         old_pos = escort.position
                         escort.position = next_hex
                         distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r} (Range to U-boat: {distance})")
+                        messages.append(f"    MOVE: [{old_pos.q},{old_pos.r}] -> [{next_hex.q},{next_hex.r}] (Range: {distance})")
                         
                         forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
@@ -644,13 +652,16 @@ class EscortAI:
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
-                            messages.append(f"      {damage_result.description}")
+                            for line in damage_result.description.split('\n'):
+                                messages.append(f"      {line}")
                             
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
                         else:
-                            messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
+                            # Only log if reasonably close to possible
+                            if distance <= 3 or u_boat.depth != Depth.SURFACED:
+                                messages.append(f"      DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
                 
                 elif die_result == 3:
                     # Die 3: MOVE → TURN → (if DL 1-3) DEPTH CHARGE
@@ -662,7 +673,7 @@ class EscortAI:
                         old_pos = escort.position
                         escort.position = next_hex
                         distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r} (Range to U-boat: {distance})")
+                        messages.append(f"    MOVE: [{old_pos.q},{old_pos.r}] -> [{next_hex.q},{next_hex.r}] (Range: {distance})")
                         
                         forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
@@ -698,13 +709,16 @@ class EscortAI:
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
-                            messages.append(f"      {damage_result.description}")
+                            for line in damage_result.description.split('\n'):
+                                messages.append(f"      {line}")
                             
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
                         else:
-                            messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
+                            # Only log if reasonably close to possible
+                            if distance <= 3 or u_boat.depth != Depth.SURFACED:
+                                messages.append(f"      DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
                 
                 elif die_result == 4:
                     # Die 4: MOVE → (if blocked) TURN → (if DL 1-3) DEPTH CHARGE
@@ -716,7 +730,7 @@ class EscortAI:
                         old_pos = escort.position
                         escort.position = next_hex
                         distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r} (Range to U-boat: {distance})")
+                        messages.append(f"    MOVE: [{old_pos.q},{old_pos.r}] -> [{next_hex.q},{next_hex.r}] (Range: {distance})")
                         
                         forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
@@ -751,13 +765,16 @@ class EscortAI:
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
-                            messages.append(f"      {damage_result.description}")
+                            for line in damage_result.description.split('\n'):
+                                messages.append(f"      {line}")
                             
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
                         else:
-                            messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
+                            # Only log if reasonably close to possible
+                            if distance <= 3 or u_boat.depth != Depth.SURFACED:
+                                messages.append(f"      DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
                 
                 elif die_result == 5:
                     # Die 5: MOVE → (if DL 1-3) DEPTH CHARGE
@@ -769,7 +786,7 @@ class EscortAI:
                         old_pos = escort.position
                         escort.position = next_hex
                         distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r} (Range to U-boat: {distance})")
+                        messages.append(f"    MOVE: [{old_pos.q},{old_pos.r}] -> [{next_hex.q},{next_hex.r}] (Range: {distance})")
                         
                         forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
@@ -784,7 +801,7 @@ class EscortAI:
                                 turn_manager.set_forced_dive_penalty()
                     else:
                         distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                        messages.append(f"    MOVE: Blocked (facing hex obstructed, Range to U-boat: {distance})")
+                        messages.append(f"    MOVE: Blocked (facing hex obstructed, Range: {distance})")
                     
                     # Then try depth charge if DL=1-3
                     distance = hex_grid.hex_distance(escort.position, u_boat.position)
@@ -795,13 +812,16 @@ class EscortAI:
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
-                            messages.append(f"      {damage_result.description}")
+                            for line in damage_result.description.split('\n'):
+                                messages.append(f"      {line}")
                             
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
                         else:
-                            messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
+                            # Only log if reasonably close to possible
+                            if distance <= 3 or u_boat.depth != Depth.SURFACED:
+                                messages.append(f"      DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
                 
                 elif die_result == 6:
                     # Die 6: MOVE → TURN → (if DL 1-3) DEPTH CHARGE
@@ -813,7 +833,7 @@ class EscortAI:
                         old_pos = escort.position
                         escort.position = next_hex
                         distance = hex_grid.hex_distance(escort.position, u_boat.position)
-                        messages.append(f"    MOVE: {old_pos.q},{old_pos.r} -> {next_hex.q},{next_hex.r} (Range to U-boat: {distance})")
+                        messages.append(f"    MOVE: [{old_pos.q},{old_pos.r}] -> [{next_hex.q},{next_hex.r}] (Range: {distance})")
                         
                         forced, msg, destroyed = self.check_forced_dive(escort, u_boat, next_hex, shallow_hexes)
                         if forced:
@@ -849,13 +869,16 @@ class EscortAI:
                             damage_result = self.damage_resolver.apply_escort_attack_damage(
                                 u_boat, attack_type="depth_charge", ship_type=escort.ship_type, ships=ships
                             )
-                            messages.append(f"      {damage_result.description}")
+                            for line in damage_result.description.split('\n'):
+                                messages.append(f"      {line}")
                             
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
                         else:
-                            messages.append(f"    DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
+                            # Only log if reasonably close to possible
+                            if distance <= 3 or u_boat.depth != Depth.SURFACED:
+                                messages.append(f"      DEPTH CHARGE not possible: Range={distance} (need ≤1), Depth={u_boat.depth.name}")
         
         # All escorts activated - return final DL and messages
         return current_dl, messages

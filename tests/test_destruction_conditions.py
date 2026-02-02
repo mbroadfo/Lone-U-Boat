@@ -111,8 +111,8 @@ def test_forced_dive_in_deep_water_does_not_destroy(escort_ai: EscortAI, destroy
     assert "shallow" not in msg.lower()
 
 
-def test_forced_dive_at_surfaced_in_shallow_does_not_destroy(escort_ai: EscortAI, destroyer: Ship, u_boat: UBoat) -> None:
-    """Test that forcing U-boat to dive from surfaced depth in shallow water does not destroy it."""
+def test_forced_dive_at_surfaced_in_shallow_destroys_uboat(escort_ai: EscortAI, destroyer: Ship, u_boat: UBoat) -> None:
+    """Test that forcing U-boat to dive from surfaced depth in shallow water destroys it."""
     # U-boat at surfaced depth
     u_boat.depth = Depth.SURFACED
     u_boat.position = HexCoord(3, 3)
@@ -120,14 +120,14 @@ def test_forced_dive_at_surfaced_in_shallow_does_not_destroy(escort_ai: EscortAI
     # Shallow hex at U-boat position
     shallow_hexes = {HexCoord(3, 3)}
     
-    # Escort moves into U-boat hex - should force dive but not destroy (surfaced -> medium is ok)
+    # Escort moves into U-boat hex - forced dive to MEDIUM not allowed in shallow water (max PERISCOPE)
     forced, msg, destroyed = escort_ai.check_forced_dive(
         destroyer, u_boat, u_boat.position, shallow_hexes
     )
     
     assert forced is True
-    assert destroyed is False
-    assert "DESTROYED" not in msg
+    assert destroyed is True
+    assert "DESTROYED" in msg
 
 
 def test_ship_blocks_forced_ascent_after_hull_damage(mock_dice: MockDice, u_boat: UBoat, destroyer: Ship) -> None:

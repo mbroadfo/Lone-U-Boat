@@ -299,7 +299,7 @@ class EventSystem:
                 damaged=ship_data.get('damaged', False)
             )
             spawned.append(ship)
-            messages.append(f"  Spawned {ship.ship_type} at {ship.position} facing {ship.facing.name}")
+            messages.append(f"  Spawned {ship.ship_type} at [{ship.position.q},{ship.position.r}] facing {ship.facing.name}")
         
         return spawned
     
@@ -344,7 +344,7 @@ class EventSystem:
                 aircraft_type=aircraft_data.get('type', 'b24')
             )
             spawned.append(aircraft)
-            messages.append(f"  Spawned {aircraft.aircraft_type.upper()} at {aircraft.position} facing {aircraft.facing.name}")
+            messages.append(f"  Spawned {aircraft.aircraft_type.upper()} at [{aircraft.position.q},{aircraft.position.r}] facing {aircraft.facing.name}")
         
         return spawned
     

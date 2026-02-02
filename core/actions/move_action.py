@@ -100,4 +100,4 @@ class MoveAction(Action):
     
     def get_description(self) -> str:
         """Get action description."""
-        return f"Move to {self.target_hex}"
+        return f"Move to [{self.target_hex.q},{self.target_hex.r}]"

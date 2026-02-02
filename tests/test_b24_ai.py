@@ -118,7 +118,7 @@ def test_b24_removed_when_exits_map():
     
     # Should be marked for removal
     assert remove
-    assert any("Off map" in msg for msg in messages)
+    assert any("flew off map" in msg.lower() or "off map" in msg.lower() for msg in messages)
 
 
 def test_b24_stops_at_first_hex_off_map():

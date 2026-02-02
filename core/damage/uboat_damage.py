@@ -474,25 +474,30 @@ class UBoatDamageResolver:
             UBoatDamageResult with damage effects
         """
         # Roll on damage chart
+        dice_info = ""  # Store dice roll information for description
         if attack_type == "gunfire":
             # Gunfire is automatic critical hit (roll 1 on chart)
             chart_roll = 1
-            print(f"[DAMAGE] Gunfire attack → automatic critical hit [1]")
+            dice_info = "Gunfire attack → automatic critical hit [1]"
+            print(f"[DAMAGE] {dice_info}")
         elif ship_type == "destroyer" and attack_type == "depth_charge":
             # Destroyer rolls 2d6, takes lowest
             roll1 = self.dice.roll_1d6()
             roll2 = self.dice.roll_1d6()
             chart_roll = min(roll1, roll2)
-            print(f"[DAMAGE] Destroyer depth charge: rolled 2d6 [{roll1},{roll2}], taking lowest [{chart_roll}]")
+            dice_info = f"Destroyer depth charge: rolled 2d6 [{roll1},{roll2}], taking lowest [{chart_roll}]"
+            print(f"[DAMAGE] {dice_info}")
         elif attack_type == "b24":
             # B-24 attack: roll 1d6
             chart_roll = self.dice.roll_1d6()
-            print(f"[DAMAGE] B-24 attack: rolled 1d6 [{chart_roll}]")
+            dice_info = f"B-24 attack: rolled 1d6 [{chart_roll}]"
+            print(f"[DAMAGE] {dice_info}")
         else:
             # Corvette or other: roll 1d6
             chart_roll = self.dice.roll_1d6()
             attack_source = ship_type.capitalize() if ship_type else "Unknown"
-            print(f"[DAMAGE] {attack_source} depth charge: rolled 1d6 [{chart_roll}]")
+            dice_info = f"{attack_source} depth charge: rolled 1d6 [{chart_roll}]"
+            print(f"[DAMAGE] {dice_info}")
         
         hull_damage = 0
         systems_damaged: List[str] = []
@@ -504,7 +509,9 @@ class UBoatDamageResolver:
         if chart_roll == 1:
             # Critical Hit!
             crit_roll = self.dice.roll_1d6()
-            print(f"[DAMAGE] Critical hit sub-table: rolled 1d6 [{crit_roll}]")
+            crit_info = f"Critical hit sub-table: rolled 1d6 [{crit_roll}]"
+            print(f"[DAMAGE] {crit_info}")
+            dice_info += f"\n        {crit_info}"  # Add to dice_info for description
             
             if crit_roll == 1:
                 # U-Boat Destroyed
@@ -540,7 +547,7 @@ class UBoatDamageResolver:
                 systems_damaged.extend(result1[0])
                 systems_damaged.extend(result2[0])
                 hull_damage = result1[1] + result2[1]
-                effect = f"Double damage: {result1[2]} AND {result2[2]}"
+                effect = f"Double damage: {result1[2]} (rolled [{result1[3]}]) AND {result2[2]} (rolled [{result2[3]}])"
                 description = f"Critical Hit! Roll {crit_roll}: {effect}"
                 if u_boat.hull_damage >= 4:
                     is_destroyed = True
@@ -558,10 +565,10 @@ class UBoatDamageResolver:
         
         elif chart_roll in [3, 4]:
             # General Damage - roll 1d6
-            systems, hull, effect = self._apply_general_damage_roll(u_boat)
+            systems, hull, effect, roll = self._apply_general_damage_roll(u_boat)
             systems_damaged.extend(systems)
             hull_damage = hull
-            description = f"Damage! {effect}"
+            description = f"Damage! {effect} (rolled [{roll}])"
             if u_boat.hull_damage >= 4:
                 is_destroyed = True
                 description += " - U-BOAT DESTROYED!"
@@ -597,13 +604,20 @@ class UBoatDamageResolver:
                 if ship_in_hex:
                     is_destroyed = True
                     u_boat.hull_damage = 4
+                    # Update description to reflect final hull damage
+                    import re
+                    description = re.sub(r'\(total: \d+\)', '(total: 4)', description)
                     description += " - Ship blocks forced ascent - U-BOAT DESTROYED!"
+        
+        # Prepend dice roll information to description
+        # Use actual newline for proper event log display
+        full_description = f"{dice_info}\n{description}"
         
         return UBoatDamageResult(
             damage_type="escort_attack",
             roll=chart_roll,
             effect=effect,
-            description=description,
+            description=full_description,
             hull_damage_taken=hull_damage,
             systems_damaged=systems_damaged,
             crew_casualties=crew_casualties,
@@ -611,12 +625,12 @@ class UBoatDamageResolver:
             is_destroyed=is_destroyed
         )
     
-    def _apply_general_damage_roll(self, u_boat: UBoat) -> Tuple[List[str], int, str]:
+    def _apply_general_damage_roll(self, u_boat: UBoat) -> Tuple[List[str], int, str, int]:
         """
         Apply general damage (3-4 on main chart).
         
         Returns:
-            (systems_damaged, hull_damage, effect_description)
+            (systems_damaged, hull_damage, effect_description, roll)
         """
         roll = self.dice.roll_1d6()
         print(f"[DAMAGE] General damage sub-table: rolled 1d6 [{roll}]")
@@ -662,7 +676,7 @@ class UBoatDamageResolver:
             else:
                 effect = "Deck Gun already damaged"
         
-        return (systems, hull, effect)
+        return (systems, hull, effect, roll)
     
     def _damage_torpedo_tubes(self, u_boat: UBoat, num_dice: int) -> List[int]:
         """

@@ -63,7 +63,7 @@ class B24AI:
         
         # Remove aircraft that flew off map (in reverse order to maintain indices)
         for i in reversed(aircraft_to_remove):
-            messages.append(f"B-24 at {aircraft_list[i].position} flew off map")
+            messages.append(f"  B-24 flew off map")
             aircraft_list.pop(i)
         
         return messages, new_dl
@@ -81,7 +81,7 @@ class B24AI:
             Tuple of (messages, new_detection_level, should_remove_aircraft)
         """
         messages = []
-        messages.append(f"B-24 at {aircraft.position} facing {aircraft.facing.name}")
+        messages.append(f"B-24 at [{aircraft.position.q},{aircraft.position.r}] facing {aircraft.facing.name}")
         
         # Step 1: Move 2 hexes
         moved_off_map = self._move_aircraft(aircraft, messages)
@@ -126,11 +126,11 @@ class B24AI:
             # Check if off map (use mission_hexes if available, otherwise just bounds)
             mission_hexes = getattr(self.hex_grid, 'mission_hexes', None)
             if not self.hex_grid.is_valid_hex(new_pos, mission_hexes):
-                messages.append(f"  → Move {move_num}: Off map")
+                messages.append(f"  → Move {move_num}: off map")
                 return True
             
             aircraft.position = new_pos
-            messages.append(f"  → Move {move_num}: to {new_pos}")
+            messages.append(f"  → Move {move_num}: to [{new_pos.q},{new_pos.r}]")
         
         return False
     
@@ -348,7 +348,7 @@ class B24AI:
         
         # Roll 1d6 for attack result
         roll = self.dice.roll_1d6()
-        messages.append(f"      Attack roll: {roll} (1-2=+2 hull, 3-4=damage chart, 5-6=miss)")
+        messages.append(f"      Attack roll: rolled 1d6 [{roll}] (1-2=+2 hull, 3-4=damage chart, 5-6=miss)")
         
         if roll <= 2:
             # +2 hull damage

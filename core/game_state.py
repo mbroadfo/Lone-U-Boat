@@ -388,7 +388,16 @@ class Game:
     
     def _execute_merchant_phase(self):
         """Execute merchant ship movements."""
-        self.turn_manager.add_phase_log("Merchant Phase", "Merchant ships acting...")
+        # Count merchants
+        merchant_count = sum(1 for ship in self.ships if ship.ship_type == 'merchant')
+        if merchant_count == 0:
+            return  # Skip if no merchants
+        
+        # Show merchant damage status
+        for ship in self.ships:
+            if ship.ship_type == 'merchant':
+                status = "damaged" if ship.damaged else "undamaged"
+                self.turn_manager.add_phase_log("Merchant Phase", f"Merchant ({status})")
         
         # Execute merchant AI
         messages = self.merchant_ai.execute_merchant_phase(self.ships)
@@ -426,9 +435,6 @@ class Game:
     
     def _execute_detection_phase(self):
         """Calculate detection level changes."""
-        self.turn_manager.add_phase_log("Detection Phase", "Calculating detection...")
-        self.turn_manager.add_phase_log("Detection Phase", f"Current DL={self.detection_level}")
-        
         # Execute detection AI
         new_detection_level, messages = self.detection_ai.execute_detection_phase(
             ships=self.ships,
@@ -449,8 +455,10 @@ class Game:
     
     def _execute_escort_phase(self):
         """Execute escort ship behaviors."""
-        self.turn_manager.add_phase_log("Escort Phase", "Escorts acting...")
-        self.turn_manager.add_phase_log("Escort Phase", f"DL={self.detection_level}")
+        # Count escorts
+        escort_count = sum(1 for ship in self.ships if ship.ship_type in ['corvette', 'destroyer'])
+        if escort_count == 0:
+            return  # Skip if no escorts
         
         # Execute escort AI
         new_detection_level, messages = self.escort_ai.execute_escort_phase(
@@ -476,6 +484,7 @@ class Game:
         # Check if U-boat was destroyed during escort phase
         is_destroyed, reason = self.escort_ai.damage_resolver.check_destruction(self.u_boat)
         if is_destroyed:
+            self.defeat_reason = 'destroyed'
             print(f"\n{'='*60}")
             print("MISSION FAILED - U-BOAT DESTROYED BY ESCORT!")
             print(f"{'='*60}")
@@ -519,6 +528,7 @@ class Game:
         # Check if U-boat was destroyed during B24 phase
         is_destroyed, reason = self.b24_ai.damage_resolver.check_destruction(self.u_boat)
         if is_destroyed:
+            self.defeat_reason = 'destroyed'
             print(f"\n{'='*60}")
             print("MISSION FAILED - U-BOAT DESTROYED BY AIRCRAFT!")
             print(f"{'='*60}")
@@ -542,14 +552,10 @@ class Game:
         # Add spawned ships
         for ship in result.spawned_ships:
             self.ships.append(ship)
-            msg = f"Spawned {ship.ship_type} at {ship.position}"
-            self.turn_manager.add_phase_log("End Turn Events", msg)
         
         # Add spawned aircraft
         for aircraft in result.spawned_aircraft:
             self.aircraft.append(aircraft)
-            msg = f"Spawned {aircraft.aircraft_type} at {aircraft.position}"
-            self.turn_manager.add_phase_log("End Turn Events", msg)
         
         # Handle special effects
         for effect in result.special_effects:

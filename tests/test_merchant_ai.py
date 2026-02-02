@@ -157,7 +157,7 @@ def test_merchant_undamaged_movement():
     
     assert new_pos == HexCoord(1, 5)
     assert new_facing == Facing.SOUTH
-    assert "moves to 1,5" in message
+    assert "moves to [1,5]" in message
     print("✓ Undamaged merchant moves to next waypoint")
 
 
@@ -184,7 +184,7 @@ def test_merchant_damaged_movement_success():
     assert new_pos == HexCoord(1, 5)
     assert new_facing == Facing.SOUTH
     assert "[4]" in message  # Check for bracketed roll format
-    assert "moves to 1,5" in message
+    assert "moves to [1,5]" in message
     print("✓ Damaged merchant with roll 4+ moves")
 
 

@@ -7,11 +7,14 @@ Handles:
 - Phase-specific logic execution
 """
 
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Dict, Any, TYPE_CHECKING
 from dataclasses import dataclass
 
 from .models import GamePhase, UBoat, Depth
 from .dice import DiceRoller
+
+if TYPE_CHECKING:
+    from .actions.action_history import ActionHistory
 
 
 @dataclass
@@ -121,7 +124,7 @@ class TurnManager:
         self.current_phase: GamePhase = GamePhase.UBOAT_PHASE
         self.ap_tracker: Optional[ActionPointTracker] = None
         self.remaining_ap: int = 0  # Track remaining AP for immediate execution
-        self.action_history = None  # Will be set to ActionHistory instance by GameState
+        self.action_history: Optional['ActionHistory'] = None  # Will be set by GameState
         self.phase_logs: Dict[str, List[str]] = {}
         self.depth_changed_this_turn: bool = False
         self.forced_dive_penalty: int = 0  # -2 AP if forced to dive
@@ -208,8 +211,7 @@ class TurnManager:
         self.ap_tracker = ActionPointTracker(ap)
         self.remaining_ap = ap  # Track remaining AP for immediate execution
         
-        self.add_phase_log("U-Boat Phase", 
-                         f"Turn {self.turn_number} started with {ap} AP")
+        # Don't add phase log here - AP roll already shown at turn start
         
         return ap
     
@@ -243,8 +245,7 @@ class TurnManager:
         self.ap_tracker = ActionPointTracker(ap)
         self.remaining_ap = ap  # Track remaining AP for immediate execution
         
-        self.add_phase_log("U-Boat Phase", 
-                         f"Turn {self.turn_number} started with {ap} AP")
+        # Don't add phase log here - AP roll already shown at turn start
         
         return ap
     
