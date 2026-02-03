@@ -412,9 +412,16 @@ class UnifiedGameScreen(BaseScreen):
                                         self.add_event("Must roll dice first (click ROLL DICE)")
                             
                             # If not exit, undo, or phase button, check regular action buttons
+                            # BUT only if not in interactive resolution mode
                             if not exit_button_clicked and not undo_button_clicked and not phase_button_clicked:
+                                # Block action buttons during interactive resolution
+                                in_interactive_resolution = (
+                                    self.torpedo_resolution_state is not None or
+                                    self.deck_gun_resolution_state is not None
+                                )
+                                
                                 from ..models import GamePhase
-                                if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
+                                if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE and not in_interactive_resolution:
                                     for action_id, button_data in self.action_button_rects.items():
                                         rect: pygame.Rect
                                         is_clickable: bool
