@@ -370,14 +370,15 @@ class UnifiedGameScreen(BaseScreen):
                         if self._handle_on_map_button_clicks(mouse_pos):
                             pass  # Button was handled
                         else:
-                            # Check EXIT MAP button first
+                            # Check if MOVE FORWARD button was clicked when exit conditions are met
                             exit_button_clicked = False
-                            if hasattr(self, 'exit_button_rect') and self.exit_button_rect:
-                                exit_rect, can_exit = self.exit_button_rect
-                                if exit_rect.collidepoint(mouse_pos):
+                            if 'move' in self.action_button_rects:
+                                move_rect, is_clickable = self.action_button_rects['move']
+                                can_exit, _ = self.game.can_exit_map()
+                                if move_rect.collidepoint(mouse_pos) and can_exit:
                                     exit_button_clicked = True
-                                    print(f"[DEBUG] EXIT MAP clicked: can_exit={can_exit}, game.running={self.game.running}")
-                                    if can_exit and self.game.running:  # Only trigger if game still running
+                                    print(f"[DEBUG] EXIT MAP (via MOVE FORWARD) clicked: can_exit={can_exit}, game.running={self.game.running}")
+                                    if is_clickable and self.game.running:  # Only trigger if game still running
                                         self.add_event("=== EXITING MAP ===")
                                         print("[DEBUG] Calling trigger_victory()...")
                                         self.game.trigger_victory()
@@ -755,6 +756,43 @@ class UnifiedGameScreen(BaseScreen):
             self._draw_game_over_overlay()
         
         pygame.display.flip()
+    
+    def _draw_destroyed_overlays(self, board_x: int, board_y: int, board_width: int, board_height: int) -> None:
+        """Draw visual feedback for entities destroyed this phase.
+        
+        Args:
+            board_x: X position of game board
+            board_y: Y position of game board
+            board_width: Width of game board
+            board_height: Height of game board
+        """
+        for destroyed in self.game.destroyed_this_phase:
+            position = destroyed['position']
+            
+            # Convert hex position to pixel position
+            pixel_x, pixel_y = self.game.renderer.hex_grid.hex_to_pixel(position)
+            
+            # Adjust to board offset
+            pixel_x += board_x
+            pixel_y += board_y
+            
+            # Draw semi-transparent red overlay box
+            overlay_size = 80
+            overlay_x = pixel_x - overlay_size // 2
+            overlay_y = pixel_y - overlay_size // 2
+            
+            # Create semi-transparent surface
+            overlay = pygame.Surface((overlay_size, overlay_size), pygame.SRCALPHA)
+            overlay.fill((255, 50, 50, 150))  # Red with alpha
+            self.screen.blit(overlay, (overlay_x, overlay_y))
+            
+            # Draw border
+            pygame.draw.rect(
+                self.screen,
+                (255, 100, 100),
+                (overlay_x, overlay_y, overlay_size, overlay_size),
+                3
+            )
     
     def _draw_game_over_overlay(self) -> None:
         """Draw victory or defeat overlay when game ends."""
@@ -2283,11 +2321,11 @@ class UnifiedGameScreen(BaseScreen):
         
         # Render ships
         for ship in self.game.ships:
-            self.game.renderer.render_ship(ship)
+            self.game.renderer.render_ship(ship, self.game.destroyed_this_phase)
         
         # Render aircraft (B-24s)
         for aircraft in self.game.aircraft:
-            self.game.renderer.render_aircraft(aircraft)  # type: ignore[attr-defined]
+            self.game.renderer.render_aircraft(aircraft, self.game.destroyed_this_phase)  # type: ignore[attr-defined]
         
         # Render U-boat
         if self.awaiting_initial_setup:
@@ -3100,6 +3138,9 @@ class UnifiedGameScreen(BaseScreen):
                      u_boat.flak_gun_damaged or 
                      damaged_tubes > 0)
         
+        # Check if exit conditions are met (for MOVE FORWARD button)
+        can_exit, _ = self.game.can_exit_map(current_position, current_facing)
+        
         # Define action buttons with cost info
         # Format: (label, action_id, enabled, action_name_for_cost)
         # Phase 2D: Use current_depth and current_position for all validations
@@ -3133,6 +3174,10 @@ class UnifiedGameScreen(BaseScreen):
             can_afford = cost is not None and cost <= remaining_ap
             is_clickable = enabled and can_afford
             
+            # Special handling for MOVE FORWARD button when exit conditions are met
+            if action_id == "move" and can_exit:
+                full_label = "EXIT MAP - " + str(cost) + " AP"
+            
             # Store rect AND clickable state
             self.action_button_rects[action_id] = (rect, is_clickable)
             
@@ -3141,7 +3186,17 @@ class UnifiedGameScreen(BaseScreen):
             is_hover = rect.collidepoint(mouse_pos)
             
             # Button color based on availability and hover
-            if is_clickable:
+            # Special green color for MOVE FORWARD when exit conditions are met
+            if action_id == "move" and can_exit and is_clickable:
+                # Green - ready to exit
+                if is_hover:
+                    color = (80, 180, 80)
+                    border_color = (120, 255, 120)
+                else:
+                    color = (60, 140, 60)
+                    border_color = (100, 200, 100)
+                text_color = (255, 255, 255)
+            elif is_clickable:
                 if is_hover:
                     color = (80, 110, 140)  # Lighter on hover
                     border_color = (120, 180, 230)
@@ -3166,42 +3221,7 @@ class UnifiedGameScreen(BaseScreen):
             
             button_y += button_height + button_spacing
         
-        # EXIT MAP button - add as last action button
-        # Phase 2D: Use current state to check if exit is possible
-        can_exit, _ = self.game.can_exit_map(current_position, current_facing)
-        exit_rect = pygame.Rect(button_x, button_y, button_width, button_height)
-        
-        # Get mouse position for hover
-        mouse_pos = pygame.mouse.get_pos()
-        is_hover = exit_rect.collidepoint(mouse_pos)
-        
-        # Button appearance
-        if can_exit:
-            # Green - ready to exit
-            if is_hover:
-                color = (80, 180, 80)
-                border_color = (120, 255, 120)
-            else:
-                color = (60, 140, 60)
-                border_color = (100, 200, 100)
-            text_color = (255, 255, 255)
-        else:
-            # Gray - cannot exit yet
-            color = (40, 40, 40)
-            border_color = (80, 80, 80)
-            text_color = (120, 120, 120)
-        
-        # Draw button
-        pygame.draw.rect(self.screen, color, exit_rect)
-        pygame.draw.rect(self.screen, border_color, exit_rect, 1)
-        self.draw_text("EXIT MAP", exit_rect.centerx, exit_rect.centery, 
-                      self.font_small, color=text_color, center=True)
-        
-        # Store rect for click detection
-        self.exit_button_rect = (exit_rect, can_exit)
-        
-        button_y += button_height + button_spacing
-        
+        # No separate EXIT MAP button - merged into MOVE FORWARD button above
         # Info section: Current depth and cost info (Phase 2D: simplified)
         info_y = button_y + 10
         
@@ -4481,6 +4501,12 @@ class UnifiedGameScreen(BaseScreen):
                     result_msgs.append(
                         f"HIT {ship.ship_type} at range {distance} - {damage_result.description} (die: {damage_die}) - SUNK!"
                     )
+                    # Record for destroyed overlay visual feedback
+                    self.game.record_destroyed_entity(
+                        entity_type=ship.ship_type,
+                        position=ship.position,
+                        name=ship.ship_type.upper()
+                    )
                     # Remove ship immediately
                     if ship in self.game.ships:
                         self.game.ships.remove(ship)
@@ -4585,6 +4611,12 @@ class UnifiedGameScreen(BaseScreen):
             # Log result
             if damage_result.is_now_sunk:
                 self.add_event(f"  Damage: {damage_result.description} - {ship.ship_type.upper()} SUNK!")
+                # Record for destroyed overlay visual feedback
+                self.game.record_destroyed_entity(
+                    entity_type=ship.ship_type,
+                    position=ship.position,
+                    name=ship.ship_type.upper()
+                )
                 # Remove ship
                 if ship in self.game.ships:
                     self.game.ships.remove(ship)

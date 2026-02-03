@@ -80,13 +80,13 @@ def test_merchant_movement_multiple_turns():
             # Advance through merchant phase
             game._advance_to_next_phase()
             
+            # Check position immediately after merchant phase
+            print(f"Turn {turn_num}: {merchant.position.q},{merchant.position.r}")
+            assert merchant.position == expected_pos, f"Turn {turn_num}: Expected {expected_pos}, got {merchant.position}"
+            
             # Skip other phases to start next turn
             while game.turn_manager.current_phase != GamePhase.UBOAT_PHASE:
                 game._advance_to_next_phase()
-            
-            # Check position
-            print(f"Turn {turn_num}: {merchant.position.q},{merchant.position.r}")
-            assert merchant.position == expected_pos, f"Turn {turn_num}: Expected {expected_pos}, got {merchant.position}"
     
     print("✓ Merchant follows expected path over multiple turns")
 

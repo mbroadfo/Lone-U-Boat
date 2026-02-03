@@ -51,6 +51,9 @@ class Game:
         self.running = True
         self.defeat_reason = None  # Track reason for defeat (None, 'destroyed', 'merchant_escaped')
         
+        # Track entities destroyed this phase for visual feedback
+        self.destroyed_this_phase: List[Dict[str, Any]] = []
+        
         # Load mission rules from JSON
         self.mission_rules = load_mission_rules(mission_number)
         
@@ -357,7 +360,9 @@ class Game:
         if not self.running:
             return
         
-        # Advance phase
+        # Advance phase (clean up destroyed entities before phase change)
+        self._cleanup_destroyed_entities()
+        
         _, turn_wrapped = self.turn_manager.advance_phase()
         
         # If wrapped to new turn, start it
@@ -506,12 +511,29 @@ class Game:
         self.turn_manager.add_phase_log("B24 Phase", msg)
         print(f"[EVENT] {msg}")
         
+        # Track aircraft before execution to identify destroyed ones
+        aircraft_before = {id(a): a for a in self.aircraft}
+        
         # Execute B-24 phase
         messages, new_dl = self.b24_ai.execute_b24_phase(
             aircraft_list=self.aircraft,  # Modified in place (aircraft removed if off map)
             u_boat=self.u_boat,
             detection_level=self.detection_level
         )
+        
+        # Record destroyed aircraft (check which were removed due to flak)
+        for msg in messages:
+            if "destroyed/driven off by flak" in msg.lower():
+                # Find which aircraft was destroyed by checking what's missing
+                aircraft_after = {id(a) for a in self.aircraft}
+                for aircraft_id, aircraft in aircraft_before.items():
+                    if aircraft_id not in aircraft_after:
+                        self.record_destroyed_entity(
+                            entity_type='b24',
+                            position=aircraft.position,
+                            name='B-24'
+                        )
+                        break
         
         # Log all messages
         for msg in messages:
@@ -691,6 +713,35 @@ class Game:
             return False, f"{merchant_count} merchant(s) still alive"
         
         return True, "Can exit"
+    
+    def record_destroyed_entity(self, entity_type: str, position: HexCoord, name: str) -> None:
+        """
+        Record an entity destroyed this phase for visual feedback.
+        
+        Args:
+            entity_type: Type of entity ('corvette', 'destroyer', 'merchant', 'b24')
+            position: Last known position of entity
+            name: Display name for overlay (e.g., 'CORVETTE', 'MERCHANT')
+        """
+        self.destroyed_this_phase.append({
+            'type': entity_type,
+            'position': position,
+            'name': name
+        })
+    
+    def _cleanup_destroyed_entities(self) -> None:
+        """Remove destroyed entities from game lists and clear tracking (called on phase advance)."""
+        # Remove ships marked for destruction
+        for destroyed in self.destroyed_this_phase:
+            if destroyed['type'] in ['corvette', 'destroyer', 'merchant']:
+                # Find and remove from ships list
+                self.ships = [s for s in self.ships if s.position != destroyed['position']]
+            elif destroyed['type'] == 'b24':
+                # Find and remove from aircraft list
+                self.aircraft = [a for a in self.aircraft if a.position != destroyed['position']]
+        
+        # Clear the destroyed list for next phase
+        self.destroyed_this_phase.clear()
     
     def _check_game_over_conditions(self):
         """Check if the game is over (victory or defeat)."""

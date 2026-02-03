@@ -5,7 +5,7 @@ Separated from game logic for cleaner architecture.
 
 import pygame
 import math
-from typing import Tuple, Set, Dict, Any, TYPE_CHECKING, Optional
+from typing import Tuple, Set, Dict, Any, TYPE_CHECKING, Optional, List
 
 from .models import HexCoord, UBoat, Ship, Facing, Depth
 
@@ -275,11 +275,12 @@ class GameRenderer:
                 destroyed_rect = scaled_destroyed.get_rect(center=(int(center[0]), int(center[1])))
                 self.screen.blit(scaled_destroyed, destroyed_rect)
     
-    def render_ship(self, ship: Ship) -> None:
+    def render_ship(self, ship: Ship, destroyed_list: Optional[List[Dict[str, Any]]] = None) -> None:
         """Render an allied ship using PNG images.
         
         Args:
             ship: Ship instance to render
+            destroyed_list: Optional list of destroyed entities this phase
         """
         center = self.hex_grid.hex_to_pixel(ship.position)
         
@@ -303,12 +304,30 @@ class GameRenderer:
         # Center the rotated image
         rect = rotated_image.get_rect(center=(int(center[0]), int(center[1])))
         self.screen.blit(rotated_image, rect)
+        
+        # If ship is destroyed (check destroyed_list), overlay destroyed icon
+        is_destroyed = False
+        if destroyed_list:
+            for destroyed in destroyed_list:
+                if destroyed.get('position') == ship.position and destroyed.get('type') in ['merchant', 'corvette', 'destroyer']:
+                    is_destroyed = True
+                    break
+        
+        if is_destroyed:
+            destroyed_image = self.marker_images.get('destroyed')
+            if destroyed_image:
+                # Scale destroyed icon to fit inside hex (about 80% of hex size)
+                target_size = int(self.hex_grid.size * 1.6)  # diameter = size * 2, use 80%
+                scaled_destroyed = pygame.transform.scale(destroyed_image, (target_size, target_size))
+                destroyed_rect = scaled_destroyed.get_rect(center=(int(center[0]), int(center[1])))
+                self.screen.blit(scaled_destroyed, destroyed_rect)
     
-    def render_aircraft(self, aircraft: 'Aircraft') -> None:
+    def render_aircraft(self, aircraft: 'Aircraft', destroyed_list: Optional[List[Dict[str, Any]]] = None) -> None:
         """Render aircraft (B-24) using PNG image.
         
         Args:
             aircraft: Aircraft instance to render
+            destroyed_list: Optional list of destroyed entities this phase
         """
         from .models import Aircraft
         
@@ -335,6 +354,23 @@ class GameRenderer:
         # Center the rotated image
         rect = rotated_image.get_rect(center=(int(center[0]), int(center[1])))
         self.screen.blit(rotated_image, rect)
+        
+        # If aircraft is destroyed (check destroyed_list), overlay destroyed icon
+        is_destroyed = False
+        if destroyed_list:
+            for destroyed in destroyed_list:
+                if destroyed.get('position') == aircraft.position and destroyed.get('type') == 'b24':
+                    is_destroyed = True
+                    break
+        
+        if is_destroyed:
+            destroyed_image = self.marker_images.get('destroyed')
+            if destroyed_image:
+                # Scale destroyed icon to fit inside hex (about 80% of hex size)
+                target_size = int(self.hex_grid.size * 1.6)  # diameter = size * 2, use 80%
+                scaled_destroyed = pygame.transform.scale(destroyed_image, (target_size, target_size))
+                destroyed_rect = scaled_destroyed.get_rect(center=(int(center[0]), int(center[1])))
+                self.screen.blit(scaled_destroyed, destroyed_rect)
     
     def render_drag_rectangle(self, start_pos: Tuple[int, int]) -> None:
         """Render drag rectangle for coordinate detection (editor mode)."""

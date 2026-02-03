@@ -50,9 +50,10 @@ class B24AI:
         
         # Process each B-24 in any order (we'll process in list order)
         aircraft_to_remove = []
+        destroyed_aircraft = []
         
         for i, aircraft in enumerate(aircraft_list):
-            msgs, dl_change, should_remove = self._activate_aircraft(
+            msgs, dl_change, should_remove, was_destroyed = self._activate_aircraft(
                 aircraft, u_boat, detection_level
             )
             messages.extend(msgs)
@@ -60,16 +61,21 @@ class B24AI:
             
             if should_remove:
                 aircraft_to_remove.append(i)
+                if was_destroyed:
+                    destroyed_aircraft.append(aircraft)
         
-        # Remove aircraft that flew off map (in reverse order to maintain indices)
+        # Remove aircraft that flew off map or were destroyed (in reverse order to maintain indices)
+        # Note: Destruction message already shown by _flak_defense, just remove from list
         for i in reversed(aircraft_to_remove):
-            messages.append(f"  B-24 flew off map")
+            aircraft = aircraft_list[i]
+            if aircraft not in destroyed_aircraft:
+                messages.append(f"  B-24 flew off map")
             aircraft_list.pop(i)
         
         return messages, new_dl
     
     def _activate_aircraft(self, aircraft: Aircraft, u_boat: UBoat, 
-                          detection_level: int) -> Tuple[List[str], int, bool]:
+                          detection_level: int) -> Tuple[List[str], int, bool, bool]:
         """Activate a single B-24.
         
         Args:
@@ -78,7 +84,7 @@ class B24AI:
             detection_level: Current detection level
         
         Returns:
-            Tuple of (messages, new_detection_level, should_remove_aircraft)
+            Tuple of (messages, new_detection_level, should_remove_aircraft, was_destroyed)
         """
         messages = []
         messages.append(f"B-24 at [{aircraft.position.q},{aircraft.position.r}] facing {aircraft.facing.name}")
@@ -86,7 +92,7 @@ class B24AI:
         # Step 1: Move 2 hexes
         moved_off_map = self._move_aircraft(aircraft, messages)
         if moved_off_map:
-            return messages, detection_level, True
+            return messages, detection_level, True, False
         
         # Step 2: Turn (only if DL 2-3)
         if detection_level >= 2:
@@ -101,14 +107,14 @@ class B24AI:
             # Flak defense first (if U-boat surfaced with undamaged flak gun)
             flak_destroyed = self._flak_defense(aircraft, u_boat, messages)
             if flak_destroyed:
-                return messages, detection_level, True  # B-24 destroyed/scared off
+                return messages, detection_level, True, True  # B-24 destroyed/scared off
             
             # B-24 attacks
             attack_result = self._execute_attack(aircraft, u_boat, messages)
             if attack_result:
                 new_dl = 3  # Successful attack reveals U-boat location
         
-        return messages, new_dl, False
+        return messages, new_dl, False, False
     
     def _move_aircraft(self, aircraft: Aircraft, messages: List[str]) -> bool:
         """Move B-24 two hexes forward.
@@ -321,7 +327,7 @@ class B24AI:
         messages.append(f"  → Flak defense: Rolled [{roll1}]+[{roll2}]={roll} (need {threshold_text})")
         
         if roll >= threshold:
-            messages.append("  → B-24 destroyed/scared off!")
+            messages.append("  → B-24 destroyed/driven off by flak!")
             return True
         else:
             messages.append("  → B-24 survives flak fire")
@@ -331,10 +337,10 @@ class B24AI:
                        messages: List[str]) -> bool:
         """Execute B-24 attack on U-boat.
         
-        Damage table:
-        - 1-2: +2 hull damage
-        - 3-4: Roll on U-Boat Damage Chart
-        - 5-6: Missed
+        Damage table (per rules):
+        - 1: Critical Hit (roll 2d6 on U-Boat Critical Hit sub-table)
+        - 2-3: General Damage (roll 1d6 on U-Boat General Damage sub-table)
+        - 4-6: No damage
         
         Args:
             aircraft: The attacking B-24
@@ -348,24 +354,28 @@ class B24AI:
         
         # Roll 1d6 for attack result
         roll = self.dice.roll_1d6()
-        messages.append(f"      Attack roll: rolled 1d6 [{roll}] (1-2=+2 hull, 3-4=damage chart, 5-6=miss)")
+        messages.append(f"      Attack roll: rolled 1d6 [{roll}] (1=critical, 2-3=general, 4-6=miss)")
         
-        if roll <= 2:
-            # +2 hull damage
-            u_boat.hull_damage += 2
-            messages.append(f"      +2 Hull Damage! U-boat at {u_boat.hull_damage}/4 hull")
+        if roll == 1:
+            # Critical Hit - roll on Critical Hit sub-table
+            messages.append("      → CRITICAL HIT!")
+            damage_result = self.damage_resolver.apply_critical_damage(u_boat)
+            messages.append(f"      {damage_result.description}")
             
-            if u_boat.hull_damage >= 4:
+            if damage_result.is_destroyed:
                 messages.append("      U-BOAT DESTROYED!")
             
             return True
         
-        elif roll <= 4:
-            # Roll on damage chart
-            damage_result = self.damage_resolver.apply_escort_attack_damage(
-                u_boat, attack_type="b24", ship_type=None
-            )
+        elif roll <= 3:
+            # General Damage - roll on General Damage sub-table
+            messages.append("      → General Damage")
+            damage_result = self.damage_resolver.apply_general_damage(u_boat)
             messages.append(f"      {damage_result.description}")
+            
+            if damage_result.is_destroyed:
+                messages.append("      U-BOAT DESTROYED!")
+            
             return True
         
         else:

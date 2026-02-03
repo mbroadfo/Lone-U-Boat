@@ -366,7 +366,7 @@ class EventSystem:
         """Get position on map edge furthest from U-boat on same hex-line.
         
         Returns:
-            HexCoord on edge of map
+            HexCoord on edge of map (guaranteed to be a valid mission hex)
         """
         if not self.game_state:
             return HexCoord(0, 0)
@@ -382,11 +382,43 @@ class EventSystem:
             max_r = max(h.r for h in hexes)
             
             # Find edge position furthest from U-boat on same or nearby line
-            # For now, use a simple heuristic: opposite edge from U-boat
-            edge_q = max_q if uboat_pos.q < (min_q + max_q) / 2 else min_q
-            edge_r = uboat_pos.r  # Same hex-line (approximately)
+            # Determine which edge (left or right)
+            target_edge_q = max_q if uboat_pos.q < (min_q + max_q) / 2 else min_q
             
-            return HexCoord(edge_q, edge_r)
+            # Try to find a valid hex on the same row as U-boat
+            target_r = uboat_pos.r
+            candidate = HexCoord(target_edge_q, target_r)
+            if candidate in hexes:
+                return candidate
+            
+            # If exact position not valid, find nearest valid hex on that edge
+            # Search nearby rows (±1, ±2, ±3)
+            for r_offset in range(0, max_r - min_r + 1):
+                for sign in [0, 1, -1]:  # Try same row first, then +/-, then -/+
+                    if sign == 0:
+                        test_r = target_r
+                    else:
+                        test_r = target_r + (r_offset * sign)
+                    
+                    if test_r < min_r or test_r > max_r:
+                        continue
+                    
+                    # Find the furthest q on this row in the target direction
+                    row_hexes = [h for h in hexes if h.r == test_r]
+                    if row_hexes:
+                        if target_edge_q == max_q:
+                            # Want rightmost hex
+                            furthest = max(row_hexes, key=lambda h: h.q)
+                        else:
+                            # Want leftmost hex
+                            furthest = min(row_hexes, key=lambda h: h.q)
+                        return furthest
+            
+            # Absolute fallback: any edge hex
+            edge_hexes = [h for h in hexes if h.q == min_q or h.q == max_q]
+            if edge_hexes:
+                # Return the one furthest from U-boat
+                return max(edge_hexes, key=lambda h: abs(h.q - uboat_pos.q) + abs(h.r - uboat_pos.r))
         
         # Fallback
         return HexCoord(uboat_pos.q + 10, uboat_pos.r)
