@@ -46,7 +46,29 @@ python main.py
 
 **The game is now fully playable!** All enemy behaviors are automated.
 
-### Recent Updates (January 2026)
+### Recent Updates (February 2026)
+
+#### UI/UX Polish & Combat Fixes ✅ Complete
+
+**Victory/Defeat Overlay Redesign:**
+- ✅ **Semi-transparent overlay** - Replaced opaque full-screen popup with 30% transparent overlay
+- ✅ **Badge graphics** - Victory and defeat badge images displayed prominently
+- ✅ **Visible game state** - Final board positions remain visible through overlay
+- ✅ **Compact stats** - Mission statistics in readable semi-transparent box
+- ✅ **Better polish** - Professional look matching destroyed entity overlay system
+
+**Combat System Fixes:**
+- ✅ **Torpedo wreckage fix** - Torpedoes now pass through destroyed ships instead of hitting wreckage
+- ✅ **Action blocking** - Combat resolution UI now blocks action button clicks to prevent accidental depth changes or moves during torpedo/deck gun resolution
+- ✅ **Type hints** - All 110+ Pylance type errors resolved (336/336 tests passing, 0 errors)
+
+**Impact:**
+- Players can see final mission state at victory/defeat
+- More realistic torpedo behavior (pass through wrecks)
+- No more accidental actions during combat
+- Zero type errors, fully type-safe codebase
+
+### Previous Updates (January 2026)
 
 #### Phase 2: Immediate Execution UI ✅ Complete
 Converted from queue-based action system to immediate execution with undo:

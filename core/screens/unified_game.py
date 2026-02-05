@@ -171,6 +171,8 @@ class UnifiedGameScreen(BaseScreen):
         self.kia_icon: Optional[pygame.Surface] = None
         self.detection_icon: Optional[pygame.Surface] = None
         self.torpedo_icon: Optional[pygame.Surface] = None
+        self.victory_badge: Optional[pygame.Surface] = None
+        self.defeat_badge: Optional[pygame.Surface] = None
         
         # Load each icon individually with error handling
         try:
@@ -192,6 +194,16 @@ class UnifiedGameScreen(BaseScreen):
             self.torpedo_icon = pygame.image.load(os.path.join(assets_path, 'Torpedo.png'))
         except Exception as e:
             print(f"Warning: Could not load Torpedo.png: {e}")
+        
+        try:
+            self.victory_badge = pygame.image.load(os.path.join(assets_path, 'victory_badge.png'))
+        except Exception as e:
+            print(f"Warning: Could not load victory_badge.png: {e}")
+        
+        try:
+            self.defeat_badge = pygame.image.load(os.path.join(assets_path, 'defeat_badge.png'))
+        except Exception as e:
+            print(f"Warning: Could not load defeat_badge.png: {e}")
     
     def add_event(self, message: str) -> None:
         """Add an event to the log."""
@@ -802,7 +814,7 @@ class UnifiedGameScreen(BaseScreen):
             )
     
     def _draw_game_over_overlay(self) -> None:
-        """Draw victory or defeat overlay when game ends."""
+        """Draw victory or defeat overlay with badge image."""
         screen_width = self.screen.get_width()
         screen_height = self.screen.get_height()
         
@@ -810,79 +822,110 @@ class UnifiedGameScreen(BaseScreen):
         # If defeat_reason is set, it's a defeat. Otherwise it's victory.
         is_victory = self.game.defeat_reason is None
         
-        # Semi-transparent overlay
+        # Light semi-transparent overlay (30% opacity) - lets game board show through
         overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
+        overlay.fill((0, 0, 0, 80))  # Much lighter than before
         self.screen.blit(overlay, (0, 0))
         
-        # Main box
-        box_width = 700
-        box_height = 400
-        box_x = (screen_width - box_width) // 2
-        box_y = (screen_height - box_height) // 2
+        # Draw badge image if available
+        badge = self.victory_badge if is_victory else self.defeat_badge
+        if badge:
+            # Scale badge to reasonable size (max 300px wide)
+            badge_width = badge.get_width()
+            badge_height = badge.get_height()
+            max_badge_width = 300
+            
+            if badge_width > max_badge_width:
+                scale_factor = max_badge_width / badge_width
+                new_width = int(badge_width * scale_factor)
+                new_height = int(badge_height * scale_factor)
+                badge = pygame.transform.smoothscale(badge, (new_width, new_height))
+                badge_width = new_width
+                badge_height = new_height
+            
+            # Position badge in upper-center
+            badge_x = (screen_width - badge_width) // 2
+            badge_y = 80
+            self.screen.blit(badge, (badge_x, badge_y))
+            
+            # Start stats below badge
+            y_pos = badge_y + badge_height + 40
+        else:
+            # Fallback: text-only title if badge image not available
+            title = "MISSION SUCCESS" if is_victory else "MISSION FAILED"
+            title_color = (150, 255, 150) if is_victory else (255, 150, 150)
+            self.draw_text(
+                title,
+                screen_width // 2,
+                100,
+                self.font_large,
+                color=title_color,
+                center=True
+            )
+            y_pos = 180
         
-        # Draw box background
-        box_color = (20, 60, 20) if is_victory else (60, 20, 20)
-        border_color = (100, 255, 100) if is_victory else (255, 100, 100)
-        pygame.draw.rect(self.screen, box_color, (box_x, box_y, box_width, box_height))
-        pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_width, box_height), 5)
-        
-        # Title
-        title = "🎯 MISSION SUCCESS! 🎯" if is_victory else "💀 MISSION FAILED 💀"
-        title_color = (150, 255, 150) if is_victory else (255, 150, 150)
-        self.draw_text(
-            title,
-            screen_width // 2,
-            box_y + 60,
-            self.font_large,
-            color=title_color,
-            center=True
-        )
-        
-        # Mission details
-        y_pos = box_y + 140
-        line_height = 40
+        # Mission stats in compact format
+        line_height = 35
         
         if is_victory:
-            details = [
+            stats = [
                 "All merchant ships destroyed!",
                 "",
-                f"Turn: {self.game.turn_manager.turn_number}",
-                f"Final Position: {self.game.u_boat.position}",
+                f"Completed in {self.game.turn_manager.turn_number} turns",
                 f"Hull Damage: {self.game.u_boat.hull_damage}/4",
-                "",
-                "Press ESC to return to menu"
             ]
         else:
             # Defeat - check the reason
             if self.game.defeat_reason == 'merchant_escaped':
-                reason = "Merchant ship escaped - Mission objective failed"
+                reason = "Merchant escaped - Objective failed"
             elif self.game.defeat_reason == 'destroyed':
                 is_destroyed, destruction_reason = self.game.escort_ai.damage_resolver.check_destruction(self.game.u_boat)
                 reason = destruction_reason if is_destroyed else "U-boat destroyed"
             else:
-                reason = "Unknown"
+                reason = "Mission failed"
             
-            details = [
-                f"Reason: {reason}",
+            stats = [
+                reason,
                 "",
-                f"Turn: {self.game.turn_manager.turn_number}",
-                f"Final Position: {self.game.u_boat.position}",
+                f"Survived {self.game.turn_manager.turn_number} turns",
                 f"Hull Damage: {self.game.u_boat.hull_damage}/4",
-                "",
-                "Press ESC to return to menu"
             ]
         
-        for detail in details:
-            self.draw_text(
-                detail,
-                screen_width // 2,
-                y_pos,
-                self.font_medium if detail else self.font_small,
-                color=(220, 220, 220),
-                center=True
-            )
-            y_pos += line_height if detail else 20
+        # Draw stats with semi-transparent background
+        stats_height = len(stats) * line_height + 80
+        stats_width = 500
+        stats_x = (screen_width - stats_width) // 2
+        stats_y = y_pos - 20
+        
+        # Stats box background
+        stats_bg = pygame.Surface((stats_width, stats_height), pygame.SRCALPHA)
+        stats_bg.fill((20, 30, 40, 200))
+        self.screen.blit(stats_bg, (stats_x, stats_y))
+        pygame.draw.rect(self.screen, (100, 120, 150), (stats_x, stats_y, stats_width, stats_height), 2)
+        
+        # Draw stats text
+        for stat in stats:
+            if stat:  # Skip empty strings
+                self.draw_text(
+                    stat,
+                    screen_width // 2,
+                    y_pos,
+                    self.font_medium,
+                    color=(220, 230, 240),
+                    center=True
+                )
+            y_pos += line_height if stat else 20
+        
+        # ESC prompt at bottom
+        y_pos += 20
+        self.draw_text(
+            "Press ESC to return to menu",
+            screen_width // 2,
+            y_pos,
+            self.font_small,
+            color=(180, 200, 220),
+            center=True
+        )
     
     def _draw_top_bar(self, width: int, height: int) -> None:
         """Draw the top title bar."""
@@ -4575,6 +4618,26 @@ class UnifiedGameScreen(BaseScreen):
         
         ship, distance, aspect = targets[current_target_idx]
         current_torpedo_idx = state['current_torpedo_idx']
+        
+        # Skip if ship has been destroyed (sunk by earlier torpedo in this salvo)
+        if ship not in self.game.ships:
+            # Ship already sunk - torpedo passes through
+            # Move to next target
+            if current_target_idx + 1 < len(targets):
+                state['current_target_idx'] += 1
+                return  # Re-process with next target
+            else:
+                # No more targets - torpedo exits map
+                # Start next torpedo from first target
+                if torpedoes_available > 0:
+                    state['torpedoes_available'] -= 1
+                    state['current_torpedo_idx'] += 1
+                    state['current_target_idx'] = 0
+                    state['waiting_for'] = 'hit'
+                    return
+                else:
+                    self._finish_torpedo_resolution()
+                    return
         
         if waiting_for == 'hit':
             # Roll for hit (1d6)

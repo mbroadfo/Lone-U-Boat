@@ -1,24 +1,57 @@
-# Phase 5 Development Plan: Escort AI & Combat Systems
+# Phase 5 Development Plan: Polish & Quality of Life
 
 ## Overview
 
-Phase 5 completes the AI automation and combat systems for enemy forces, making the game fully playable with automated opponent behavior.
+Phase 5 focuses on polish, UI improvements, and essential quality of life features to make the game production-ready.
 
-## Current Status (January 2026)
+## Current Status (February 2026)
 
 **Completed:**
 - ✅ Phase 1: Turn system (6-phase cycle, AP rolling)
 - ✅ Phase 2: All validators (movement, combat, depth, repair, torpedoes)
 - ✅ Phase 3: All 7 U-boat actions (Move, Rotate, DepthChange, Repair, DeckGun, LoadTorpedo, FireTorpedo)
 - ✅ Phase 4: Merchant AI, Detection AI, Escort AI, B-24 AI (all automated)
-- ✅ Phase 5: Victory/Defeat conditions (EXIT MAP button, merchant escape, U-boat destruction)
+- ✅ Victory/Defeat conditions (EXIT MAP button, merchant escape, U-boat destruction)
+- ✅ Type hint cleanup (336/336 tests passing, 0 Pylance errors)
+- ✅ Combat resolution UI blocking (prevents accidental actions during combat)
 
-**Test Coverage:** 268+ tests across 26+ test files
+**Test Coverage:** 336 tests across 24+ test files, **all passing**
 
 **Mission 1 Status:**
 - ✅ Fully playable with automated AI
 - ✅ All game-ending conditions implemented and tested
 - ✅ Complete turn-based gameplay loop functional
+- ✅ Zero type errors, comprehensive test coverage
+
+## Phase 5 Immediate Priorities
+
+### Must Have (Next 2-3 Weeks)
+
+1. **Victory/Defeat Visual Overhaul** ⬜ HIGH PRIORITY
+   - Replace full-screen popup with non-intrusive overlay
+   - Show final game state (like destroyed entity overlays)
+   - Add proper victory overlay (currently missing)
+   - Top banner or corner indicator instead of modal dialog
+   - Allow player to see final positions before returning to menu
+
+2. **Save/Load System** ⬜
+   - Save game state mid-mission
+   - Resume from saved games
+   - Auto-save on phase transitions
+   - Save file management UI
+
+3. **Sound Effects** ⬜
+   - Torpedo fire/hit sounds
+   - Depth charge explosions
+   - Sonar pings
+   - Ship destruction
+   - Phase transition sounds
+
+4. **Tutorial/Help System** ⬜
+   - In-game help overlay
+   - Action tooltips
+   - Quick reference card
+   - First-time player guidance
 
 ## Phase 5 Scope
 
