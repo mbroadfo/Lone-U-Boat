@@ -58,6 +58,12 @@ class UnifiedGameScreen(BaseScreen):
         self.awaiting_initial_setup = True  # Player needs to choose depth/facing
         self.selected_depth = Depth.SURFACED
         self.selected_facing = Facing.NORTH
+        self.showing_exit_confirmation = False  # ESC confirmation dialog
+        
+        # Setup UI rects (for clickable buttons)
+        self.setup_depth_rects: Dict[Depth, pygame.Rect] = {}
+        self.setup_facing_rects: Dict[str, pygame.Rect] = {}  # 'left', 'right'
+        self.setup_begin_rect: Optional[pygame.Rect] = None
         
         # Track if mission has been started before (for restart detection)
         self.mission_has_started_once = False
@@ -228,8 +234,11 @@ class UnifiedGameScreen(BaseScreen):
         """Handle all game events."""
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                # Return to main menu
-                self.transition_to('menu')
+                # Show exit confirmation dialog if in game, otherwise return to menu
+                if not self.awaiting_initial_setup and self.game.running:
+                    self.showing_exit_confirmation = True
+                else:
+                    self.transition_to('menu')
             
             elif event.key == pygame.K_F11:
                 # Toggle fullscreen via screen manager
@@ -248,6 +257,8 @@ class UnifiedGameScreen(BaseScreen):
                     self.game.show_status_boxes = True  # Enable status boxes in edit mode
                 else:
                     self.add_event("Alignment mode OFF")
+                    self.game.show_grid = False  # Turn off grid
+                    self.game.show_map = False  # Turn off map icons
                     self.game.show_status_boxes = False  # Disable status boxes when exiting edit mode
             
             # Alignment mode controls
@@ -389,20 +400,15 @@ class UnifiedGameScreen(BaseScreen):
                                 can_exit, _ = self.game.can_exit_map()
                                 if move_rect.collidepoint(mouse_pos) and can_exit:
                                     exit_button_clicked = True
-                                    print(f"[DEBUG] EXIT MAP (via MOVE FORWARD) clicked: can_exit={can_exit}, game.running={self.game.running}")
                                     if is_clickable and self.game.running:  # Only trigger if game still running
                                         self.add_event("=== EXITING MAP ===")
-                                        print("[DEBUG] Calling trigger_victory()...")
                                         self.game.trigger_victory()
-                                        print(f"[DEBUG] After trigger_victory: game.running={self.game.running}, defeat_reason={self.game.defeat_reason}")
                                     elif not self.game.running:
                                         # Game already over, ignore clicks
-                                        print("[DEBUG] Game already over, ignoring click")
                                         pass
                                     else:
                                         _, reason = self.game.can_exit_map()
                                         self.add_event(f"Cannot exit: {reason}")
-                                        print(f"[DEBUG] Cannot exit: {reason}")
                             
                             # Phase 2C: Check UNDO button
                             undo_button_clicked = False
@@ -448,9 +454,12 @@ class UnifiedGameScreen(BaseScreen):
                                                 self._queue_action(action_id)
                                             break
                 
-                if self.awaiting_initial_setup:
+                if self.showing_exit_confirmation:
+                    # Handle exit confirmation clicks
+                    self._handle_exit_confirmation_clicks(mouse_pos)
+                elif self.awaiting_initial_setup:
                     # Handle setup clicks
-                    pass  # Will implement click handling
+                    self._handle_setup_clicks(mouse_pos)
                 else:
                     # Handle game clicks
                     pass
@@ -3194,12 +3203,52 @@ class UnifiedGameScreen(BaseScreen):
         # Define action buttons with cost info
         # Format: (label, action_id, enabled, action_name_for_cost)
         # Phase 2D: Use current_depth and current_position for all validations
+        # Check if depth has already changed this turn
+        depth_changed_this_turn = self.game.turn_manager.depth_changed_this_turn
+        
+        # Calculate depth button states
+        # DIVE button enabled if:
+        # - Not at DEEP depth
+        # - Haven't changed depth this turn
+        # - Hull damage doesn't prevent going deeper
+        # - Can go one level deeper (checked by validator)
+        from ..depth_validator import DepthValidator
+        depth_validator = DepthValidator(self.game.shallow_hexes)
+        
+        # DIVE: Check if we can go one level deeper
+        dive_enabled = False
+        if not depth_changed_this_turn and current_depth != Depth.DEEP:
+            # Calculate target depth (one level deeper)
+            depth_order = [Depth.SURFACED, Depth.PERISCOPE, Depth.MEDIUM, Depth.DEEP]
+            current_idx = depth_order.index(current_depth)
+            if current_idx < len(depth_order) - 1:  # Not at deepest
+                target_depth = depth_order[current_idx + 1]
+                # Check if validator allows it
+                can_dive, _ = depth_validator.can_change_depth(
+                    u_boat, target_depth, current_position, self.game.ships, depth_changed_this_turn
+                )
+                dive_enabled = can_dive
+        
+        # SURFACE: Check if we can go one level shallower
+        surface_enabled = False
+        if not depth_changed_this_turn and current_depth != Depth.SURFACED:
+            # Calculate target depth (one level shallower)
+            depth_order = [Depth.SURFACED, Depth.PERISCOPE, Depth.MEDIUM, Depth.DEEP]
+            current_idx = depth_order.index(current_depth)
+            if current_idx > 0:  # Not at shallowest
+                target_depth = depth_order[current_idx - 1]
+                # Check if validator allows it
+                can_surface, _ = depth_validator.can_change_depth(
+                    u_boat, target_depth, current_position, self.game.ships, depth_changed_this_turn
+                )
+                surface_enabled = can_surface
+        
         actions: list[tuple[str, str, bool, str]] = [
             ("MOVE FORWARD", "move", True, "MOVE"),  # Movement validation happens in MovementValidator
             ("ROTATE LEFT", "rotate_l", True, "TURN"),
             ("ROTATE RIGHT", "rotate_r", True, "TURN"),
-            ("DIVE", "dive", current_depth != Depth.DEEP, "CHANGE DEPTH"),
-            ("SURFACE", "surface", current_depth != Depth.SURFACED, "CHANGE DEPTH"),
+            ("DIVE", "dive", dive_enabled, "CHANGE DEPTH"),
+            ("SURFACE", "surface", surface_enabled, "CHANGE DEPTH"),
             ("REPAIR", "repair", has_damage, "REPAIR"),  # Enabled if something damaged
             ("FIRE DECK GUN", "deck_gun", not u_boat.deck_gun_damaged and current_depth == Depth.SURFACED and self._has_valid_deck_gun_targets(current_position), "FIRE DECK GUN"),
             ("LOAD TORPEDOES", "load_torp", empty_tubes > 0, "LOAD TORPS"),  # Phase 2E: No queue checking needed
@@ -4325,15 +4374,36 @@ class UnifiedGameScreen(BaseScreen):
                 u_boat = state['u_boat']
                 tube_idx = tube_num - 1  # Convert to 0-based
                 
-                # Check if tube is loaded
+                # Check if tube is loaded (only allow selecting loaded tubes)
                 if u_boat.torpedo_tubes[tube_idx] != TubeState.LOADED:
-                    self.add_event(f"Tube {tube_num} is empty")
+                    if u_boat.torpedo_tubes[tube_idx] == TubeState.DAMAGED:
+                        self.add_event(f"Tube {tube_num} is damaged")
+                    else:
+                        self.add_event(f"Tube {tube_num} is not loaded")
                     return
                 
                 if tube_num in state['selected_tubes']:
+                    # Deselect
                     state['selected_tubes'].remove(tube_num)
                     self.add_event(f"Deselected Tube {tube_num}")
                 else:
+                    # Check 3-torpedo limit BEFORE selecting
+                    if len(state['selected_tubes']) >= 3:
+                        self.add_event("Can fire maximum 3 torpedoes per action")
+                        return
+                    
+                    # Check front/rear restriction
+                    has_front = any(t <= 4 for t in state['selected_tubes'])
+                    has_rear = any(t == 5 for t in state['selected_tubes'])
+                    
+                    if tube_num <= 4 and has_rear:
+                        self.add_event("Cannot mix front and rear tubes")
+                        return
+                    elif tube_num == 5 and has_front:
+                        self.add_event("Cannot mix front and rear tubes")
+                        return
+                    
+                    # Select
                     state['selected_tubes'].append(tube_num)
                     self.add_event(f"Selected Tube {tube_num}")
                 return
@@ -4394,6 +4464,11 @@ class UnifiedGameScreen(BaseScreen):
                     # Open interactive resolution UI
                     targets = result.state_changes['targets']
                     
+                    # Torpedoes fire regardless of whether there are ships in line
+                    # They travel forward until hitting land or leaving map
+                    target_count = len(targets)
+                    target_text = f"{target_count} ship(s)" if target_count > 0 else "no targets in line"
+                    
                     self.torpedo_resolution_state = {
                         'targets': targets,
                         'current_target_idx': 0,
@@ -4406,15 +4481,14 @@ class UnifiedGameScreen(BaseScreen):
                         'snapshot': snapshot,
                         'ap_cost': ap_cost
                     }
-                    self.add_event(f"=== TORPEDO ATTACK: {len(tube_indices)} torpedo(es) vs {len(targets)} ship(s) ===")
+                    self.add_event(f"=== TORPEDO ATTACK: {len(tube_indices)} torpedo(es) vs {target_text} ===")
                     
                     # Close selection UI - moving to resolution
                     self.fire_torpedo_selection_state = None
                 else:
-                    # No targets in range - refund AP and keep selection open
-                    self.game.turn_manager.remaining_ap += ap_cost
-                    self.add_event("⚠ No ships in range for torpedo attack")
-                    # Don't close selection UI - let user cancel or try different tubes
+                    # Action failed validation - this shouldn't happen after UI validation
+                    self.add_event("✗ Torpedo firing failed validation")
+                    self.fire_torpedo_selection_state = None
                     return
             else:
                 self.add_event("Select at least one tube to fire")
@@ -4589,12 +4663,8 @@ class UnifiedGameScreen(BaseScreen):
         # Log result
         self.add_event(f"✓ Deck Gun: {message}")
         
-        # Record in action history for undo (AP already deducted when opening resolution)
-        if snapshot:
-            # Create a dummy action for history tracking
-            from ..actions.deck_gun_action import DeckGunAction
-            dummy_action = DeckGunAction([], None, None, None, None)  # type: ignore
-            self.game.action_history.record_action(dummy_action, ap_cost, snapshot)
+        # Deck gun attack uses dice rolls - CLEAR undo buffer (cannot undo dice-rolled actions)
+        self.game.action_history.clear()
         
         # Clear resolution state
         self.deck_gun_resolution_state = None
@@ -4610,6 +4680,23 @@ class UnifiedGameScreen(BaseScreen):
         targets = state['targets']
         torpedoes_available = state['torpedoes_available']
         waiting_for = state['waiting_for']
+        
+        # Special case: No targets (fired into empty space)
+        if len(targets) == 0:
+            if torpedoes_available > 0:
+                # Show miss message for current torpedo
+                current_torpedo_idx = state['current_torpedo_idx']
+                self.add_event(f"Torpedo #{current_torpedo_idx + 1}: MISS (no targets in line)")
+                state['torpedoes_available'] -= 1
+                state['current_torpedo_idx'] += 1
+                
+                # If more torpedoes, continue with next
+                if torpedoes_available - 1 <= 0:
+                    self._finish_torpedo_resolution()
+                return
+            else:
+                self._finish_torpedo_resolution()
+                return
         
         # Check if finished
         if torpedoes_available <= 0 or current_target_idx >= len(targets):
@@ -4765,14 +4852,8 @@ class UnifiedGameScreen(BaseScreen):
         # Summary
         self.add_event(f"=== TORPEDO ATTACK COMPLETE: {hits}/{torpedo_count} hits ===")
         
-        # Record in action history for undo (AP already deducted when opening resolution)
-        snapshot = state.get('snapshot')
-        ap_cost = state.get('ap_cost', 0)
-        if snapshot:
-            # Create a dummy action for history tracking
-            from ..actions.fire_torpedo_action import FireTorpedoAction
-            dummy_action = FireTorpedoAction([], None, None, None, None, None)  # type: ignore
-            self.game.action_history.record_action(dummy_action, ap_cost, snapshot)
+        # Torpedo attack uses dice rolls - CLEAR undo buffer (cannot undo dice-rolled actions)
+        self.game.action_history.clear()
         
         # Clear resolution state
         self.torpedo_resolution_state = None
@@ -5599,6 +5680,13 @@ class UnifiedGameScreen(BaseScreen):
             # Log the action
             action_name = action.get_description()
             self.add_event(f"Executed: {action_name} (cost: {ap_cost} AP)")
+            
+            # Auto-advance phase if AP exhausted during U-Boat phase
+            from ..models import GamePhase
+            if (self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE and 
+                self.game.turn_manager.remaining_ap <= 0):
+                self.add_event("→ No AP remaining, advancing to Merchant Phase")
+                self._advance_phase_and_update_ui()
             
         except Exception as e:
             self.add_event(f"Error executing {action_id}: {str(e)}")
