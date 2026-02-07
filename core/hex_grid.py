@@ -51,6 +51,20 @@ class HexGrid:
         y = self.size * (math.sqrt(3) * (coord.r + coord.q / 2))
         return (x + self.offset_x, y + self.offset_y)
     
+    def hex_to_pixel_float(self, q: float, r: float) -> Tuple[float, float]:
+        """Convert fractional axial coordinates to pixel coordinates for animation.
+        
+        Args:
+            q: Fractional q coordinate
+            r: Fractional r coordinate
+        
+        Returns:
+            Pixel coordinates as (x, y)
+        """
+        x = self.size * (3/2 * q)
+        y = self.size * (math.sqrt(3) * (r + q / 2))
+        return (x + self.offset_x, y + self.offset_y)
+    
     def pixel_to_hex(self, x: float, y: float) -> HexCoord:
         """Convert pixel coordinates to axial hex coordinates (flat-top hexes)."""
         # Adjust for offset

@@ -29,6 +29,8 @@ from missions.mission_rules_loader import load_mission_rules
 class Game:
     """Main game state and gameplay logic (editor features removed)."""
     
+    animation_manager: Any  # Type hint for animation manager (set externally)
+    
     def __init__(
         self,
         mission_number: int = 1,
@@ -404,8 +406,38 @@ class Game:
                 status = "damaged" if ship.damaged else "undamaged"
                 self.turn_manager.add_phase_log("Merchant Phase", f"Merchant ({status})")
         
+        # Store ship states before movement for animation
+        ship_states_before = []
+        for ship in self.ships:
+            ship_states_before.append({
+                'position': ship.position,
+                'facing': ship.facing
+            })
+        
         # Execute merchant AI
         messages = self.merchant_ai.execute_merchant_phase(self.ships)
+        
+        # Trigger animations for ships that moved or rotated
+        if hasattr(self, 'animation_manager'):
+            for ship_idx, ship in enumerate(self.ships):
+                if ship.ship_type == 'merchant':
+                    old_state = ship_states_before[ship_idx]
+                    
+                    # Trigger rotation animation if facing changed
+                    if old_state['facing'] != ship.facing:
+                        self.animation_manager.start_ship_rotation(
+                            ship_idx,
+                            old_state['facing'],
+                            ship.facing
+                        )
+                    
+                    # Trigger movement animation if position changed
+                    if old_state['position'] != ship.position:
+                        self.animation_manager.start_ship_movement(
+                            ship_idx,
+                            old_state['position'],
+                            ship.position
+                        )
         
         # Log all merchant movements
         for message in messages:
@@ -465,6 +497,14 @@ class Game:
         if escort_count == 0:
             return  # Skip if no escorts
         
+        # Store ship states before movement for animation
+        ship_states_before = []
+        for ship in self.ships:
+            ship_states_before.append({
+                'position': ship.position,
+                'facing': ship.facing
+            })
+        
         # Execute escort AI
         new_detection_level, messages = self.escort_ai.execute_escort_phase(
             ships=self.ships,
@@ -476,6 +516,28 @@ class Game:
             shallow_hexes=self.shallow_hexes,
             turn_manager=self.turn_manager
         )
+        
+        # Trigger animations for ships that moved or rotated
+        if hasattr(self, 'animation_manager'):
+            for ship_idx, ship in enumerate(self.ships):
+                if ship.ship_type in ['corvette', 'destroyer']:
+                    old_state = ship_states_before[ship_idx]
+                    
+                    # Trigger rotation animation if facing changed
+                    if old_state['facing'] != ship.facing:
+                        self.animation_manager.start_ship_rotation(
+                            ship_idx,
+                            old_state['facing'],
+                            ship.facing
+                        )
+                    
+                    # Trigger movement animation if position changed
+                    if old_state['position'] != ship.position:
+                        self.animation_manager.start_ship_movement(
+                            ship_idx,
+                            old_state['position'],
+                            ship.position
+                        )
         
         # Log all escort action messages
         for message in messages:

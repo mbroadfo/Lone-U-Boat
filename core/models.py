@@ -47,6 +47,11 @@ class Facing(Enum):
         """Rotate one hex edge counterclockwise."""
         return Facing((self.value - 1) % 6)
     
+    def to_degrees(self) -> float:
+        """Convert facing to angle in degrees (0 = North, clockwise)."""
+        # Flat-top hexes: North=0°, NE=60°, SE=120°, S=180°, SW=240°, NW=300°
+        return float(self.value * 60)
+    
     def forward(self, coord: 'HexCoord') -> 'HexCoord':
         """Get the hex coordinate in front of this facing (axial coordinates)."""
         # Constant axial direction vectors for flat-top hexes

@@ -244,21 +244,32 @@ class GameRenderer:
         pygame.draw.polygon(surface, color_with_alpha, corners)
         self.screen.blit(surface, (0, 0))
     
-    def render_u_boat(self, u_boat: UBoat) -> None:
+    def render_u_boat(self, u_boat: UBoat, animated_pos: Optional[Tuple[float, float]] = None, 
+                      animated_angle: Optional[float] = None) -> None:
         """Render the U-boat using depth-specific PNG images.
         
         Args:
             u_boat: UBoat instance to render
+            animated_pos: Optional animated position as (q, r) floats for interpolation
+            animated_angle: Optional animated angle in degrees for rotation
         """
-        center = self.hex_grid.hex_to_pixel(u_boat.position)
+        # Use animated position if provided, otherwise use actual position
+        if animated_pos:
+            center = self.hex_grid.hex_to_pixel_float(animated_pos[0], animated_pos[1])
+        else:
+            center = self.hex_grid.hex_to_pixel(u_boat.position)
         
         # Get the appropriate image for current depth
         image = self.u_boat_images.get(u_boat.depth)
         if image is None:
             return
         
-        # Rotate image based on facing (aligned with hex edges)
-        angle_deg = -60 * u_boat.facing.value
+        # Use animated angle if provided, otherwise use actual facing
+        if animated_angle is not None:
+            angle_deg = -animated_angle  # Negative for pygame rotation
+        else:
+            angle_deg = -60 * u_boat.facing.value
+        
         rotated_image = pygame.transform.rotate(image, angle_deg)
         
         # Center the rotated image
@@ -275,14 +286,22 @@ class GameRenderer:
                 destroyed_rect = scaled_destroyed.get_rect(center=(int(center[0]), int(center[1])))
                 self.screen.blit(scaled_destroyed, destroyed_rect)
     
-    def render_ship(self, ship: Ship, destroyed_list: Optional[List[Dict[str, Any]]] = None) -> None:
+    def render_ship(self, ship: Ship, destroyed_list: Optional[List[Dict[str, Any]]] = None,
+                    animated_pos: Optional[Tuple[float, float]] = None,
+                    animated_angle: Optional[float] = None) -> None:
         """Render an allied ship using PNG images.
         
         Args:
             ship: Ship instance to render
             destroyed_list: Optional list of destroyed entities this phase
+            animated_pos: Optional animated position as (q, r) floats for interpolation
+            animated_angle: Optional animated angle in degrees for rotation
         """
-        center = self.hex_grid.hex_to_pixel(ship.position)
+        # Use animated position if provided, otherwise use actual position
+        if animated_pos:
+            center = self.hex_grid.hex_to_pixel_float(animated_pos[0], animated_pos[1])
+        else:
+            center = self.hex_grid.hex_to_pixel(ship.position)
         
         # Get the appropriate image
         image_key = f"{ship.ship_type}_damaged" if ship.damaged else ship.ship_type
@@ -297,8 +316,12 @@ class GameRenderer:
                 pygame.draw.rect(self.screen, (255, 0, 0), rect, 3)
             return
         
-        # Rotate image based on facing (aligned with hex edges)
-        angle_deg = -60 * ship.facing.value
+        # Use animated angle if provided, otherwise use actual facing
+        if animated_angle is not None:
+            angle_deg = -animated_angle  # Negative for pygame rotation
+        else:
+            angle_deg = -60 * ship.facing.value
+        
         rotated_image = pygame.transform.rotate(image, angle_deg)
         
         # Center the rotated image

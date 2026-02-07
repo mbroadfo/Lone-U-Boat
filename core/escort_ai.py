@@ -379,6 +379,14 @@ class EscortAI:
                 # U-boat is destroyed - cannot dive to MEDIUM in shallow water (max depth PERISCOPE)
                 return True, "Escort forces U-boat to dive in shallow water - U-BOAT DESTROYED!", True
             
+            # Check if hull damage prevents diving to MEDIUM
+            # Hull damage limits: 0=DEEP, 1=MEDIUM, 2=PERISCOPE, 3+=SURFACED
+            from .depth_validator import DepthValidator
+            max_depth_for_hull = DepthValidator.max_depth_for_hull_damage(u_boat.hull_damage)
+            if max_depth_for_hull.value < Depth.MEDIUM.value:
+                # U-boat is destroyed - hull damage prevents diving to MEDIUM
+                return True, f"Escort forces U-boat to dive to MEDIUM, but hull damage ({u_boat.hull_damage}) only allows {max_depth_for_hull.name} - U-BOAT DESTROYED!", True
+            
             return True, f"Escort forces U-boat to dive from {u_boat.depth.name} to MEDIUM (+1 DL, -2 AP next turn)", False
         
         return False, "", False

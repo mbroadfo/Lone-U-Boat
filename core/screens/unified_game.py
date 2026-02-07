@@ -15,6 +15,7 @@ from ..actions import (
 from ..damage.ship_damage import ShipDamageResolver
 from ..damage.ship_damage import ShipDamageResolver
 from ..damage.ship_damage import ShipDamageResolver
+from ..animation import AnimationManager
 
 
 class UnifiedGameScreen(BaseScreen):
@@ -42,6 +43,9 @@ class UnifiedGameScreen(BaseScreen):
         super().__init__(screen_manager, config)
         self.mission_number = mission_number
         
+        # Animation manager
+        self.animation_manager = AnimationManager()
+        
         # Import here to avoid circular dependency
         if game_instance is None:
             from ..game_state import Game
@@ -51,8 +55,12 @@ class UnifiedGameScreen(BaseScreen):
                 initial_facing=None,
                 screen=self.screen  # Pass existing screen to avoid creating new display
             )
+            # Share animation manager with game state
+            self.game.animation_manager = self.animation_manager
         else:
             self.game = game_instance
+            # Share animation manager with existing game
+            self.game.animation_manager = self.animation_manager
         
         # UI state
         self.awaiting_initial_setup = True  # Player needs to choose depth/facing
@@ -233,6 +241,11 @@ class UnifiedGameScreen(BaseScreen):
     def handle_events(self, event: pygame.event.Event) -> None:
         """Handle all game events."""
         if event.type == pygame.KEYDOWN:
+            # Block keyboard input during animations (except ESC and F11)
+            if self.animation_manager.is_animating():
+                if event.key not in (pygame.K_ESCAPE, pygame.K_F11):
+                    return
+            
             if event.key == pygame.K_ESCAPE:
                 # Show exit confirmation dialog if in game, otherwise return to menu
                 if not self.awaiting_initial_setup and self.game.running:
@@ -315,6 +328,10 @@ class UnifiedGameScreen(BaseScreen):
                 self.event_log_scroll = max(0, self.event_log_scroll - 3)
         
         elif event.type == pygame.MOUSEBUTTONDOWN:
+            # Block input during animations
+            if self.animation_manager.is_animating():
+                return
+            
             if event.button == 1:  # Left click
                 mouse_pos = event.pos
                 
@@ -497,6 +514,19 @@ class UnifiedGameScreen(BaseScreen):
             self.selected_facing = Facing.NORTHWEST
         elif event.key == pygame.K_d:
             self.selected_facing = Facing.NORTHEAST
+    
+    def _handle_setup_clicks(self, mouse_pos: tuple[int, int]) -> None:
+        """Handle mouse clicks during initial setup phase.
+        
+        Currently setup is keyboard-only. This method is reserved for future
+        implementation of clickable depth/facing buttons.
+        
+        Args:
+            mouse_pos: Mouse position (x, y)
+        """
+        # TODO: Implement clickable setup buttons for depth and facing
+        # For now, setup uses keyboard controls only
+        pass
     
     def _advance_phase_and_update_ui(self):
         """Advance to next phase and update UI with phase information."""
@@ -751,6 +781,9 @@ class UnifiedGameScreen(BaseScreen):
     
     def render(self) -> None:
         """Render the unified game screen."""
+        # Update animations
+        self.animation_manager.update()
+        
         # Clear screen
         self.screen.fill((10, 15, 25))
         
@@ -782,6 +815,10 @@ class UnifiedGameScreen(BaseScreen):
         # Draw game over overlay if game has ended
         if not self.game.running:
             self._draw_game_over_overlay()
+        
+        # Draw exit confirmation dialog if showing
+        if self.showing_exit_confirmation:
+            self._draw_exit_confirmation(screen_width, screen_height)
         
         pygame.display.flip()
     
@@ -893,7 +930,7 @@ class UnifiedGameScreen(BaseScreen):
             else:
                 reason = "Mission failed"
             
-            stats = [
+            stats: list[str] = [
                 reason,
                 "",
                 f"Survived {self.game.turn_manager.turn_number} turns",
@@ -2379,8 +2416,17 @@ class UnifiedGameScreen(BaseScreen):
             )
         
         # Render ships
-        for ship in self.game.ships:
-            self.game.renderer.render_ship(ship, self.game.destroyed_this_phase)
+        for ship_idx, ship in enumerate(self.game.ships):
+            # Get animated state if animating
+            if self.animation_manager.is_animating():
+                render_pos, render_angle = self.animation_manager.get_ship_render_state(
+                    ship_idx,
+                    ship.position,
+                    ship.facing
+                )
+                self.game.renderer.render_ship(ship, self.game.destroyed_this_phase, render_pos, render_angle)
+            else:
+                self.game.renderer.render_ship(ship, self.game.destroyed_this_phase)
         
         # Render aircraft (B-24s)
         for aircraft in self.game.aircraft:
@@ -2394,7 +2440,15 @@ class UnifiedGameScreen(BaseScreen):
             temp_boat.facing = self.selected_facing
             self.game.renderer.render_u_boat(temp_boat)
         else:
-            self.game.renderer.render_u_boat(self.game.u_boat)
+            # Get animated state if animating
+            if self.animation_manager.is_animating():
+                render_pos, render_angle = self.animation_manager.get_u_boat_render_state(
+                    self.game.u_boat.position,
+                    self.game.u_boat.facing
+                )
+                self.game.renderer.render_u_boat(self.game.u_boat, render_pos, render_angle)
+            else:
+                self.game.renderer.render_u_boat(self.game.u_boat)
         
         # Render action preview (outline showing where u-boat will be after queued actions)
         if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
@@ -4601,8 +4655,6 @@ class UnifiedGameScreen(BaseScreen):
         
         results = state['results']
         hits = sum(1 for _, _, hit, _ in results if hit)
-        ap_cost = state.get('ap_cost', 2)
-        snapshot = state.get('snapshot')
         
         # Build message from results (damage already applied during interactive rolls)
         result_msgs: list[str] = []
@@ -5672,7 +5724,19 @@ class UnifiedGameScreen(BaseScreen):
             snapshot = create_u_boat_snapshot(u_boat)
             
             # Execute action immediately
-            _result = action.execute(self.game)
+            result = action.execute(self.game)
+            
+            # Start animations based on action type
+            if isinstance(action, RotateAction):
+                old_facing = result.state_changes.get('old_facing')
+                new_facing = result.state_changes.get('new_facing')
+                if old_facing and new_facing:
+                    self.animation_manager.start_u_boat_rotation(old_facing, new_facing)
+            elif isinstance(action, MoveAction):
+                old_pos = result.state_changes.get('old_position')
+                new_pos = result.state_changes.get('new_position')
+                if old_pos and new_pos:
+                    self.animation_manager.start_u_boat_movement(old_pos, new_pos)
             
             # Record in action history for undo
             self.game.action_history.record_action(action, ap_cost, snapshot)
@@ -5926,4 +5990,69 @@ class UnifiedGameScreen(BaseScreen):
             import traceback
             self.add_event(f"Error queuing action: {e}")
             print(f"Full error: {traceback.format_exc()}")
-
+    
+    def _handle_exit_confirmation_clicks(self, mouse_pos: Tuple[int, int]) -> None:
+        """Handle clicks on exit confirmation dialog."""
+        # Check if clicking Yes or No buttons
+        if hasattr(self, 'exit_yes_button_rect') and self.exit_yes_button_rect:
+            if self.exit_yes_button_rect.collidepoint(mouse_pos):
+                # Exit to menu
+                self.transition_to('menu')
+                return
+        
+        if hasattr(self, 'exit_no_button_rect') and self.exit_no_button_rect:
+            if self.exit_no_button_rect.collidepoint(mouse_pos):
+                # Cancel exit, continue game
+                self.showing_exit_confirmation = False
+                return
+    
+    def _draw_exit_confirmation(self, screen_width: int, screen_height: int) -> None:
+        """Draw exit confirmation dialog."""
+        # Semi-transparent overlay
+        overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+        
+        # Dialog box
+        dialog_width = 500
+        dialog_height = 200
+        dialog_x = (screen_width - dialog_width) // 2
+        dialog_y = (screen_height - dialog_height) // 2
+        
+        dialog_rect = pygame.Rect(dialog_x, dialog_y, dialog_width, dialog_height)
+        pygame.draw.rect(self.screen, (40, 40, 60), dialog_rect)
+        pygame.draw.rect(self.screen, (100, 100, 150), dialog_rect, 3)
+        
+        # Title
+        title_text = self.game.renderer.font_large.render("Exit Mission?", True, (255, 255, 255))
+        title_rect = title_text.get_rect(center=(screen_width // 2, dialog_y + 40))
+        self.screen.blit(title_text, title_rect)
+        
+        # Message
+        message_text = self.game.renderer.font.render("Unsaved progress will be lost", True, (200, 200, 200))
+        message_rect = message_text.get_rect(center=(screen_width // 2, dialog_y + 85))
+        self.screen.blit(message_text, message_rect)
+        
+        # Yes button
+        yes_button_width = 150
+        yes_button_height = 50
+        yes_x = dialog_x + 70
+        yes_y = dialog_y + dialog_height - 80
+        
+        self.exit_yes_button_rect = pygame.Rect(yes_x, yes_y, yes_button_width, yes_button_height)
+        pygame.draw.rect(self.screen, (180, 50, 50), self.exit_yes_button_rect)
+        pygame.draw.rect(self.screen, (255, 100, 100), self.exit_yes_button_rect, 2)
+        
+        yes_text = self.game.renderer.font.render("Exit to Menu", True, (255, 255, 255))
+        yes_text_rect = yes_text.get_rect(center=self.exit_yes_button_rect.center)
+        self.screen.blit(yes_text, yes_text_rect)
+        
+        # No button
+        no_x = dialog_x + dialog_width - 70 - yes_button_width
+        self.exit_no_button_rect = pygame.Rect(no_x, yes_y, yes_button_width, yes_button_height)
+        pygame.draw.rect(self.screen, (50, 100, 180), self.exit_no_button_rect)
+        pygame.draw.rect(self.screen, (100, 150, 255), self.exit_no_button_rect, 2)
+        
+        no_text = self.game.renderer.font.render("Continue Game", True, (255, 255, 255))
+        no_text_rect = no_text.get_rect(center=self.exit_no_button_rect.center)
+        self.screen.blit(no_text, no_text_rect)
