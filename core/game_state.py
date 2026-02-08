@@ -407,7 +407,7 @@ class Game:
                 self.turn_manager.add_phase_log("Merchant Phase", f"Merchant ({status})")
         
         # Store ship states before movement for animation
-        ship_states_before = []
+        ship_states_before: List[Dict[str, Any]] = []
         for ship in self.ships:
             ship_states_before.append({
                 'position': ship.position,
@@ -498,7 +498,7 @@ class Game:
             return  # Skip if no escorts
         
         # Store ship states before movement for animation
-        ship_states_before = []
+        ship_states_before: List[Dict[str, Any]] = []
         for ship in self.ships:
             ship_states_before.append({
                 'position': ship.position,
@@ -545,7 +545,8 @@ class Game:
         
         # Update detection level (can be increased by FIRE action or forced dive)
         if new_detection_level != self.detection_level:
-            self.turn_manager.add_phase_log("Escort Phase", f"Detection Level changed: {self.detection_level} -> {new_detection_level}")
+            self.turn_manager.add_phase_log("Escort Phase", 
+                f"Detection Level changed: {self.detection_level} -> {new_detection_level}")
         self.detection_level = min(3, new_detection_level)  # Ensure cap at 3
         
         # Check if U-boat was destroyed during escort phase
@@ -573,29 +574,13 @@ class Game:
         self.turn_manager.add_phase_log("B24 Phase", msg)
         print(f"[EVENT] {msg}")
         
-        # Track aircraft before execution to identify destroyed ones
-        aircraft_before = {id(a): a for a in self.aircraft}
-        
-        # Execute B-24 phase
+        # Execute B-24 phase (passes self to record destroyed entities)
         messages, new_dl = self.b24_ai.execute_b24_phase(
-            aircraft_list=self.aircraft,  # Modified in place (aircraft removed if off map)
+            aircraft_list=self.aircraft,  # Modified in place (off-map aircraft removed)
             u_boat=self.u_boat,
-            detection_level=self.detection_level
+            detection_level=self.detection_level,
+            game_state=self  # Pass self so B24 AI can record destroyed entities
         )
-        
-        # Record destroyed aircraft (check which were removed due to flak)
-        for msg in messages:
-            if "destroyed/driven off by flak" in msg.lower():
-                # Find which aircraft was destroyed by checking what's missing
-                aircraft_after = {id(a) for a in self.aircraft}
-                for aircraft_id, aircraft in aircraft_before.items():
-                    if aircraft_id not in aircraft_after:
-                        self.record_destroyed_entity(
-                            entity_type='b24',
-                            position=aircraft.position,
-                            name='B-24'
-                        )
-                        break
         
         # Log all messages
         for msg in messages:

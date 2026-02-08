@@ -31,13 +31,14 @@ class B24AI:
         self.damage_resolver = UBoatDamageResolver(dice_roller, mission_rules)
     
     def execute_b24_phase(self, aircraft_list: List[Aircraft], u_boat: UBoat, 
-                          detection_level: int) -> Tuple[List[str], int]:
+                          detection_level: int, game_state: Any = None) -> Tuple[List[str], int]:
         """Execute B-24 phase for all aircraft.
         
         Args:
             aircraft_list: List of aircraft on map (modified in place)
             u_boat: The U-boat
             detection_level: Current detection level (0-3)
+            game_state: Optional game state for recording destroyed entities
         
         Returns:
             Tuple of (messages, new_detection_level)
@@ -54,7 +55,7 @@ class B24AI:
         
         for i, aircraft in enumerate(aircraft_list):
             msgs, dl_change, should_remove, was_destroyed = self._activate_aircraft(
-                aircraft, u_boat, detection_level
+                aircraft, u_boat, detection_level, game_state
             )
             messages.extend(msgs)
             new_dl = max(new_dl, dl_change)
@@ -64,24 +65,28 @@ class B24AI:
                 if was_destroyed:
                     destroyed_aircraft.append(aircraft)
         
-        # Remove aircraft that flew off map or were destroyed (in reverse order to maintain indices)
-        # Note: Destruction message already shown by _flak_defense, just remove from list
+        # Mark aircraft for removal - destroyed ones stay visible with overlay until phase advance
         for i in reversed(aircraft_to_remove):
             aircraft = aircraft_list[i]
-            if aircraft not in destroyed_aircraft:
+            if aircraft in destroyed_aircraft:
+                # Destroyed aircraft stays visible with overlay until phase advance
+                pass
+            else:
+                # Aircraft flew off map - remove immediately
                 messages.append(f"  B-24 flew off map")
-            aircraft_list.pop(i)
+                aircraft_list.pop(i)
         
         return messages, new_dl
     
     def _activate_aircraft(self, aircraft: Aircraft, u_boat: UBoat, 
-                          detection_level: int) -> Tuple[List[str], int, bool, bool]:
+                          detection_level: int, game_state: Any = None) -> Tuple[List[str], int, bool, bool]:
         """Activate a single B-24.
         
         Args:
             aircraft: The B-24 to activate
             u_boat: The U-boat
             detection_level: Current detection level
+            game_state: Optional game state for recording destroyed entities
         
         Returns:
             Tuple of (messages, new_detection_level, should_remove_aircraft, was_destroyed)
@@ -105,7 +110,7 @@ class B24AI:
         new_dl = detection_level
         if self.can_attack(aircraft, u_boat):
             # Flak defense first (if U-boat surfaced with undamaged flak gun)
-            flak_destroyed = self._flak_defense(aircraft, u_boat, messages)
+            flak_destroyed = self._flak_defense(aircraft, u_boat, messages, game_state)
             if flak_destroyed:
                 return messages, detection_level, True, True  # B-24 destroyed/scared off
             
@@ -296,7 +301,7 @@ class B24AI:
         return True
     
     def _flak_defense(self, aircraft: Aircraft, u_boat: UBoat, 
-                     messages: List[str]) -> bool:
+                     messages: List[str], game_state: Any = None) -> bool:
         """U-boat flak gun defense.
         
         Args:
@@ -327,7 +332,19 @@ class B24AI:
         messages.append(f"  → Flak defense: Rolled [{roll1}]+[{roll2}]={roll} (need {threshold_text})")
         
         if roll >= threshold:
-            messages.append("  → B-24 destroyed/driven off by flak!")
+            # Randomly choose between scared off or shot down
+            outcome_roll = self.dice.roll_1d6()
+            if outcome_roll <= 3:
+                messages.append("  → B-24 SHOT DOWN by flak!")
+            else:
+                messages.append("  → B-24 SCARED OFF by flak!")
+            # Record destroyed B-24 for overlay
+            if game_state:
+                game_state.record_destroyed_entity(
+                    entity_type='b24',
+                    position=aircraft.position,
+                    name='B-24'
+                )
             return True
         else:
             messages.append("  → B-24 survives flak fire")

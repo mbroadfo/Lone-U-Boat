@@ -385,11 +385,11 @@ def test_flak_defense_destroys_b24_on_8_plus():
     u_boat.flak_gun_damaged = False
     u_boat.lookout_alive = False
     
-    messages, new_dl, remove, destroyed = ai._activate_aircraft(aircraft, u_boat, detection_level=2)  # type: ignore[reportPrivateUsage]
+    messages, new_dl, remove, destroyed = ai._activate_aircraft(aircraft, u_boat, detection_level=2)
     
-    # B-24 should be destroyed/driven off
+    # B-24 should be scared off (roll 8 < 10)
     assert remove
-    assert any("destroyed/driven off" in msg for msg in messages)
+    assert any("SCARED OFF" in msg or "SHOT DOWN" in msg for msg in messages)
 
 
 def test_flak_defense_with_lookout_bonus():
@@ -405,11 +405,11 @@ def test_flak_defense_with_lookout_bonus():
     u_boat.flak_gun_damaged = False
     u_boat.lookout_alive = True
     
-    messages, new_dl, remove, destroyed = ai._activate_aircraft(aircraft, u_boat, detection_level=2)  # type: ignore[reportPrivateUsage]
+    messages, new_dl, remove, destroyed = ai._activate_aircraft(aircraft, u_boat, detection_level=2)
     
-    # B-24 should be destroyed/driven off (7+ with lookout)
+    # B-24 should be scared off (7+ with lookout, but 7 < 10)
     assert remove
-    assert any("destroyed/driven off" in msg for msg in messages)
+    assert any("SCARED OFF" in msg or "SHOT DOWN" in msg for msg in messages)
 
 
 def test_no_flak_if_gun_damaged():

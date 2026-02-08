@@ -4683,10 +4683,8 @@ class UnifiedGameScreen(BaseScreen):
                         position=ship.position,
                         name=ship.ship_type.upper()
                     )
-                    # Remove ship immediately
-                    if ship in self.game.ships:
-                        self.game.ships.remove(ship)
-                        self.add_event(f"💀 {ship.ship_type.title()} SUNK and removed from map")
+                    # Ship stays visible with destroyed overlay until phase advance
+                    self.add_event(f"💀 {ship.ship_type.title()} SUNK")
                 elif damage_result.effect == "damaged":
                     # Damage marker was already applied by apply_damage() earlier
                     result_msgs.append(
@@ -4826,9 +4824,7 @@ class UnifiedGameScreen(BaseScreen):
                     position=ship.position,
                     name=ship.ship_type.upper()
                 )
-                # Remove ship
-                if ship in self.game.ships:
-                    self.game.ships.remove(ship)
+                # Ship stays visible with destroyed overlay until phase advance
             elif damage_result.effect == "damaged":
                 self.add_event(f"  Damage: DAMAGED (roll: {damage_result.roll})")
             else:
@@ -4883,23 +4879,35 @@ class UnifiedGameScreen(BaseScreen):
         results = state['results']
         torpedo_count = state['torpedo_count']
         
-        # Count hits
+        # Count hits and check if any ship was sunk
         hits = sum(1 for _, _, _, hit, _ in results if hit)
+        any_sunk = any(ship not in self.game.ships for _, ship, _, _, _ in results)
         
-        # Calculate DL increase (max +2 total per salvo)
-        dl_increase = 0
-        if torpedo_count == 3:
-            dl_increase += 1  # Noise from firing 3 torpedoes
-        dl_increase += hits  # +1 DL per hit
-        dl_increase = min(dl_increase, 2)  # Enforce max +2 total
-        
-        # Apply DL increase (show actual increase after cap)
-        if dl_increase > 0:
+        # Detection Level logic (RULES.md lines 259, 327-329):
+        # PRIORITY: If any ship was sunk → set DL to 3 immediately (overrides incremental)
+        # Otherwise: +1 for firing 3 torpedoes, +1 if any hit (max +2 per salvo)
+        # This matches deck gun behavior (line 4709) which sets DL to 3 on any hit
+        if any_sunk:
             old_dl = self.game.detection_level
-            self.game.detection_level = min(self.game.detection_level + dl_increase, 3)  # Cap at 3
-            actual_increase = self.game.detection_level - old_dl
-            if actual_increase > 0:
-                self.add_event(f"Detection Level +{actual_increase} (now {self.game.detection_level})")
+            self.game.detection_level = 3
+            if old_dl != 3:
+                self.add_event(f"Detection Level set to 3 (ship sunk)")
+        else:
+            # Standard DL increase (no sunk ships)
+            dl_increase = 0
+            if torpedo_count == 3:
+                dl_increase += 1  # Noise from firing 3 torpedoes
+            if hits > 0:
+                dl_increase += 1  # +1 if any hit
+            dl_increase = min(dl_increase, 2)  # Enforce max +2 total
+            
+            # Apply DL increase
+            if dl_increase > 0:
+                old_dl = self.game.detection_level
+                self.game.detection_level = min(self.game.detection_level + dl_increase, 3)  # Cap at 3
+                actual_increase = self.game.detection_level - old_dl
+                if actual_increase > 0:
+                    self.add_event(f"Detection Level +{actual_increase} (now {self.game.detection_level})")
         
         # Summary
         self.add_event(f"=== TORPEDO ATTACK COMPLETE: {hits}/{torpedo_count} hits ===")
