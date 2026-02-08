@@ -1,0 +1,15 @@
+--- a/core/b24_ai.py
++++ b/core/b24_ai.py
+@@ -327,7 +327,11 @@ class B24AI:
+         messages.append(f"  → Flak defense: Rolled [{roll1}]+[{roll2}]={roll} (need {threshold_text})")
+         
+         if roll >= threshold:
+-            messages.append("  → B-24 destroyed/driven off by flak!")
++            # Roll 10+ destroys, 8-9 (or 7-9 with lookout) scares off
++            if roll >= 10:
++                messages.append("  → B-24 DESTROYED by flak!")
++            else:
++                messages.append("  → B-24 SCARED OFF by flak!")
+             return True
+         else:
+             messages.append("  → B-24 survives flak fire")
