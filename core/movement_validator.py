@@ -9,7 +9,7 @@ Validates U-Boat movement based on:
 Rules from u_boat_ruleset_default.json -> MOVE restrictions
 """
 
-from typing import Set, Tuple, List, Optional
+from typing import Set, Tuple, List, Optional, Dict, Any
 from .models import HexCoord, UBoat, Ship, Depth
 
 
@@ -42,7 +42,8 @@ class MovementValidator:
         self,
         u_boat: UBoat,
         target_hex: HexCoord,
-        ships: List[Ship]
+        ships: List[Ship],
+        destroyed_entities: Optional[List[Dict[str, Any]]] = None
     ) -> Tuple[bool, str]:
         """
         Validate if U-Boat can move to target hex.
@@ -51,11 +52,13 @@ class MovementValidator:
         1. Cannot enter Land hexes
         2. Cannot enter Shallow unless Surfaced or Periscope
         3. Cannot enter Ship hex unless Medium or Deep (pass under)
+        4. Can move through destroyed ships (they no longer block)
         
         Args:
             u_boat: The player's U-Boat
             target_hex: Destination hex
             ships: List of all ships in play
+            destroyed_entities: List of destroyed entities this phase (optional)
             
         Returns:
             (can_move, reason_if_not)
@@ -77,9 +80,24 @@ class MovementValidator:
                 return False, f"Shallow water requires Surfaced or Periscope (currently {u_boat.depth.name})"
         
         # Rule 3: Cannot enter Ship hex unless Medium or Deep
+        # Exception: Can move through destroyed ships
         ship_at_target = self._get_ship_at_hex(target_hex, ships)
         if ship_at_target is not None:
-            if u_boat.depth not in [Depth.MEDIUM, Depth.DEEP]:
+            # Check if this ship is destroyed (still visible but passable)
+            ship_is_destroyed = False
+            if destroyed_entities:
+                for destroyed in destroyed_entities:
+                    if destroyed['type'] in ['corvette', 'destroyer', 'merchant']:
+                        if destroyed['position'] == target_hex:
+                            ship_is_destroyed = True
+                            break
+            
+            # If ship is destroyed, U-boat can move through it at any depth
+            if ship_is_destroyed:
+                print(f"[MOVEMENT] Ship at {target_hex} is destroyed, can move through")
+                # Remove destroyed ship visual when U-boat moves through
+                # (This will be handled by the caller)
+            elif u_boat.depth not in [Depth.MEDIUM, Depth.DEEP]:
                 print(f"[MOVEMENT] Cannot move to ship hex: u_boat.depth={u_boat.depth} ({u_boat.depth.name}), need MEDIUM or DEEP")
                 return False, f"Cannot enter ship hex unless Medium or Deep (currently {u_boat.depth.name})"
             else:
@@ -92,7 +110,8 @@ class MovementValidator:
         self,
         u_boat: UBoat,
         candidate_hexes: Set[HexCoord],
-        ships: List[Ship]
+        ships: List[Ship],
+        destroyed_entities: Optional[List[Dict[str, Any]]] = None
     ) -> Set[HexCoord]:
         """
         Filter candidate hexes to only valid moves.
@@ -103,6 +122,7 @@ class MovementValidator:
             u_boat: The player's U-Boat
             candidate_hexes: Set of hexes to check (e.g., all adjacent)
             ships: List of all ships in play
+            destroyed_entities: List of destroyed entities this phase (optional)
             
         Returns:
             Set of hexes where U-Boat can legally move
@@ -110,7 +130,7 @@ class MovementValidator:
         valid: Set[HexCoord] = set()
         
         for hex_coord in candidate_hexes:
-            can_move, _ = self.can_move_to(u_boat, hex_coord, ships)
+            can_move, _ = self.can_move_to(u_boat, hex_coord, ships, destroyed_entities)
             if can_move:
                 valid.add(hex_coord)
         

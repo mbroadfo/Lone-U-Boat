@@ -4756,25 +4756,83 @@ class UnifiedGameScreen(BaseScreen):
         ship, distance, aspect = targets[current_target_idx]
         current_torpedo_idx = state['current_torpedo_idx']
         
-        # Skip if ship has been destroyed (sunk by earlier torpedo in this salvo)
-        if ship not in self.game.ships:
-            # Ship already sunk - torpedo passes through
-            # Move to next target
-            if current_target_idx + 1 < len(targets):
-                state['current_target_idx'] += 1
-                return  # Re-process with next target
-            else:
-                # No more targets - torpedo exits map
-                # Start next torpedo from first target
-                if torpedoes_available > 0:
-                    state['torpedoes_available'] -= 1
-                    state['current_torpedo_idx'] += 1
-                    state['current_target_idx'] = 0
+        # Skip if ship has been destroyed (sunk by earlier torpedo in this salvo OR earlier in the turn)
+        ship_was_sunk = False
+        
+        # Check if ship was sunk in this salvo
+        for result in state['results']:
+            # Results format: (torpedo_num, ship, distance, hit, damage_roll, is_sunk)
+            if len(result) >= 6:
+                _, result_ship, _, _, _, is_sunk = result
+                if result_ship is ship and is_sunk:
+                    ship_was_sunk = True
+                    break
+        
+        # Also check if ship was destroyed earlier in the turn (different torpedo attack)
+        if not ship_was_sunk:
+            for destroyed in self.game.destroyed_this_phase:
+                # Compare position coordinates directly and entity type
+                destroyed_pos = destroyed.get('position')
+                if (destroyed_pos and 
+                    destroyed_pos.q == ship.position.q and 
+                    destroyed_pos.r == ship.position.r and 
+                    destroyed.get('entity_type') == ship.ship_type):
+                    ship_was_sunk = True
+                    break
+        
+        if ship_was_sunk:
+            # Ship already sunk - check if any remaining ships are in line with torpedo path
+            remaining_torpedoes = state['torpedoes_available']
+            
+            if remaining_torpedoes > 0:
+                # Get torpedo firing direction from U-boat position and first target's position
+                u_boat_pos = self.game.u_boat.position
+                first_target = state['targets'][0][0]  # First ship in original target list
+                
+                # Determine firing direction
+                dq = first_target.position.q - u_boat_pos.q
+                dr = first_target.position.r - u_boat_pos.r
+                
+                # Check remaining ships to see if any are in line
+                valid_targets_in_line: List[Tuple[Any, int, str]] = []
+                for remaining_ship, rem_dist, rem_aspect in targets[current_target_idx + 1:]:
+                    if remaining_ship in self.game.ships:
+                        # Check if this ship is in line with torpedo path
+                        ship_dq = remaining_ship.position.q - u_boat_pos.q
+                        ship_dr = remaining_ship.position.r - u_boat_pos.r
+                        
+                        # Ship is in line if direction vector matches (same direction, further along)
+                        # Normalize directions to compare
+                        if dq != 0:
+                            ratio_q = ship_dq / dq if dq != 0 else 0
+                        else:
+                            ratio_q = 1 if ship_dq == 0 else 0
+                        
+                        if dr != 0:
+                            ratio_r = ship_dr / dr if dr != 0 else 0
+                        else:
+                            ratio_r = 1 if ship_dr == 0 else 0
+                        
+                        # If both ratios are positive and approximately equal, ship is in line
+                        if ratio_q > 0 and ratio_r > 0 and abs(ratio_q - ratio_r) < 0.5:
+                            valid_targets_in_line.append((remaining_ship, rem_dist, rem_aspect))
+                
+                if valid_targets_in_line:
+                    # Continue torpedoes with remaining in-line targets
+                    self.add_event(f"Ship sunk - {remaining_torpedoes} torpedo(es) continue toward ships in line")
+                    # Move to next target in line
+                    state['current_target_idx'] += 1
                     state['waiting_for'] = 'hit'
                     return
                 else:
+                    # No ships in line - cancel remaining torpedoes
+                    self.add_event(f"Ship sunk - no ships in line, canceling {remaining_torpedoes} remaining torpedo(es)")
                     self._finish_torpedo_resolution()
                     return
+            else:
+                # No more torpedoes
+                self._finish_torpedo_resolution()
+                return
         
         if waiting_for == 'hit':
             # Roll for hit (1d6)
@@ -4793,8 +4851,8 @@ class UnifiedGameScreen(BaseScreen):
                 state['waiting_for'] = 'damage'
                 self.add_event(f"Torpedo #{current_torpedo_idx + 1} vs {ship.ship_type} (range {distance}, {aspect}): HIT! (Rolled {roll}, needed {hit_target}+)")
             else:
-                # Miss - torpedo continues
-                state['results'].append((current_torpedo_idx + 1, ship, distance, False, None))
+                # Miss - torpedo continues (torpedo_num, ship, distance, hit, damage_roll, is_sunk)
+                state['results'].append((current_torpedo_idx + 1, ship, distance, False, None, False))
                 self.add_event(f"Torpedo #{current_torpedo_idx + 1} vs {ship.ship_type} (range {distance}, {aspect}): MISS (Rolled {roll}, needed {hit_target}+)")
                 
                 # Don't consume this torpedo - it continues to next ship
@@ -4812,8 +4870,8 @@ class UnifiedGameScreen(BaseScreen):
                 'description': damage_result.description
             }
             
-            # Store result
-            state['results'].append((current_torpedo_idx + 1, ship, distance, True, damage_result.roll))
+            # Store result (torpedo_num, ship, distance, hit, damage_roll, is_sunk)
+            state['results'].append((current_torpedo_idx + 1, ship, distance, True, damage_result.roll, damage_result.is_now_sunk))
             
             # Log result
             if damage_result.is_now_sunk:
@@ -4839,7 +4897,7 @@ class UnifiedGameScreen(BaseScreen):
         elif waiting_for == 'continue':
             # Move to next target or next torpedo
             # Check if we just had a hit (by checking if last result was a hit)
-            just_hit = len(state['results']) > 0 and state['results'][-1][3]  # results are (torp_num, ship, dist, hit, dmg)
+            just_hit = len(state['results']) > 0 and state['results'][-1][3]  # results are (torp_num, ship, dist, hit, dmg, is_sunk)
             
             state['last_hit_roll'] = None
             state['last_damage_roll'] = None
@@ -4880,8 +4938,9 @@ class UnifiedGameScreen(BaseScreen):
         torpedo_count = state['torpedo_count']
         
         # Count hits and check if any ship was sunk
-        hits = sum(1 for _, _, _, hit, _ in results if hit)
-        any_sunk = any(ship not in self.game.ships for _, ship, _, _, _ in results)
+        # Results format: (torpedo_num, ship, distance, hit, damage_roll, is_sunk)
+        hits = sum(1 for _, _, _, hit, _, _ in results if hit)
+        any_sunk = any(is_sunk for _, _, _, _, _, is_sunk in results)
         
         # Detection Level logic (RULES.md lines 259, 327-329):
         # PRIORITY: If any ship was sunk → set DL to 3 immediately (overrides incremental)

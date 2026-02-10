@@ -130,8 +130,8 @@ def test_merchant_ai_initialization():
     ai = MerchantAI(mission_config, mission_rules)
     
     assert 0 in ai.paths
-    assert len(ai.paths[0].waypoints) == 12  # Mission 1 has 12 waypoints
-    assert ai.paths[0].exit_hex == HexCoord(6, 10)
+    assert len(ai.paths[0].waypoints) == 11  # Mission 1 has 11 waypoints
+    assert ai.paths[0].exit_hex == HexCoord(6, 9)
     print("✓ AI initialized with mission 1 merchant paths")
 
 
@@ -209,10 +209,10 @@ def test_merchant_damaged_movement_fail():
     new_pos, new_facing, message = ai.get_merchant_movement(merchant, 0)
 
     assert new_pos is None
-    assert new_facing == Facing.SOUTH  # Still updates facing
+    assert new_facing is None  # No facing change when can't move
     assert "[3]" in message  # Check for bracketed roll format
     assert "cannot move" in message
-    print("✓ Damaged merchant with roll 1-3 doesn't move but updates facing")
+    print("✓ Damaged merchant with roll 1-3 doesn't move and doesn't change facing")
 
 
 def test_merchant_facing_changes_at_turns():
@@ -270,14 +270,14 @@ def test_merchant_at_end_of_path():
     ai = MerchantAI(mission_config, mission_rules)
     
     merchant = Ship(
-        position=HexCoord(6, 10),  # At exit
+        position=HexCoord(6, 9),  # At exit
         facing=Facing.SOUTH,
         ship_type='merchant',
         damaged=False
     )
-    
+
     new_pos, _, message = ai.get_merchant_movement(merchant, 0)
-    
+
     assert new_pos is None
     assert "exited the map" in message
     print("✓ Merchant at exit doesn't move")
@@ -293,7 +293,7 @@ def test_check_merchant_exit():
     ai = MerchantAI(mission_config, mission_rules)
     
     ships = [
-        Ship(HexCoord(6, 10), Facing.SOUTH, 'merchant', False),  # At exit
+        Ship(HexCoord(6, 9), Facing.SOUTH, 'merchant', False),  # At exit
         Ship(HexCoord(1, 5), Facing.SOUTH, 'merchant', False),   # Not at exit
         Ship(HexCoord(2, 3), Facing.SOUTH, 'corvette', False),   # Not merchant
     ]
@@ -326,7 +326,7 @@ def test_merchant_full_path_simulation():
     expected_path = [
         HexCoord(1, 4), HexCoord(1, 5), HexCoord(1, 6), HexCoord(1, 7),
         HexCoord(2, 7), HexCoord(3, 7), HexCoord(4, 7), HexCoord(5, 7),
-        HexCoord(6, 7), HexCoord(6, 8), HexCoord(6, 9), HexCoord(6, 10)
+        HexCoord(6, 7), HexCoord(6, 8), HexCoord(6, 9)
     ]
     
     ships = [merchant]

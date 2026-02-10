@@ -4,6 +4,59 @@ All notable changes to the Lone U-Boat project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-02-01
+
+### Fixed
+- **Merchant Facing Bug**: Damaged merchants no longer change facing when failing movement roll
+  - Merchant ships now return `None` for new_facing when unable to move
+  - Only change facing when actually moving to waypoint
+  - Test updated to verify no facing change on failed roll
+- **Torpedo Penetration System**: Torpedoes now correctly skip destroyed ships and continue to targets in line
+  - Torpedoes skip ships sunk earlier in same salvo (checks result tuple is_sunk flag)
+  - Torpedoes skip ships destroyed earlier in turn (checks destroyed_this_phase with coordinate comparison)
+  - Calculates torpedo firing direction and checks remaining targets for in-line positioning
+  - Cancels remaining torpedoes if no ships in line after sinking target
+  - Added messages: "Ship sunk - N torpedo(es) continue toward ships in line" or "Ship sunk - no ships in line, canceling N remaining torpedo(es)"
+- **B24 Spawn Algorithm**: Rewrote _get_furthest_edge_position() to match RULES.txt specification
+  - Now traces lines in all 6 Facing directions from U-boat position
+  - Counts valid hexes in each direction until hitting edge
+  - Returns last hex in longest line (truly furthest edge on hex-line)
+  - Fixes bug where B24 spawned 1 hex away instead of at map edge
+- **Movement Through Destroyed Ships**: U-boat can now pass through destroyed ship hexes at any depth
+  - Added destroyed_entities parameter to MovementValidator.can_move_to()
+  - Checks destroyed_this_phase for ships at target hex with coordinate comparison
+  - Allows movement through destroyed ships (visual cleanup handled by caller)
+
+### Changed
+- **Result Tuple Format**: Fire torpedo result tuple expanded from 5 to 6 elements
+  - Old format: `(torpedo_num, ship, distance, hit, damage_roll)`
+  - New format: `(torpedo_num, ship, distance, hit, damage_roll, is_sunk)`
+  - Added is_sunk flag from damage_result.is_now_sunk for penetration logic
+- **Escort AI**: Added check_forced_ascent() method called after all depth charge and gun attacks
+  - Checks if hull damage forces U-boat to ascend beyond current depth capability
+  - Destroys U-boat if ship blocks forced ascent in same hex
+  - Called in 7 locations after damage resolution
+- **Mission 1 Config**: Updated merchant exit hex from (6,10) to (6,9)
+  - Corrected waypoint list to match actual map boundaries
+  - Updated test expectations to match corrected path
+
+### Technical
+- **Code Cleanup**: Fixed 5 Pylance linting errors in unified_game.py
+  - Replaced unused tuple unpacking variables with underscores
+  - Removed unused Facing import
+  - Added type annotation: `List[Tuple[Any, int, str]]` to valid_targets_in_line
+- **Coordinate Comparison**: Changed HexCoord equality checks to explicit q/r comparisons
+  - Destroyed entity detection now uses: `destroyed_pos.q == ship.position.q and destroyed_pos.r == ship.position.r`
+  - More reliable than HexCoord.__eq__ for cross-turn entity tracking
+
+### Validated
+- All 336 tests passing
+- Epic gameplay validation: "Ship sunk - no ships in line, canceling 1 remaining torpedo(es)"
+- B24 spawn distances verified in-game
+- Merchant facing confirmed: "rolled 1d6 [3], cannot move" (no facing change)
+
+---
+
 ## [Phase 2] - 2026-01-31
 
 ### Added

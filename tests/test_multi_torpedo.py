@@ -151,3 +151,95 @@ def test_two_torpedo_firing():
 
 if __name__ == "__main__":
     test_two_torpedo_firing()
+
+
+def test_three_torpedo_penetration():
+    """Test 3 torpedoes: first sinks merchant, second sinks corvette in line, third runs off map."""
+    print("\n" + "="*60)
+    print("TEST: Torpedo Penetration Through Multiple Ships")
+    print("="*60)
+    
+    # Create game instance
+    game = Game()
+    
+    # Position U-boat at periscope depth in open water
+    game.u_boat.depth = Depth.PERISCOPE
+    game.u_boat.position = HexCoord(6, 5)  # Column 6 has rows 0-9
+    game.u_boat.facing = Facing.NORTH
+    
+    # Load torpedoes in tubes 1, 2, 3
+    game.u_boat.torpedo_tubes[0] = True  # Tube 1
+    game.u_boat.torpedo_tubes[1] = True  # Tube 2
+    game.u_boat.torpedo_tubes[2] = True  # Tube 3
+    
+    # Place merchant and corvette in line north of U-boat
+    merchant = Ship(
+        position=HexCoord(6, 3),  # 2 hexes north
+        facing=Facing.SOUTH,
+        ship_type="merchant",
+        damaged=True  # Already damaged so one more hit sinks it
+    )
+    corvette = Ship(
+        position=HexCoord(6, 1),  # 4 hexes north (2 past merchant)
+        facing=Facing.SOUTH,
+        ship_type="corvette",
+        damaged=True  # Already damaged so one more hit sinks it
+    )
+    game.ships = [merchant, corvette]
+    
+    print(f"\nU-Boat at {game.u_boat.position}, facing {game.u_boat.facing.name}")
+    print(f"Loaded tubes: {[i+1 for i, loaded in enumerate(game.u_boat.torpedo_tubes) if loaded]}")
+    print(f"Merchant at {merchant.position} (range 2, damaged)")
+    print(f"Corvette at {corvette.position} (range 4, damaged)")
+    print(f"Ships in game: {[s.ship_type for s in game.ships]}")
+    
+    # Create fire torpedo action for tubes 1, 2, 3
+    from core.actions.fire_torpedo_action import FireTorpedoAction
+    from core.torpedo_validator import TorpedoValidator
+    from core.los import LOSCalculator
+    from core.combat_resolver import CombatResolver
+    from core.action_costs import ActionCostLookup
+    
+    cost_lookup = ActionCostLookup(game.mission_rules)
+    validator = TorpedoValidator()
+    los_calc = LOSCalculator(game.land_hexes)
+    combat = CombatResolver(game.turn_manager.dice, game.mission_rules)
+    
+    action = FireTorpedoAction(
+        tube_indices=[1, 2, 3],  # Fire tubes 1, 2, 3
+        fire_direction=game.u_boat.facing,
+        cost_lookup=cost_lookup,
+        validator=validator,
+        los_calculator=los_calc,
+        combat_resolver=combat
+    )
+    
+    # Execute action
+    result = action.execute(game)
+    
+    # Verify torpedo count is correct
+    assert result.state_changes['torpedo_count'] == 3, f"Expected 3 torpedoes, got {result.state_changes['torpedo_count']}"
+    
+    # Verify targets - should have both merchant and corvette
+    targets = result.state_changes['targets']
+    print(f"\nTargets in line:")
+    for i, (ship, distance, aspect) in enumerate(targets):
+        print(f"  {i+1}. {ship.ship_type} at range {distance}, aspect {aspect}")
+    
+    assert len(targets) == 2, f"Expected 2 targets in line, got {len(targets)}"
+    assert targets[0][0] == merchant, "First target should be merchant"
+    assert targets[1][0] == corvette, "Second target should be corvette"
+    assert targets[0][1] == 2, "Merchant should be at range 2"
+    assert targets[1][1] == 4, "Corvette should be at range 4"
+    
+    print("\n" + "="*60)
+    print("✓ TEST PASSED: Torpedoes found both ships in line")
+    print("  - Merchant at range 2")
+    print("  - Corvette at range 4 (2 hexes past merchant)")
+    print("="*60 + "\n")
+
+
+
+if __name__ == "__main__":
+    test_two_torpedo_firing()
+    test_three_torpedo_penetration()

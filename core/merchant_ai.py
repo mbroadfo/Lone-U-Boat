@@ -207,7 +207,8 @@ class MerchantAI:
             if roll >= success_threshold:
                 return next_waypoint, new_facing, f"Merchant (damaged) rolled 1d6 [{roll}], moves to [{next_waypoint.q},{next_waypoint.r}]"
             else:
-                return None, new_facing, f"Merchant (damaged) rolled 1d6 [{roll}], cannot move but faces {new_facing.name}"
+                # Cannot move - don't change facing, stay in current facing
+                return None, None, f"Merchant (damaged) rolled 1d6 [{roll}], cannot move"
         
         else:
             # Unknown action, default to move

@@ -57,10 +57,12 @@ class MoveAction(Action):
             return False, f"Target hex is not adjacent (distance: {distance})"
         
         # Use MovementValidator
+        destroyed_entities = getattr(game_state, 'destroyed_this_phase', [])
         can_move, reason = self.validator.can_move_to(
             u_boat,
             self.target_hex,
-            game_state.ships
+            game_state.ships,
+            destroyed_entities
         )
         
         return can_move, reason

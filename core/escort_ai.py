@@ -391,6 +391,41 @@ class EscortAI:
         
         return False, "", False
     
+    def check_forced_ascent(
+        self,
+        u_boat: UBoat,
+        ships: List[Ship]
+    ) -> Tuple[bool, str, bool]:
+        """
+        Check if U-boat must ascend due to hull damage exceeding max depth.
+        If ship is in same hex, U-boat is destroyed (cannot ascend).
+        
+        Args:
+            u_boat: The U-boat
+            ships: List of all ships
+            
+        Returns:
+            Tuple of (forced_ascent_occurred, message, u_boat_destroyed)
+        """
+        from .depth_validator import DepthValidator
+        
+        # Check if current depth exceeds max allowed for hull damage
+        max_depth = DepthValidator.max_depth_for_hull_damage(u_boat.hull_damage)
+        if u_boat.depth.value > max_depth.value:
+            # Need to ascend
+            # Check if ship in same hex blocks ascent
+            for ship in ships:
+                if ship.position == u_boat.position:
+                    # Ship blocks forced ascent - U-boat destroyed
+                    return True, f"Hull damage {u_boat.hull_damage} forces ascent to {max_depth.name}, but ship in hex blocks ascent - U-BOAT DESTROYED!", True
+            
+            # No ship blocking, force ascent
+            old_depth = u_boat.depth
+            u_boat.depth = max_depth
+            return True, f"Hull damage {u_boat.hull_damage} forces ascent from {old_depth.name} to {max_depth.name}", False
+        
+        return False, "", False
+    
     def can_use_fire(
         self,
         escort: Ship,
@@ -595,6 +630,14 @@ class EscortAI:
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
+                            
+                            # Check if hull damage forces ascent
+                            forced_ascent, ascent_msg, destroyed_by_ascent = self.check_forced_ascent(u_boat, ships)
+                            if forced_ascent:
+                                messages.append(f"      {ascent_msg}")
+                                if destroyed_by_ascent:
+                                    u_boat.hull_damage = 4
+                                    return current_dl, messages
                         
                         # Otherwise try DEPTH CHARGE (if U-boat submerged)
                         elif self.can_use_depth_charge(escort, u_boat, current_dl, hex_grid):
@@ -609,6 +652,14 @@ class EscortAI:
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
+                            
+                            # Check if hull damage forces ascent
+                            forced_ascent, ascent_msg, destroyed_by_ascent = self.check_forced_ascent(u_boat, ships)
+                            if forced_ascent:
+                                messages.append(f"      {ascent_msg}")
+                                if destroyed_by_ascent:
+                                    u_boat.hull_damage = 4
+                                    return current_dl, messages
                         else:
                             # Explain why no attack is possible
                             if u_boat.depth == Depth.SURFACED:
@@ -666,6 +717,14 @@ class EscortAI:
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
+                            
+                            # Check if hull damage forces ascent
+                            forced_ascent, ascent_msg, destroyed_by_ascent = self.check_forced_ascent(u_boat, ships)
+                            if forced_ascent:
+                                messages.append(f"      {ascent_msg}")
+                                if destroyed_by_ascent:
+                                    u_boat.hull_damage = 4
+                                    return current_dl, messages
                         else:
                             # Only log if reasonably close to possible
                             if distance <= 3 or u_boat.depth != Depth.SURFACED:
@@ -723,6 +782,14 @@ class EscortAI:
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
+                            
+                            # Check if hull damage forces ascent
+                            forced_ascent, ascent_msg, destroyed_by_ascent = self.check_forced_ascent(u_boat, ships)
+                            if forced_ascent:
+                                messages.append(f"      {ascent_msg}")
+                                if destroyed_by_ascent:
+                                    u_boat.hull_damage = 4
+                                    return current_dl, messages
                         else:
                             # Only log if reasonably close to possible
                             if distance <= 3 or u_boat.depth != Depth.SURFACED:
@@ -779,6 +846,14 @@ class EscortAI:
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
+                            
+                            # Check if hull damage forces ascent
+                            forced_ascent, ascent_msg, destroyed_by_ascent = self.check_forced_ascent(u_boat, ships)
+                            if forced_ascent:
+                                messages.append(f"      {ascent_msg}")
+                                if destroyed_by_ascent:
+                                    u_boat.hull_damage = 4
+                                    return current_dl, messages
                         else:
                             # Only log if reasonably close to possible
                             if distance <= 3 or u_boat.depth != Depth.SURFACED:
@@ -826,6 +901,14 @@ class EscortAI:
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
+                            
+                            # Check if hull damage forces ascent
+                            forced_ascent, ascent_msg, destroyed_by_ascent = self.check_forced_ascent(u_boat, ships)
+                            if forced_ascent:
+                                messages.append(f"      {ascent_msg}")
+                                if destroyed_by_ascent:
+                                    u_boat.hull_damage = 4
+                                    return current_dl, messages
                         else:
                             # Only log if reasonably close to possible
                             if distance <= 3 or u_boat.depth != Depth.SURFACED:
@@ -883,6 +966,14 @@ class EscortAI:
                             is_destroyed, _ = self.damage_resolver.check_destruction(u_boat)
                             if is_destroyed:
                                 return current_dl, messages
+                            
+                            # Check if hull damage forces ascent
+                            forced_ascent, ascent_msg, destroyed_by_ascent = self.check_forced_ascent(u_boat, ships)
+                            if forced_ascent:
+                                messages.append(f"      {ascent_msg}")
+                                if destroyed_by_ascent:
+                                    u_boat.hull_damage = 4
+                                    return current_dl, messages
                         else:
                             # Only log if reasonably close to possible
                             if distance <= 3 or u_boat.depth != Depth.SURFACED:

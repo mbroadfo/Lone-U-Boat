@@ -93,10 +93,9 @@ MERCHANT_PATHS: list[dict[str, Any]] = [
             (5, 7),
             (6, 7),
             (6, 8),  # Turn south
-            (6, 9),
-            (6, 10), # Exit
+            (6, 9),  # Exit (last valid hex on map)
         ],
-        'exit_hex': (6, 10),
+        'exit_hex': (6, 9),
     },
 ]
 

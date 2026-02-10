@@ -365,6 +365,11 @@ class EventSystem:
     def _get_furthest_edge_position(self) -> HexCoord:
         """Get position on map edge furthest from U-boat on same hex-line.
         
+        According to RULES.txt: "trace the 6 lines of hexes that run out of the 
+        U-Boat's current hex until you reach the edge of the Map. Of the six lines, 
+        take the longest (decide randomly if there is a tie). Then place the B24 on 
+        the hex at the edge of the Map at the end of the longest line."
+        
         Returns:
             HexCoord on edge of map (guaranteed to be a valid mission hex)
         """
@@ -376,49 +381,32 @@ class EventSystem:
         # Get map bounds from mission hexes
         if hasattr(self.game_state, 'mission_hexes') and self.game_state.mission_hexes:
             hexes = self.game_state.mission_hexes
-            min_q = min(h.q for h in hexes)
-            max_q = max(h.q for h in hexes)
-            min_r = min(h.r for h in hexes)
-            max_r = max(h.r for h in hexes)
             
-            # Find edge position furthest from U-boat on same or nearby line
-            # Determine which edge (left or right)
-            target_edge_q = max_q if uboat_pos.q < (min_q + max_q) / 2 else min_q
+            # Trace lines in all 6 directions from U-boat
+            longest_line = []
+            longest_distance = 0
             
-            # Try to find a valid hex on the same row as U-boat
-            target_r = uboat_pos.r
-            candidate = HexCoord(target_edge_q, target_r)
-            if candidate in hexes:
-                return candidate
+            for facing in [Facing.NORTH, Facing.NORTHEAST, Facing.SOUTHEAST, 
+                          Facing.SOUTH, Facing.SOUTHWEST, Facing.NORTHWEST]:
+                # Trace line in this direction until we hit edge or off-map
+                current = uboat_pos
+                line_hexes = []
+                
+                for _ in range(50):  # Max trace distance
+                    current = facing.forward(current)
+                    if current not in hexes:
+                        # Hit edge - last valid hex was the end of the line
+                        break
+                    line_hexes.append(current)
+                
+                # Check if this is the longest line
+                if len(line_hexes) > longest_distance:
+                    longest_distance = len(line_hexes)
+                    longest_line = line_hexes
             
-            # If exact position not valid, find nearest valid hex on that edge
-            # Search nearby rows (±1, ±2, ±3)
-            for r_offset in range(0, max_r - min_r + 1):
-                for sign in [0, 1, -1]:  # Try same row first, then +/-, then -/+
-                    if sign == 0:
-                        test_r = target_r
-                    else:
-                        test_r = target_r + (r_offset * sign)
-                    
-                    if test_r < min_r or test_r > max_r:
-                        continue
-                    
-                    # Find the furthest q on this row in the target direction
-                    row_hexes = [h for h in hexes if h.r == test_r]
-                    if row_hexes:
-                        if target_edge_q == max_q:
-                            # Want rightmost hex
-                            furthest = max(row_hexes, key=lambda h: h.q)
-                        else:
-                            # Want leftmost hex
-                            furthest = min(row_hexes, key=lambda h: h.q)
-                        return furthest
-            
-            # Absolute fallback: any edge hex
-            edge_hexes = [h for h in hexes if h.q == min_q or h.q == max_q]
-            if edge_hexes:
-                # Return the one furthest from U-boat
-                return max(edge_hexes, key=lambda h: abs(h.q - uboat_pos.q) + abs(h.r - uboat_pos.r))
+            # Return the last hex in the longest line (edge of map)
+            if longest_line:
+                return longest_line[-1]
         
         # Fallback
         return HexCoord(uboat_pos.q + 10, uboat_pos.r)
