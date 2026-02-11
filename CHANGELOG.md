@@ -4,6 +4,16 @@ All notable changes to the Lone U-Boat project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-02-10
+
+### Fixed
+- **Deck Gun Targeting Bug**: Deck gun no longer targets ships destroyed earlier in same turn
+  - Added destroyed_this_phase check when building deck gun target list (unified_game.py lines 5888-5904)
+  - Uses same coordinate comparison logic as torpedo penetration system
+  - Prevents deck gun from attacking ships sunk by torpedoes in same turn
+
+---
+
 ## [Unreleased] - 2026-02-01
 
 ### Fixed
@@ -47,7 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Added type annotation: `List[Tuple[Any, int, str]]` to valid_targets_in_line
 - **Coordinate Comparison**: Changed HexCoord equality checks to explicit q/r comparisons
   - Destroyed entity detection now uses: `destroyed_pos.q == ship.position.q and destroyed_pos.r == ship.position.r`
-  - More reliable than HexCoord.__eq__ for cross-turn entity tracking
+  - More reliable than `HexCoord.__eq__` for cross-turn entity tracking
 
 ### Validated
 - All 336 tests passing

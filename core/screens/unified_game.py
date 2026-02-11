@@ -5881,8 +5881,23 @@ class UnifiedGameScreen(BaseScreen):
                 los_calc = LOSCalculator(self.game.land_hexes)
                 
                 # Find all valid targets from PREVIEW position (after queued moves/rotations)
+                # Filter out ships destroyed earlier this turn
                 preview_targets: List[Tuple[Ship, int]] = []
                 for ship in self.game.ships:
+                    # Skip ships destroyed earlier in this turn (e.g., by torpedoes)
+                    ship_was_destroyed = False
+                    for destroyed in self.game.destroyed_this_phase:
+                        destroyed_pos = destroyed.get('position')
+                        if (destroyed_pos and 
+                            destroyed_pos.q == ship.position.q and 
+                            destroyed_pos.r == ship.position.r and 
+                            destroyed.get('entity_type') == ship.ship_type):
+                            ship_was_destroyed = True
+                            break
+                    
+                    if ship_was_destroyed:
+                        continue  # Skip this ship - it was destroyed earlier this turn
+                    
                     distance = HexGrid.hex_distance(preview_position, ship.position)
                     if 1 <= distance <= 3:
                         has_los, blocking_reason = los_calc.has_line_of_sight(
