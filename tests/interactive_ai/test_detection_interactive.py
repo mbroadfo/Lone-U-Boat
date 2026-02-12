@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from core.models import HexCoord, Facing, Depth, UBoat, Ship
 from core.actions.ai import EscortDetectionAction, MerchantVisualAction
-from tests.interactive_ai.conftest import MockGameState, MockDice, HexGrid
+from tests.interactive_ai.conftest import MockGameState, MockDice
 
 
 # ============================================================================
@@ -95,7 +95,7 @@ def test_escort_detection_threshold_sonar_operator(hex_grid: Any, mock_dice: Moc
     
     # Base threshold for PERISCOPE is 2, +1 for sonar = 3
     mock_dice.set_roll_sequence([2])
-    result = action.execute(game_state)
+    action.execute(game_state)
     
     assert action.threshold == 3
     assert action.roll == 2
@@ -120,7 +120,7 @@ def test_escort_detection_threshold_engine_damaged(hex_grid: Any, mock_dice: Moc
     
     # Base threshold for MEDIUM is 4, -1 for engine = 3
     mock_dice.set_roll_sequence([3])
-    result = action.execute(game_state)
+    action.execute(game_state)
     
     assert action.threshold == 3
     assert action.roll == 3
@@ -141,11 +141,11 @@ def test_escort_detection_surfaced_auto(hex_grid: Any, mock_dice: MockDice):
     game_state.dice_roller = mock_dice
     
     action = EscortDetectionAction(ship_index=0, current_detection_level=0)
-    
+
     # Roll 1 - minimum roll succeeds
     mock_dice.set_roll_sequence([1])
-    result = action.execute(game_state)
-    
+    action.execute(game_state)
+
     assert action.threshold == 1
     assert action.success
 
@@ -240,7 +240,7 @@ def test_escort_detection_dl_caps_at_3(hex_grid: Any, mock_dice: MockDice):
     
     # Successful detection
     mock_dice.set_roll_sequence([6])
-    result = action.execute(game_state)
+    action.execute(game_state)
     
     assert action.success
     assert action.new_detection_level == 3  # Capped at 3, not 4

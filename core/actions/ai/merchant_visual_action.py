@@ -7,7 +7,7 @@ Merchants at DL 3 can visually spot U-boat at range 1 (adjacent hex).
 
 from typing import Tuple, Any, Optional, Dict
 from .base_ai_action import AIAction, ActionResult
-from core.models import Ship, UBoat, Depth, HexCoord
+from core.models import Depth
 
 
 class MerchantVisualAction(AIAction):
@@ -161,8 +161,15 @@ class MerchantVisualAction(AIAction):
         # Get hex grid
         hex_grid = getattr(game_state, 'hex_grid', None)
         
+        # Type narrowing - validation ensures these are not None
+        assert u_boat is not None, "U-boat must exist for visual check"
+        assert hex_grid is not None, "Hex grid must exist"
+        
         # Calculate range
         self._range_to_uboat = hex_grid.hex_distance(merchant.position, u_boat.position)
+        
+        # Type narrowing - range is now assigned
+        assert self._range_to_uboat is not None
         
         # Automatic check - if within range and at correct depth, spotted
         in_range = self._range_to_uboat <= self._visual_range

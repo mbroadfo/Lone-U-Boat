@@ -7,7 +7,7 @@ attempting to detect U-boat during Detection Phase.
 
 from typing import Tuple, Any, Optional, Dict
 from .base_ai_action import AIAction, ActionResult
-from core.models import Ship, UBoat, Depth, HexCoord
+from core.models import UBoat, Depth, HexCoord
 
 
 class EscortDetectionAction(AIAction):
@@ -279,11 +279,18 @@ class EscortDetectionAction(AIAction):
         # Get hex grid
         hex_grid = getattr(game_state, 'hex_grid', None)
         
+        # Type narrowing - validation ensures these are not None
+        assert u_boat is not None, "U-boat must exist for detection"
+        assert hex_grid is not None, "Hex grid must exist"
+        
         # Calculate range
         self._range_to_uboat = hex_grid.hex_distance(escort.position, u_boat.position)
         
         # Calculate threshold
         self._threshold = self._calculate_threshold(u_boat)
+        
+        # Type narrowing for Optional fields that are now assigned
+        assert self._threshold is not None
         
         # Get dice roller
         dice = getattr(game_state, 'dice_roller', None)
@@ -297,6 +304,10 @@ class EscortDetectionAction(AIAction):
         
         # Player rolls 1d6
         self._roll = dice.roll_1d6(context=f"{escort.ship_type}_detection")
+        
+        # Type narrowing - roll and threshold are now assigned
+        assert self._roll is not None
+        assert self._threshold is not None
         
         # Check success
         self._success = self._roll >= self._threshold
