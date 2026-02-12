@@ -37,6 +37,7 @@ test_files = [
     "tests/interactive_ai/test_merchant_interactive.py",
     "tests/interactive_ai/test_escort_interactive.py",
     "tests/interactive_ai/test_b24_interactive.py",
+    "tests/interactive_ai/test_detection_interactive.py",
 ]
 
 if __name__ == "__main__":

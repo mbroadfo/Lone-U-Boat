@@ -22,6 +22,8 @@ from .b24_move_action import B24MoveAction
 from .b24_turn_action import B24TurnAction
 from .b24_bomb_action import B24BombAction
 from .flak_defense_action import FlakDefenseAction
+from .escort_detection_action import EscortDetectionAction
+from .merchant_visual_action import MerchantVisualAction
 
 __all__ = [
     'AIAction',
@@ -38,4 +40,6 @@ __all__ = [
     'B24TurnAction',
     'B24BombAction',
     'FlakDefenseAction',
+    'EscortDetectionAction',
+    'MerchantVisualAction',
 ]
