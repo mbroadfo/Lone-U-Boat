@@ -131,7 +131,8 @@ def test_escort_detection_surfaced_auto(hex_grid: Any, mock_dice: MockDice):
     """Test U-boat at SURFACED has threshold 1 (auto-detect)."""
     corvette = Ship(ship_type='corvette', position=HexCoord(5, 5), facing=Facing.NORTH)
     u_boat = UBoat(position=HexCoord(5, 6), facing=Facing.SOUTH, depth=Depth.SURFACED)
-    
+    u_boat.sonar_operator_alive = False  # Base threshold without modifiers
+
     game_state = MockGameState()
     game_state.ships = [corvette]
     game_state.u_boat = u_boat
