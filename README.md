@@ -29,8 +29,8 @@ python main.py
 
 ## Development Status
 
-**Current Phase**: Phase 5 - Polish, Save/Load, and Mission Expansion  
-**Latest Completion**: Phase 2 - Immediate Execution UI ✅ **COMPLETE**
+**Current Phase**: Phase 7 - Interactive AI Mode (Strangler Fig Pattern) 🚧  
+**Latest Completion**: Phase 7.3 - Backend Routing ✅ **COMPLETE**
 
 ### Completed Phases
 
@@ -41,10 +41,33 @@ python main.py
 - ✅ **Phase 3.6**: Complete damage resolution system
 - ✅ **Refactoring**: All game rules moved to JSON (zero redundancy)
 - ✅ **Phase 4**: All enemy AI complete - Merchants, Detection, Escorts (with depth charges), B-24 Aircraft, Event System
+- ✅ **Phase 6**: AIActionQueue - Queue manager for player-controlled AI actions (445 tests)
+- ✅ **Phase 7.1-7.3**: Strangler Fig Backend - Dual-mode routing system (450 tests)
 
-**Test Coverage**: 336 tests across 24 test files, **all passing** ✓
+**Test Coverage**: 450 tests across 34 test files + 5 integration tests, **all passing** ✓
 
-**The game is now fully playable!** All enemy behaviors are automated.
+**The game is fully playable in batch mode!** Enemy AI executes automatically.  
+**Interactive AI mode is 90% complete** - awaiting UI integration (Phase 7.4).
+
+### Interactive AI Mode (February 2026) 🚧
+
+**Status**: Backend complete, UI pending
+
+**Strangler Fig Pattern Implementation:**
+- ✅ 15 interactive AI action classes (Phases 1-6)
+- ✅ AIActionQueue orchestrator for player-executed actions
+- ✅ Action generators wrapping existing AI logic
+- ✅ Dual-mode routing (batch vs interactive)
+- ✅ Backward compatibility (0 breaking changes)
+- ⏳ UI integration (Phase 7.4)
+
+**What Works:**
+- Player can control ALL dice rolls (true solitaire)
+- Actions preview before execution
+- Progress tracking for multi-action sequences
+- Both systems coexist via `interactive_ai_mode` flag
+
+**Documentation**: See [docs/STRANGLER_FIG_INTERACTIVE_AI.md](docs/STRANGLER_FIG_INTERACTIVE_AI.md) for complete architecture.
 
 ### Recent Updates (February 2026)
 

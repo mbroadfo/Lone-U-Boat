@@ -5,8 +5,11 @@ Tests that interactive_ai_mode=True routes through AIActionQueue
 instead of batch AI execution.
 """
 
+# pyright: reportPrivateUsage=false
+
 import sys
 from pathlib import Path
+from typing import List, Tuple, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.game_state import Game
@@ -128,6 +131,7 @@ def test_has_pending_ai_actions():
     
     # Detection phase should have pending actions
     if game.has_pending_ai_actions():
+        assert game.current_ai_queue is not None, "Queue should exist when has_pending_ai_actions is True"
         print(f"✓ Has pending actions: {game.current_ai_queue.total_count()}")
         
         # Execute all actions
@@ -153,7 +157,7 @@ def run_all_tests():
         test_has_pending_ai_actions
     ]
     
-    results = []
+    results: List[Tuple[str, bool, Optional[str]]] = []
     for test_func in tests:
         try:
             result = test_func()

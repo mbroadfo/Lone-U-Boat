@@ -12,7 +12,6 @@ from core.actions.ai import (
     MerchantDamageCheckAction,
     EscortActivationAction,
     EscortMoveAction,
-    EscortTurnAction,
     EscortFireAction,
     EscortDepthChargeAction,
     EscortDetectionAction,
