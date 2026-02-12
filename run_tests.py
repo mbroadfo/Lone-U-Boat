@@ -33,6 +33,10 @@ test_files = [
     "tests/test_scripted_captain.py",
     "tests/test_torpedo_validator.py",
     "tests/test_victory_loss_conditions.py",
+    # Interactive AI tests (new)
+    "tests/interactive_ai/test_merchant_interactive.py",
+    "tests/interactive_ai/test_escort_interactive.py",
+    "tests/interactive_ai/test_b24_interactive.py",
 ]
 
 if __name__ == "__main__":

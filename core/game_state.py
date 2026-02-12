@@ -36,13 +36,18 @@ class Game:
         mission_number: int = 1,
         initial_depth: Optional[Depth] = None,
         initial_facing: Optional[Facing] = None,
-        screen: Optional[pygame.Surface] = None
+        screen: Optional[pygame.Surface] = None,
+        interactive_ai_mode: bool = False
     ):
         pygame.init()
         if screen is None:
             self.screen = pygame.display.set_mode((cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT))
         else:
             self.screen = screen
+        
+        # Interactive AI Mode: Execute AI actions one at a time with animations
+        # If False, use batch processing (original behavior)
+        self.interactive_ai_mode = interactive_ai_mode
         
         # Load mission configuration
         self.mission_number = mission_number
