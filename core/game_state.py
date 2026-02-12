@@ -18,6 +18,13 @@ from .board_layout import BoardLayoutRuntime
 from .turn_manager import TurnManager
 from .actions.action_history import ActionHistory
 from .actions.action_queue import ActionQueue  # Phase 2A: Keep for complex actions temporarily
+from .actions.ai import AIActionQueue
+from .ai_action_generators import (
+    generate_merchant_actions,
+    generate_detection_actions,
+    generate_escort_actions,
+    generate_b24_actions
+)
 from .merchant_ai import MerchantAI
 from .detection_ai import DetectionAI
 from .escort_ai import EscortAI
@@ -60,6 +67,10 @@ class Game:
         
         # Track entities destroyed this phase for visual feedback
         self.destroyed_this_phase: List[Dict[str, Any]] = []
+        
+        # Interactive AI mode - strangler fig pattern
+        self.interactive_ai_mode = interactive_ai_mode
+        self.current_ai_queue: Optional[AIActionQueue] = None
         
         # Load mission rules from JSON
         self.mission_rules = load_mission_rules(mission_number)
@@ -351,13 +362,25 @@ class Game:
         if current_phase == GamePhase.UBOAT_PHASE:
             self._end_uboat_phase()
         elif current_phase == GamePhase.MERCHANT_PHASE:
-            self._execute_merchant_phase()
+            if self.interactive_ai_mode:
+                self._execute_merchant_phase_interactive()
+            else:
+                self._execute_merchant_phase()
         elif current_phase == GamePhase.DETECTION_PHASE:
-            self._execute_detection_phase()
+            if self.interactive_ai_mode:
+                self._execute_detection_phase_interactive()
+            else:
+                self._execute_detection_phase()
         elif current_phase == GamePhase.ESCORT_PHASE:
-            self._execute_escort_phase()
+            if self.interactive_ai_mode:
+                self._execute_escort_phase_interactive()
+            else:
+                self._execute_escort_phase()
         elif current_phase == GamePhase.B24_PHASE:
-            self._execute_b24_phase()
+            if self.interactive_ai_mode:
+                self._execute_b24_phase_interactive()
+            else:
+                self._execute_b24_phase()
         elif current_phase == GamePhase.END_TURN_EVENTS:
             self._execute_end_turn_events()
         elif current_phase == GamePhase.END_TURN_PHASE:
@@ -814,6 +837,128 @@ class Game:
         
         # Note: Victory is now triggered by EXIT MAP button, not automatic
         # This ensures all exit conditions are met: position, facing, AP, and merchants sunk
+    
+    # ========== INTERACTIVE AI MODE METHODS (Strangler Fig Pattern) ==========
+    
+    def _execute_merchant_phase_interactive(self):
+        """Execute merchant phase in interactive mode - generate action queue."""
+        # Generate actions for player to execute
+        self.current_ai_queue = generate_merchant_actions(self)
+        
+        # Log phase start
+        merchant_count = sum(1 for ship in self.ships if ship.ship_type == 'merchant')
+        if merchant_count == 0:
+            self.turn_manager.add_phase_log("Merchant Phase", "No merchants on map")
+            self.current_ai_queue = None  # Skip to next phase immediately
+            return
+        
+        # If queue is empty even with merchants present, log it
+        if self.current_ai_queue.total_count() == 0:
+            self.turn_manager.add_phase_log("Merchant Phase", 
+                                           f"{merchant_count} merchant(s) - no actions needed")
+            self.current_ai_queue = None  # Skip to next phase immediately
+            return
+        
+        self.turn_manager.add_phase_log("Merchant Phase", 
+                                       f"{merchant_count} merchant(s) - {self.current_ai_queue.total_count()} actions queued")
+    
+    def _execute_detection_phase_interactive(self):
+        """Execute detection phase in interactive mode - generate action queue."""
+        # Generate actions for player to execute
+        self.current_ai_queue = generate_detection_actions(self)
+        
+        # Log phase start
+        action_count = self.current_ai_queue.total_count()
+        if action_count == 0:
+            self.turn_manager.add_phase_log("Detection Phase", "No detection checks")
+            self.current_ai_queue = None  # Skip to next phase immediately
+            return
+        
+        self.turn_manager.add_phase_log("Detection Phase",
+                                       f"{action_count} detection check(s) queued")
+    
+    def _execute_escort_phase_interactive(self):
+        """Execute escort phase in interactive mode - generate action queue."""
+        # Generate actions for player to execute
+        self.current_ai_queue = generate_escort_actions(self)
+        
+        # Log phase start
+        escort_count = sum(1 for ship in self.ships if ship.ship_type in ['corvette', 'destroyer'])
+        if escort_count == 0:
+            self.turn_manager.add_phase_log("Escort Phase", "No escorts on map")
+            self.current_ai_queue = None  # Skip to next phase immediately
+            return
+        
+        self.turn_manager.add_phase_log("Escort Phase",
+                                       f"{escort_count} escort(s) - {self.current_ai_queue.total_count()} actions queued")
+    
+    def _execute_b24_phase_interactive(self):
+        """Execute B-24 phase in interactive mode - generate action queue."""
+        # Generate actions for player to execute
+        self.current_ai_queue = generate_b24_actions(self)
+        
+        # Log phase start
+        if not self.aircraft:
+            self.turn_manager.add_phase_log("B24 Phase", "No aircraft on map")
+            self.current_ai_queue = None  # Skip to next phase immediately
+            return
+        
+        self.turn_manager.add_phase_log("B24 Phase",
+                                       f"{len(self.aircraft)} aircraft - {self.current_ai_queue.total_count()} actions queued")
+    
+    def execute_next_ai_action(self) -> bool:
+        """Execute next action in current AI queue (called from UI).
+        
+        Returns:
+            True if more actions remain, False if queue exhausted
+        """
+        if not self.current_ai_queue or self.current_ai_queue.is_exhausted():
+            return False
+        
+        # Execute current action
+        result = self.current_ai_queue.execute_current(self)
+        
+        # Log result
+        if result and result.success:
+            self.turn_manager.add_phase_log(
+                self.turn_manager.get_current_phase_name(),
+                result.message
+            )
+        
+        # Advance to next action
+        has_more = self.current_ai_queue.next()
+        
+        # If queue exhausted, clear it and allow phase advance
+        if not has_more:
+            self.current_ai_queue = None
+        
+        return has_more
+    
+    def get_current_ai_action_preview(self) -> Optional[Dict[str, Any]]:
+        """Get preview data for current AI action (for UI display).
+        
+        Returns:
+            Preview data dict or None if no action queued
+        """
+        if not self.current_ai_queue or self.current_ai_queue.is_exhausted():
+            return None
+        
+        action = self.current_ai_queue.current_action()
+        if not action:
+            return None
+        
+        return action.get_preview_data(self)
+    
+    def has_pending_ai_actions(self) -> bool:
+        """Check if there are pending AI actions to execute.
+        
+        Returns:
+            True if player must execute AI actions before advancing phase
+        """
+        return (self.current_ai_queue is not None 
+                and not self.current_ai_queue.is_exhausted())
+    
+    # ========== END INTERACTIVE AI MODE METHODS ==========
     
     def trigger_victory(self):
         """Trigger victory when exiting via EXIT MAP button."""
