@@ -136,7 +136,7 @@ def test_has_pending_ai_actions():
         
         # Execute all actions
         while game.has_pending_ai_actions():
-            game.execute_next_ai_action()
+            _, _ = game.execute_next_ai_action()
         
         # No more pending actions
         assert not game.has_pending_ai_actions()

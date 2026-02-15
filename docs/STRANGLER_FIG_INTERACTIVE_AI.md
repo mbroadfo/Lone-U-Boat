@@ -175,23 +175,36 @@ if game.has_pending_ai_actions():
 # When queue exhausted, phase can advance
 ```
 
-### UI Integration (Phase 7.4 - Pending)
+### UI Integration (Phase 7.4 - COMPLETE)
 
 ```python
-# In UnifiedGameScreen.update()
+# In UnifiedGameScreen._draw_phase_advance_button()
+# Now checks for pending actions and shows Execute button
+
 if self.game.has_pending_ai_actions():
-    # Show "Execute Action" button
-    self.show_execute_button = True
-    
-    # Display action preview
-    preview = self.game.get_current_ai_action_preview()
-    self.render_action_preview(preview)
-    
-    # On button click:
+    # Shows "EXECUTE AI ACTION" button (purple tint)
+    # Displays action name, details, and progress (X of Y)
+    # On button click: self.game.execute_next_ai_action()
+    pass
+else:
+    # Shows "NEXT PHASE" button when no actions pending
+    pass
+
+# In handle_events() (MOUSEBUTTONDOWN)
+if self.execute_ai_action_button_rect and 
+   self.execute_ai_action_button_rect.collidepoint(mouse_pos):
     has_more = self.game.execute_next_ai_action()
     if not has_more:
-        self.show_execute_button = False
+        phase_name = self.game.turn_manager.get_current_phase_name()
+        self.add_event(f"{phase_name} AI actions complete")
 ```
+
+**To Test UI Manually:**
+1. Edit `main.py`: Set `interactive_ai_mode=True` in Game() constructor
+2. Run game: `python main.py`
+3. Complete U-boat phase, advance to AI phase
+4. Purple "EXECUTE AI ACTION" button appears
+5. Click button to execute each action step-by-step
 
 ## Test Coverage
 
@@ -213,25 +226,20 @@ Located in repository root for quick access.
 
 ## Migration Strategy
 
-### Current State (Phase 7.3 Complete)
+### Current State (Phase 7.4 Complete)
 ✅ Both systems fully functional  
 ✅ Feature flag controls routing  
 ✅ All 445 tests passing (batch mode)  
-✅ 5 new tests passing (interactive mode)  
+✅ 5 integration tests passing (interactive mode)  
 ✅ Zero breaking changes  
+✅ **UI Integration Complete** - Execute AI Action button functional
 
 ### Next Steps
 
-**Phase 7.4: UI Integration** (Not Started)
-- Modify `UnifiedGameScreen` to detect `has_pending_ai_actions()`
-- Add "Execute Action" button when queue active
-- Display action preview with `get_current_ai_action_preview()`
-- Execute on click with `execute_next_ai_action()`
-- Show progress with `get_progress()`
-
-**Phase 7.5: User Enablement** (Future)
+**Phase 7.5: User Enablement** (Not Started)
 - Add settings toggle for interactive_ai_mode
 - Allow players to choose batch vs interactive
+- Add keyboard shortcut to execute AI actions
 - Default remains batch mode (safe)
 
 **Phase 8: Deprecate Old System** (Future)
@@ -265,8 +273,8 @@ Located in repository root for quick access.
 
 1. **Merchant Phase Queues** - May be empty on first turn (no path yet)
 2. **Escort Activation** - Queue generates all actions upfront (doesn't dynamically adjust for deactivation)
-3. **B-24 Spawning** - Not yet in interactive mode (Phase 7.4)
-4. **UI Not Integrated** - Phase 7.4 needed for player visibility
+3. **B-24 Spawning** - Not yet in interactive mode (Phase 7.5)
+4. **Manual Mode Toggle** - Must set interactive_ai_mode in code (Phase 7.5 will add UI toggle)
 
 ## Future Enhancements
 
@@ -278,7 +286,7 @@ Located in repository root for quick access.
 
 ## References
 
-- **Strangler Fig Pattern**: Martin Fowler, https://martinfowler.com/bliki/StranglerFigApplication.html
+- **Strangler Fig Pattern**: Martin Fowler, <https://martinfowler.com/bliki/StranglerFigApplication.html>
 - **Action System Design**: `core/actions/README.md` (if exists)
 - **Test Coverage**: `tests/interactive_ai/README.md` (if exists)
 - **Phase Documentation**: `docs/archive/phases/PHASE_*.md`
@@ -287,10 +295,11 @@ Located in repository root for quick access.
 
 - **Phase 6 (2026-02-11)**: AIActionQueue implementation
 - **Phase 7.1-7.3 (2026-02-12)**: Strangler fig backend wiring
-- **Phase 7.4 (Pending)**: UI integration
+- **Phase 7.4 (2026-02-12)**: UI integration - Execute AI Action button complete
+- **Phase 7.5 (Pending)**: User enablement - settings toggle
 - **Phase 8 (Future)**: Old system deprecation
 
 ---
 
 *Last Updated: February 12, 2026*  
-*Status: Phase 7.3 Complete - Backend Routing Functional*
+*Status: Phase 7.4 Complete - UI Fully Functional*

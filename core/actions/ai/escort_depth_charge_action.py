@@ -58,10 +58,10 @@ class EscortDepthChargeAction(AIAction):
         if escort is None:
             return False, f"Ship {self.entity_index} is not an escort"
         
-        if not hasattr(game_state, 'uboat'):
+        if not hasattr(game_state, 'u_boat'):
             return False, "No U-boat in game"
         
-        u_boat = game_state.uboat
+        u_boat = game_state.u_boat
         
         # Check U-boat is submerged
         if u_boat.depth == Depth.SURFACED:
@@ -98,7 +98,7 @@ class EscortDepthChargeAction(AIAction):
                 state_changes={}
             )
         
-        u_boat = game_state.uboat
+        u_boat = game_state.u_boat
         
         state_changes: Dict[str, Any] = {
             'range': self._range,
@@ -141,7 +141,10 @@ class EscortDepthChargeAction(AIAction):
                         u_boat.hull_damage = 4
                         state_changes['uboat_destroyed'] = True
         
+        # Build message with damage description
         message = f"DEPTH CHARGE: Attack on U-boat (Range {self._range})"
+        if 'damage_description' in state_changes:
+            message += f" - {state_changes['damage_description']}"
         
         return ActionResult(
             success=True,

@@ -178,8 +178,11 @@ def generate_b24_actions(game_state: Any) -> AIActionQueue:
     if not game_state.aircraft:
         return queue
     
-    # For each B-24, determine actions based on AI logic
-    for aircraft_idx, aircraft in enumerate(game_state.aircraft):
+    # Process aircraft in REVERSE order (highest index first)
+    # This ensures that if an aircraft is removed from the list, lower indices remain valid
+    for aircraft_idx in range(len(game_state.aircraft) - 1, -1, -1):
+        aircraft = game_state.aircraft[aircraft_idx]
+        
         # 1. Movement (always moves forward)
         queue.add(B24MoveAction(aircraft_index=aircraft_idx))
         

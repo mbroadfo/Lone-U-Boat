@@ -134,6 +134,9 @@ class AnimationManager:
         
         # Ship animations: dict mapping ship ID to (rotation_anim, movement_anim)
         self.ship_animations: Dict[int, Tuple[Optional[RotateAnimation], Optional[MoveAnimation]]] = {}
+        
+        # Aircraft animations: dict mapping aircraft ID to (rotation_anim, movement_anim)
+        self.aircraft_animations: Dict[int, Tuple[Optional[RotateAnimation], Optional[MoveAnimation]]] = {}
     
     def start_u_boat_rotation(self, old_facing: Facing, new_facing: Facing) -> None:
         """
@@ -187,6 +190,38 @@ class AnimationManager:
         rotation_anim, _ = self.ship_animations[ship_id]
         self.ship_animations[ship_id] = (rotation_anim, movement_anim)
     
+    def start_aircraft_rotation(self, aircraft_id: int, old_facing: Facing, new_facing: Facing) -> None:
+        """
+        Start aircraft rotation animation.
+        
+        Args:
+            aircraft_id: ID of the aircraft (index in game.aircraft list)
+            old_facing: Starting facing
+            new_facing: Target facing
+        """
+        if aircraft_id not in self.aircraft_animations:
+            self.aircraft_animations[aircraft_id] = (None, None)
+        
+        rotation_anim = RotateAnimation(old_facing, new_facing)
+        _, movement_anim = self.aircraft_animations[aircraft_id]
+        self.aircraft_animations[aircraft_id] = (rotation_anim, movement_anim)
+    
+    def start_aircraft_movement(self, aircraft_id: int, old_pos: HexCoord, new_pos: HexCoord) -> None:
+        """
+        Start aircraft movement animation.
+        
+        Args:
+            aircraft_id: ID of the aircraft (index in game.aircraft list)
+            old_pos: Starting position
+            new_pos: Target position
+        """
+        if aircraft_id not in self.aircraft_animations:
+            self.aircraft_animations[aircraft_id] = (None, None)
+        
+        movement_anim = MoveAnimation(old_pos, new_pos)
+        rotation_anim, _ = self.aircraft_animations[aircraft_id]
+        self.aircraft_animations[aircraft_id] = (rotation_anim, movement_anim)
+    
     def update(self) -> None:
         """Update all animations, removing finished ones."""
         if self.u_boat_rotation and self.u_boat_rotation.is_finished():
@@ -212,12 +247,31 @@ class AnimationManager:
         # Remove ships with no active animations
         for ship_id in finished_ships:
             del self.ship_animations[ship_id]
+        
+        # Update aircraft animations
+        finished_aircraft: list[int] = []
+        for aircraft_id, (rotation_anim, movement_anim) in self.aircraft_animations.items():
+            rotation_finished = rotation_anim is None or rotation_anim.is_finished()
+            movement_finished = movement_anim is None or movement_anim.is_finished()
+            
+            if rotation_finished and movement_finished:
+                finished_aircraft.append(aircraft_id)  # type: ignore[arg-type]
+            else:
+                # Update the tuple if either animation finished
+                new_rotation = None if rotation_finished else rotation_anim
+                new_movement = None if movement_finished else movement_anim
+                self.aircraft_animations[aircraft_id] = (new_rotation, new_movement)
+        
+        # Remove aircraft with no active animations
+        for aircraft_id in finished_aircraft:
+            del self.aircraft_animations[aircraft_id]
     
     def is_animating(self) -> bool:
         """Check if any animations are active."""
         return (self.u_boat_rotation is not None or 
                 self.u_boat_movement is not None or 
-                len(self.ship_animations) > 0)
+                len(self.ship_animations) > 0 or
+                len(self.aircraft_animations) > 0)
     
     def get_u_boat_render_state(self, actual_pos: HexCoord, actual_facing: Facing) -> Tuple[Tuple[float, float], float]:
         """
@@ -272,8 +326,38 @@ class AnimationManager:
         
         return (render_pos, render_angle)
     
+    def get_aircraft_render_state(self, aircraft_id: int, actual_pos: HexCoord, 
+                                 actual_facing: Facing) -> Tuple[Tuple[float, float], float]:
+        """
+        Get aircraft's current visual state for rendering.
+        
+        Args:
+            aircraft_id: ID of the aircraft (index in game.aircraft list)
+            actual_pos: Aircraft's actual game state position
+            actual_facing: Aircraft's actual game state facing
+        
+        Returns:
+            Tuple of ((q, r), angle_degrees) for rendering
+        """
+        # Start with actual game state
+        render_pos = (float(actual_pos.q), float(actual_pos.r))
+        render_angle = actual_facing.to_degrees()
+        
+        # Override with animation if active
+        if aircraft_id in self.aircraft_animations:
+            rotation_anim, movement_anim = self.aircraft_animations[aircraft_id]
+            
+            if movement_anim:
+                render_pos = movement_anim.get_current_position()
+            
+            if rotation_anim:
+                render_angle = rotation_anim.get_current_angle()
+        
+        return (render_pos, render_angle)
+    
     def clear_all(self) -> None:
         """Clear all active animations."""
         self.u_boat_rotation = None
         self.u_boat_movement = None
         self.ship_animations.clear()
+        self.aircraft_animations.clear()

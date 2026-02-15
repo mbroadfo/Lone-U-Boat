@@ -97,16 +97,31 @@ class EscortMoveAction(AIAction):
                 state_changes={}
             )
         
+        # Calculate target hex if not already set
+        if self.target_hex is None:
+            self.target_hex = escort.facing.forward(escort.position)
+        
+        # Validate move before executing
+        can_move, reason = self.validate(game_state)
+        if not can_move:
+            return ActionResult(
+                success=False,
+                message=f"Cannot move: {reason}",
+                ap_spent=0,
+                state_changes={}
+            )
+        
         old_position = escort.position
         
         # Move escort
-        assert self.target_hex is not None, "target_hex must be set before execute"
         escort.position = self.target_hex
         
         # Trigger movement animation
         if hasattr(game_state, 'animation_manager') and game_state.animation_manager:
-            game_state.animation_manager.ship_movements.append(
-                (self.entity_index, old_position, self.target_hex)
+            game_state.animation_manager.start_ship_movement(
+                self.entity_index,
+                old_position,
+                self.target_hex
             )
         
         # Check for forced dive (if U-boat at destination and surfaced)
@@ -115,8 +130,8 @@ class EscortMoveAction(AIAction):
             'new_position': self.target_hex
         }
         
-        if hasattr(game_state, 'uboat') and game_state.uboat.position == self.target_hex:
-            u_boat = game_state.uboat
+        if hasattr(game_state, 'u_boat') and game_state.u_boat.position == self.target_hex:
+            u_boat = game_state.u_boat
             if u_boat.depth == Depth.SURFACED:
                 shallow_hexes: set[HexCoord] = getattr(game_state, 'shallow_hexes', set())
                 
@@ -149,8 +164,8 @@ class EscortMoveAction(AIAction):
                         state_changes['dive_penalty_applied'] = True
         
         distance = 0
-        if hasattr(game_state, 'hex_grid') and hasattr(game_state, 'uboat'):
-            distance = game_state.hex_grid.hex_distance(self.target_hex, game_state.uboat.position)
+        if hasattr(game_state, 'hex_grid') and hasattr(game_state, 'u_boat'):
+            distance = game_state.hex_grid.hex_distance(self.target_hex, game_state.u_boat.position)
             state_changes['distance_to_uboat'] = distance
         
         message = f"MOVE: [{old_position.q},{old_position.r}] -> [{self.target_hex.q},{self.target_hex.r}]"

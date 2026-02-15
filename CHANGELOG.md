@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] - 2026-02-10
 
 ### Fixed
+- **B24 Aircraft Animation**: B24 movements and turns now display smooth animations
+  - Extended AnimationManager with aircraft_animations dictionary (matching ship_animations pattern)
+  - Added start_aircraft_rotation(), start_aircraft_movement(), and get_aircraft_render_state() methods
+  - B24MoveAction.execute_with_animation() now triggers animations for each hex moved
+  - B24TurnAction.execute_with_animation() now triggers rotation animations
+  - Renderer accepts animated_pos and animated_angle parameters for aircraft rendering
+  - UnifiedGameScreen queries animation manager for interpolated aircraft state
+- **Exit Button Logic**: Exit button now appears correctly when merchant destroyed on exit hex
+  - GameState.can_exit_map() now excludes destroyed merchants from count
+  - Filters ships using destroyed_this_phase list with coordinate comparison
+  - Fixes bug where destroyed merchants (still in ships list) prevented exit button activation
 - **Deck Gun Targeting Bug**: Deck gun no longer targets ships destroyed earlier in same turn
   - Added destroyed_this_phase check when building deck gun target list (unified_game.py lines 5888-5904)
   - Uses same coordinate comparison logic as torpedo penetration system

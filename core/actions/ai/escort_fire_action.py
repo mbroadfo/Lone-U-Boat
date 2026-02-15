@@ -60,10 +60,10 @@ class EscortFireAction(AIAction):
         if escort is None:
             return False, f"Ship {self.entity_index} is not an escort"
         
-        if not hasattr(game_state, 'uboat'):
+        if not hasattr(game_state, 'u_boat'):
             return False, "No U-boat in game"
         
-        u_boat = game_state.uboat
+        u_boat = game_state.u_boat
         
         # Check U-boat is surfaced
         if u_boat.depth != Depth.SURFACED:
@@ -114,7 +114,7 @@ class EscortFireAction(AIAction):
                 state_changes={}
             )
         
-        u_boat = game_state.uboat
+        u_boat = game_state.u_boat
         self.hit = True  # Escort fire is always a critical hit
         
         state_changes: Dict[str, Any] = {
@@ -165,7 +165,10 @@ class EscortFireAction(AIAction):
                         u_boat.hull_damage = 4
                         state_changes['uboat_destroyed'] = True
         
+        # Build message with damage description
         message = f"FIRE: Critical Hit on U-boat! (Range {self._range}, LOS: Yes, DL -> 3)"
+        if 'damage_description' in state_changes:
+            message += f" - {state_changes['damage_description']}"
         
         return ActionResult(
             success=True,

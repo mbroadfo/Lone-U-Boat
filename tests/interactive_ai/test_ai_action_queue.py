@@ -379,7 +379,7 @@ def test_mixed_action_types_sequence(hex_grid: Any, mock_dice: MockDice):
     game_state.hex_grid = hex_grid
     game_state.detection_level = 3
     game_state.dice_roller = mock_dice
-    game_state.aircraft_list = [Ship(ship_type='b24', position=HexCoord(4, 8), facing=Facing.NORTHEAST)]
+    game_state.aircraft = [Ship(ship_type='b24', position=HexCoord(4, 8), facing=Facing.NORTHEAST)]
     
     queue = AIActionQueue()
     

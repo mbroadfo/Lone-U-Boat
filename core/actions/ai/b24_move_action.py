@@ -16,7 +16,7 @@ class B24MoveAction(AIAction):
         """Initialize B-24 move action.
         
         Args:
-            aircraft_index: Index of aircraft in game_state.aircraft_list
+            aircraft_index: Index of aircraft in game_state.aircraft
         """
         super().__init__(entity_index=aircraft_index)
         self._aircraft_index = aircraft_index
@@ -35,8 +35,8 @@ class B24MoveAction(AIAction):
     
     def get_entity(self, game_state: Any) -> Optional[Aircraft]:
         """Get the B-24 aircraft."""
-        if hasattr(game_state, 'aircraft_list') and 0 <= self._aircraft_index < len(game_state.aircraft_list):
-            return game_state.aircraft_list[self._aircraft_index]
+        if hasattr(game_state, 'aircraft') and 0 <= self._aircraft_index < len(game_state.aircraft):
+            return game_state.aircraft[self._aircraft_index]
         return None
     
     def get_preview_data(self, game_state: Any) -> Dict[str, Any]:
@@ -69,19 +69,19 @@ class B24MoveAction(AIAction):
         """Validate that aircraft can move.
         
         Args:
-            game_state: Current game state with aircraft_list, hex_grid
+            game_state: Current game state with aircraft, hex_grid
         
         Returns:
             Tuple of (can_move, reason)
         """
         # Check aircraft exists
-        if not hasattr(game_state, 'aircraft_list'):
+        if not hasattr(game_state, 'aircraft'):
             return (False, "No aircraft list in game state")
         
-        if self._aircraft_index >= len(game_state.aircraft_list):
+        if self._aircraft_index >= len(game_state.aircraft):
             return (False, f"Aircraft index {self._aircraft_index} out of range")
         
-        aircraft = game_state.aircraft_list[self._aircraft_index]
+        aircraft = game_state.aircraft[self._aircraft_index]
         
         # Check hex grid
         if not hasattr(game_state, 'hex_grid'):
@@ -102,7 +102,16 @@ class B24MoveAction(AIAction):
         Returns:
             ActionResult with success status and movement details
         """
-        aircraft: Aircraft = game_state.aircraft_list[self._aircraft_index]
+        # Validate aircraft still exists (may have been removed by earlier action)
+        if self._aircraft_index >= len(game_state.aircraft):
+            return ActionResult(
+                success=False,
+                message=f"Aircraft no longer exists (removed earlier)",
+                ap_spent=0,
+                state_changes={}
+            )
+        
+        aircraft: Aircraft = game_state.aircraft[self._aircraft_index]
         hex_grid = game_state.hex_grid
         mission_hexes: Optional[set[HexCoord]] = getattr(hex_grid, 'mission_hexes', None)
         
@@ -116,9 +125,11 @@ class B24MoveAction(AIAction):
             # Check if off map
             if not hex_grid.is_valid_hex(new_pos, mission_hexes):
                 self._off_map = True
+                # Remove aircraft from game when it flies off map
+                game_state.aircraft.pop(self._aircraft_index)
                 return ActionResult(
                     success=True,
-                    message=f"B-24 moved off map after {move_num - 1} hex(es)",
+                    message=f"B-24 flew off map after {move_num - 1} hex(es)",
                     ap_spent=0,
                     state_changes={}
                 )
@@ -137,7 +148,7 @@ class B24MoveAction(AIAction):
     def execute_with_animation(self, game_state: Any) -> ActionResult:
         """Execute with animation trigger.
         
-        Future enhancement: Add movement animation
+        Triggers aircraft movement animation.
         
         Args:
             game_state: Current game state
@@ -145,4 +156,32 @@ class B24MoveAction(AIAction):
         Returns:
             ActionResult from execute()
         """
-        return self.execute(game_state)
+        # Validate aircraft still exists
+        if self._aircraft_index >= len(game_state.aircraft):
+            return ActionResult(
+                success=False,
+                message=f"Aircraft no longer exists (removed earlier)",
+                ap_spent=0,
+                state_changes={}
+            )
+        
+        aircraft = game_state.aircraft[self._aircraft_index]
+        old_position = aircraft.position
+        
+        # Execute the movement
+        result = self.execute(game_state)
+        
+        # If successful and aircraft moved (not off map), trigger animation for each hex moved
+        if result.success and not self._off_map and len(self._moves_made) > 0:
+            if hasattr(game_state, 'animation_manager') and game_state.animation_manager:
+                # Animate each movement step
+                current_pos = old_position
+                for new_pos in self._moves_made:
+                    game_state.animation_manager.start_aircraft_movement(
+                        self._aircraft_index,
+                        current_pos,
+                        new_pos
+                    )
+                    current_pos = new_pos
+        
+        return result

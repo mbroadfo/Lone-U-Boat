@@ -5,7 +5,7 @@ Contains the main Game class with gameplay loop (no editor features).
 
 import pygame
 import importlib
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Any, Dict, Tuple
 
 from config import board_config as cfg
 from config.board_layout_config import load_mission_layout
@@ -782,10 +782,23 @@ class Game:
         if remaining_ap <= 0:
             return False, "No movement points remaining"
         
-        # 4. Check all merchants sunk
-        merchant_count = sum(1 for ship in self.ships if ship.ship_type == "merchant")
-        if merchant_count > 0:
-            return False, f"{merchant_count} merchant(s) still alive"
+        # 4. Check all merchants sunk (exclude destroyed merchants that are still visible)
+        # Count only merchants that are NOT in the destroyed_this_phase list
+        alive_merchant_count = 0
+        for ship in self.ships:
+            if ship.ship_type == "merchant":
+                # Check if this merchant is in destroyed_this_phase
+                is_destroyed = False
+                for destroyed in self.destroyed_this_phase:
+                    if destroyed.get('position') == ship.position and destroyed.get('type') == 'merchant':
+                        is_destroyed = True
+                        break
+                
+                if not is_destroyed:
+                    alive_merchant_count += 1
+        
+        if alive_merchant_count > 0:
+            return False, f"{alive_merchant_count} merchant(s) still alive"
         
         return True, "Can exit"
     
@@ -906,24 +919,35 @@ class Game:
         self.turn_manager.add_phase_log("B24 Phase",
                                        f"{len(self.aircraft)} aircraft - {self.current_ai_queue.total_count()} actions queued")
     
-    def execute_next_ai_action(self) -> bool:
+    def execute_next_ai_action(self) -> Tuple[bool, Optional[str]]:
         """Execute next action in current AI queue (called from UI).
         
         Returns:
-            True if more actions remain, False if queue exhausted
+            Tuple of (has_more, result_message):
+            - has_more: True if more actions remain, False if queue exhausted
+            - result_message: The action result message to display, or None
         """
         if not self.current_ai_queue or self.current_ai_queue.is_exhausted():
-            return False
+            return (False, None)
         
         # Execute current action
         result = self.current_ai_queue.execute_current(self)
         
-        # Log result
+        # Store result message for return
+        result_message = None
         if result and result.success:
+            result_message = result.message
             self.turn_manager.add_phase_log(
                 self.turn_manager.get_current_phase_name(),
                 result.message
             )
+        
+        # Check if U-boat was destroyed by this action
+        self._check_game_over_conditions()
+        if not self.running:
+            # Game over - clear queue and return False
+            self.current_ai_queue = None
+            return (False, result_message)
         
         # Advance to next action
         has_more = self.current_ai_queue.next()
@@ -932,13 +956,14 @@ class Game:
         if not has_more:
             self.current_ai_queue = None
         
-        return has_more
+        return (has_more, result_message)
     
     def get_current_ai_action_preview(self) -> Optional[Dict[str, Any]]:
         """Get preview data for current AI action (for UI display).
         
         Returns:
-            Preview data dict or None if no action queued
+            Preview data dict with action_name and details for UI display,
+            or None if no action queued
         """
         if not self.current_ai_queue or self.current_ai_queue.is_exhausted():
             return None
@@ -947,7 +972,26 @@ class Game:
         if not action:
             return None
         
-        return action.get_preview_data(self)
+        # Get technical preview data (for rendering, not for UI text)
+        preview_data = action.get_preview_data(self)
+        
+        # Add user-friendly data for UI display
+        action_name = action.__class__.__name__.replace('Action', '').replace('_', ' ')
+        details = action.get_description() if hasattr(action, 'get_description') else "AI action"
+        
+        # Also add entity description if available
+        if hasattr(action, 'get_entity_description'):
+            try:
+                entity_desc = action.get_entity_description(self)
+                details = f"{entity_desc}: {details}"
+            except:
+                pass  # If entity lookup fails, just use basic description
+        
+        return {
+            'action_name': action_name,
+            'details': details,
+            'preview_data': preview_data  # Technical data for rendering
+        }
     
     def has_pending_ai_actions(self) -> bool:
         """Check if there are pending AI actions to execute.

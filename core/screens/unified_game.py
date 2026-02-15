@@ -53,7 +53,8 @@ class UnifiedGameScreen(BaseScreen):
                 mission_number=mission_number,
                 initial_depth=None,  # Will be set by player
                 initial_facing=None,
-                screen=self.screen  # Pass existing screen to avoid creating new display
+                screen=self.screen,  # Pass existing screen to avoid creating new display
+                interactive_ai_mode=True  # Phase 7.4: Enable interactive AI mode
             )
             # Share animation manager with game state
             self.game.animation_manager = self.animation_manager
@@ -133,6 +134,7 @@ class UnifiedGameScreen(BaseScreen):
         self.exit_button_rect: Optional[tuple[pygame.Rect, bool]] = None
         self.undo_button_rect: Optional[pygame.Rect] = None  # Phase 2C: Undo button
         self.phase_advance_button_rect: Optional[pygame.Rect] = None  # Phase 2D: Next phase button
+        self.execute_ai_action_button_rect: Optional[pygame.Rect] = None  # Phase 7.4: Execute AI Action button
         
         # Deck gun resolution state (for interactive combat)
         self.deck_gun_resolution_state: Optional[Dict[str, Any]] = None
@@ -434,9 +436,30 @@ class UnifiedGameScreen(BaseScreen):
                                     undo_button_clicked = True
                                     self._undo_last_action()
                             
+                            # Phase 7.4: Check EXECUTE AI ACTION button
+                            ai_button_clicked = False
+                            if not exit_button_clicked and not undo_button_clicked and hasattr(self, 'execute_ai_action_button_rect') and self.execute_ai_action_button_rect:
+                                if self.execute_ai_action_button_rect.collidepoint(mouse_pos):
+                                    ai_button_clicked = True
+                                    has_more, result_message = self.game.execute_next_ai_action()
+                                    
+                                    # Display result immediately in event log
+                                    if result_message:
+                                        self.add_event(result_message)
+                                    
+                                    # If game ended, render one final frame to show the message before game-over overlay
+                                    if not self.game.running:
+                                        self.render()
+                                        pygame.time.wait(100)  # Brief pause to ensure player sees final message
+                                    
+                                    if not has_more:
+                                        # Queue exhausted, show completion message
+                                        phase_name = self.game.turn_manager.get_current_phase_name()
+                                        self.add_event(f"{phase_name} AI actions complete")
+                            
                             # Phase 2D: Check NEXT PHASE button
                             phase_button_clicked = False
-                            if not exit_button_clicked and not undo_button_clicked and hasattr(self, 'phase_advance_button_rect') and self.phase_advance_button_rect:
+                            if not exit_button_clicked and not undo_button_clicked and not ai_button_clicked and hasattr(self, 'phase_advance_button_rect') and self.phase_advance_button_rect:
                                 if self.phase_advance_button_rect.collidepoint(mouse_pos):
                                     phase_button_clicked = True
                                     # Only allow phase advance if dice have been rolled (or not U-Boat phase)
@@ -2429,8 +2452,17 @@ class UnifiedGameScreen(BaseScreen):
                 self.game.renderer.render_ship(ship, self.game.destroyed_this_phase)
         
         # Render aircraft (B-24s)
-        for aircraft in self.game.aircraft:
-            self.game.renderer.render_aircraft(aircraft, self.game.destroyed_this_phase)  # type: ignore[attr-defined]
+        for aircraft_idx, aircraft in enumerate(self.game.aircraft):
+            # Get animated state if animating
+            if self.animation_manager.is_animating():
+                render_pos, render_angle = self.animation_manager.get_aircraft_render_state(
+                    aircraft_idx,
+                    aircraft.position,
+                    aircraft.facing
+                )
+                self.game.renderer.render_aircraft(aircraft, self.game.destroyed_this_phase, render_pos, render_angle)  # type: ignore[attr-defined]
+            else:
+                self.game.renderer.render_aircraft(aircraft, self.game.destroyed_this_phase)  # type: ignore[attr-defined]
         
         # Render U-boat
         if self.awaiting_initial_setup:
@@ -3642,7 +3674,12 @@ class UnifiedGameScreen(BaseScreen):
         return False
     
     def _draw_phase_advance_button(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw button to advance to next phase (for AI phases)."""
+        """Draw button to advance to next phase (for AI phases) or execute AI action."""
+        # Phase 7.4: Check if interactive AI mode has pending actions
+        if self.game.has_pending_ai_actions():
+            self._draw_execute_ai_action_button(x, y, width, height)
+            return
+        
         # Determine if we're stepping through action execution or advancing phases
         is_executing = self.action_execution_state and self.action_execution_state.get('waiting_for_continue', False)
         
@@ -3674,6 +3711,7 @@ class UnifiedGameScreen(BaseScreen):
         
         # Store rect for click detection
         self.phase_advance_button_rect = button_rect
+        self.execute_ai_action_button_rect = None  # Clear AI button rect
         
         # Show hint
         hint_y = button_rect.bottom + 15
@@ -3683,6 +3721,141 @@ class UnifiedGameScreen(BaseScreen):
             hint_y,
             self.font_small,
             color=(120, 140, 160),
+            center=True
+        )
+    
+    def _draw_execute_ai_action_button(self, x: int, y: int, width: int, height: int) -> None:
+        """Draw button to execute current AI action (Phase 7.4: Interactive AI Mode)."""
+        # Get action preview
+        preview = self.game.get_current_ai_action_preview()
+        if not preview:
+            # No action available, fall back to phase advance
+            return
+        
+        # Get progress info
+        progress = self.game.current_ai_queue.get_progress() if self.game.current_ai_queue else None
+        
+        # Button area (upper portion)
+        button_width = width - 40
+        button_height = 60
+        button_x = x + 20
+        button_y = y + 30
+        
+        button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+        
+        # Button styling (distinct color for AI actions)
+        button_color = (100, 50, 120)  # Purple tint for AI
+        border_color = (180, 100, 220)
+        text_color = (240, 220, 255)
+        
+        pygame.draw.rect(self.screen, button_color, button_rect)
+        pygame.draw.rect(self.screen, border_color, button_rect, 3)
+        self.draw_text(
+            "EXECUTE AI ACTION",
+            button_rect.centerx,
+            button_rect.centery - 8,
+            self.font_medium,
+            color=text_color,
+            center=True
+        )
+        
+        # Show progress
+        if progress:
+            # Progress shows: "Action X of Y" (1-indexed for user display)
+            current_num = progress['current_index'] + 1  # Convert 0-indexed to 1-indexed
+            total_num = progress['total_count']
+            progress_text = f"(Action {current_num} of {total_num})"
+            self.draw_text(
+                progress_text,
+                button_rect.centerx,
+                button_rect.centery + 15,
+                self.font_small,
+                color=(200, 180, 220),
+                center=True
+            )
+        
+        # Store rect for click detection
+        self.execute_ai_action_button_rect = button_rect
+        self.phase_advance_button_rect = None  # Clear phase button rect
+        
+        # Display action preview below button
+        preview_y = button_rect.bottom + 25
+        
+        # Action name (larger, highlighted)
+        action_name = preview.get('action_name', 'Unknown Action')
+        self.draw_text(
+            f"Next: {action_name}",
+            x + width // 2,
+            preview_y,
+            self.font_medium,
+            color=(255, 220, 100),
+            center=True
+        )
+        preview_y += 30
+        
+        # Action details (wrapped text)
+        details = preview.get('details', 'No details available')
+        
+        # Add technical context from preview_data if available
+        preview_data = preview.get('preview_data', {})
+        if preview_data:
+            extra_info = []
+            
+            # Add range information if present
+            if 'range' in preview_data:
+                extra_info.append(f"Range: {preview_data['range']}")
+            
+            # Add detection level if present
+            if 'detection_level' in preview_data:
+                extra_info.append(f"DL: {preview_data['detection_level']}")
+            
+            # Add position info if present
+            if 'current_position' in preview_data and preview_data['current_position']:
+                pos = preview_data['current_position']
+                extra_info.append(f"At [{pos.q},{pos.r}]")
+            
+            # Append extra info to details
+            if extra_info:
+                details += f" ({', '.join(extra_info)})"
+        
+        # Simple word wrapping
+        words = details.split()
+        lines = []
+        current_line = []
+        max_width = width - 60
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            text_surface = self.font_small.render(test_line, True, (200, 200, 200))
+            if text_surface.get_width() <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        # Draw wrapped text lines (increased from 4 to 6 lines for more detail)
+        for line in lines[:6]:
+            self.draw_text(
+                line,
+                x + width // 2,
+                preview_y,
+                self.font_small,
+                color=(200, 200, 200),
+                center=True
+            )
+            preview_y += 18
+        
+        # Hint
+        hint_y = y + height - 30
+        self.draw_text(
+            "(click to execute)",
+            x + width // 2,
+            hint_y,
+            self.font_small,
+            color=(140, 120, 160),
             center=True
         )
     

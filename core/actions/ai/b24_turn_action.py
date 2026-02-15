@@ -17,7 +17,7 @@ class B24TurnAction(AIAction):
         """Initialize B-24 turn action.
         
         Args:
-            aircraft_index: Index of aircraft in game_state.aircraft_list
+            aircraft_index: Index of aircraft in game_state.aircraft
             detection_level: Current detection level (0-3)
         """
         super().__init__(entity_index=aircraft_index)
@@ -38,8 +38,8 @@ class B24TurnAction(AIAction):
     
     def get_entity(self, game_state: Any) -> Optional[Aircraft]:
         """Get the B-24 aircraft."""
-        if hasattr(game_state, 'aircraft_list') and 0 <= self._aircraft_index < len(game_state.aircraft_list):
-            return game_state.aircraft_list[self._aircraft_index]
+        if hasattr(game_state, 'aircraft') and 0 <= self._aircraft_index < len(game_state.aircraft):
+            return game_state.aircraft[self._aircraft_index]
         return None
     
     def get_preview_data(self, game_state: Any) -> Dict[str, Any]:
@@ -78,7 +78,7 @@ class B24TurnAction(AIAction):
         """Validate that aircraft can turn.
         
         Args:
-            game_state: Current game state with aircraft_list, u_boat
+            game_state: Current game state with aircraft, u_boat
         
         Returns:
             Tuple of (can_turn, reason)
@@ -88,10 +88,10 @@ class B24TurnAction(AIAction):
             return (False, f"Detection level {self._detection_level} < 2, B-24 cannot turn")
         
         # Check aircraft exists
-        if not hasattr(game_state, 'aircraft_list'):
+        if not hasattr(game_state, 'aircraft'):
             return (False, "No aircraft list in game state")
         
-        if self._aircraft_index >= len(game_state.aircraft_list):
+        if self._aircraft_index >= len(game_state.aircraft):
             return (False, f"Aircraft index {self._aircraft_index} out of range")
         
         # Check U-boat exists
@@ -115,7 +115,16 @@ class B24TurnAction(AIAction):
         Returns:
             ActionResult with turn details
         """
-        aircraft: Aircraft = game_state.aircraft_list[self._aircraft_index]
+        # Validate aircraft still exists (may have been removed by earlier action)
+        if self._aircraft_index >= len(game_state.aircraft):
+            return ActionResult(
+                success=False,
+                message=f"Aircraft no longer exists (removed earlier)",
+                ap_spent=0,
+                state_changes={}
+            )
+        
+        aircraft: Aircraft = game_state.aircraft[self._aircraft_index]
         u_boat: UBoat = game_state.u_boat
         hex_grid = game_state.hex_grid
         dice = getattr(game_state, 'dice_roller', None)
@@ -224,7 +233,7 @@ class B24TurnAction(AIAction):
     def execute_with_animation(self, game_state: Any) -> ActionResult:
         """Execute with animation trigger.
         
-        Future enhancement: Add turn animation
+        Triggers aircraft rotation animation.
         
         Args:
             game_state: Current game state
@@ -232,7 +241,31 @@ class B24TurnAction(AIAction):
         Returns:
             ActionResult from execute()
         """
-        return self.execute(game_state)
+        # Validate aircraft still exists
+        if self._aircraft_index >= len(game_state.aircraft):
+            return ActionResult(
+                success=False,
+                message=f"Aircraft no longer exists (removed earlier)",
+                ap_spent=0,
+                state_changes={}
+            )
+        
+        aircraft = game_state.aircraft[self._aircraft_index]
+        old_facing = aircraft.facing
+        
+        # Execute the turn
+        result = self.execute(game_state)
+        
+        # If successful and aircraft turned, trigger animation
+        if result.success and self._turn_direction is not None and self._new_facing is not None:
+            if hasattr(game_state, 'animation_manager') and game_state.animation_manager:
+                game_state.animation_manager.start_aircraft_rotation(
+                    self._aircraft_index,
+                    old_facing,
+                    self._new_facing
+                )
+        
+        return result
     
     def _is_facing_target(self, pos: HexCoord, facing: Facing, target: HexCoord, 
                          hex_grid: Any, mission_hexes: Optional[set[HexCoord]]) -> bool:

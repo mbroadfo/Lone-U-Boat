@@ -345,16 +345,24 @@ class GameRenderer:
                 destroyed_rect = scaled_destroyed.get_rect(center=(int(center[0]), int(center[1])))
                 self.screen.blit(scaled_destroyed, destroyed_rect)
     
-    def render_aircraft(self, aircraft: 'Aircraft', destroyed_list: Optional[List[Dict[str, Any]]] = None) -> None:
+    def render_aircraft(self, aircraft: 'Aircraft', destroyed_list: Optional[List[Dict[str, Any]]] = None,
+                       animated_pos: Optional[Tuple[float, float]] = None,
+                       animated_angle: Optional[float] = None) -> None:
         """Render aircraft (B-24) using PNG image.
         
         Args:
             aircraft: Aircraft instance to render
             destroyed_list: Optional list of destroyed entities this phase
+            animated_pos: Optional animated position as (q, r) floats for interpolation
+            animated_angle: Optional animated angle in degrees for rotation
         """
         from .models import Aircraft
         
-        center = self.hex_grid.hex_to_pixel(aircraft.position)
+        # Use animated position if provided, otherwise use actual position
+        if animated_pos:
+            center = self.hex_grid.hex_to_pixel_float(animated_pos[0], animated_pos[1])
+        else:
+            center = self.hex_grid.hex_to_pixel(aircraft.position)
         
         # Get B-24 image
         image = self.ship_images.get('b24')
@@ -370,8 +378,12 @@ class GameRenderer:
             pygame.draw.polygon(self.screen, (100, 100, 255), points)
             return
         
-        # Rotate image based on facing
-        angle_deg = -60 * aircraft.facing.value
+        # Use animated angle if provided, otherwise use actual facing
+        if animated_angle is not None:
+            angle_deg = -animated_angle  # Negative for pygame rotation
+        else:
+            angle_deg = -60 * aircraft.facing.value
+        
         rotated_image = pygame.transform.rotate(image, angle_deg)
         
         # Center the rotated image

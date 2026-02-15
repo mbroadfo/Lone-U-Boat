@@ -269,7 +269,7 @@ def test_escort_move_forced_dive(mock_game_state: MockGameState, destroyer: Ship
     destroyer.facing = Facing.SOUTHEAST
     surfaced_uboat.position = HexCoord(5, 5)
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = surfaced_uboat
+    mock_game_state.u_boat = surfaced_uboat
     mock_game_state.detection_level = 1
     
     action = EscortMoveAction(entity_index=0)
@@ -379,7 +379,7 @@ def test_escort_fire_validation_success(mock_game_state: MockGameState, destroye
     destroyer.position = HexCoord(5, 5)
     surfaced_uboat.position = HexCoord(8, 5)  # Range 3
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = surfaced_uboat
+    mock_game_state.u_boat = surfaced_uboat
     
     action = EscortFireAction(entity_index=0, detection_level=2)
     can_fire, reason = action.validate(mock_game_state)
@@ -398,7 +398,7 @@ def test_escort_fire_fails_submerged(mock_game_state: MockGameState, destroyer: 
     destroyer.position = HexCoord(5, 5)
     submerged_uboat.position = HexCoord(7, 5)
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = submerged_uboat
+    mock_game_state.u_boat = submerged_uboat
     
     action = EscortFireAction(entity_index=0, detection_level=2)
     can_fire, reason = action.validate(mock_game_state)
@@ -415,7 +415,7 @@ def test_escort_fire_fails_range(mock_game_state: MockGameState, destroyer: Ship
     destroyer.position = HexCoord(5, 5)
     surfaced_uboat.position = HexCoord(15, 5)  # Range > 6
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = surfaced_uboat
+    mock_game_state.u_boat = surfaced_uboat
     
     action = EscortFireAction(entity_index=0, detection_level=2)
     can_fire, reason = action.validate(mock_game_state)
@@ -432,7 +432,7 @@ def test_escort_fire_fails_dl0(mock_game_state: MockGameState, destroyer: Ship, 
     destroyer.position = HexCoord(5, 5)
     surfaced_uboat.position = HexCoord(7, 5)
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = surfaced_uboat
+    mock_game_state.u_boat = surfaced_uboat
     
     action = EscortFireAction(entity_index=0, detection_level=0)
     can_fire, reason = action.validate(mock_game_state)
@@ -449,7 +449,7 @@ def test_escort_fire_execution(mock_game_state: MockGameState, destroyer: Ship, 
     destroyer.position = HexCoord(5, 5)
     surfaced_uboat.position = HexCoord(7, 5)
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = surfaced_uboat
+    mock_game_state.u_boat = surfaced_uboat
     mock_game_state.detection_level = 1
     
     action = EscortFireAction(entity_index=0, detection_level=1)
@@ -474,7 +474,7 @@ def test_escort_depth_charge_validation_success(mock_game_state: MockGameState, 
     destroyer.position = HexCoord(5, 5)
     submerged_uboat.position = HexCoord(5, 5)  # Same hex
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = submerged_uboat
+    mock_game_state.u_boat = submerged_uboat
     
     action = EscortDepthChargeAction(entity_index=0, detection_level=2)
     can_attack, reason = action.validate(mock_game_state)
@@ -492,7 +492,7 @@ def test_escort_depth_charge_fails_surfaced(mock_game_state: MockGameState, dest
     destroyer.position = HexCoord(5, 5)
     surfaced_uboat.position = HexCoord(5, 5)
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = surfaced_uboat
+    mock_game_state.u_boat = surfaced_uboat
     
     action = EscortDepthChargeAction(entity_index=0, detection_level=2)
     can_attack, reason = action.validate(mock_game_state)
@@ -509,7 +509,7 @@ def test_escort_depth_charge_fails_range(mock_game_state: MockGameState, destroy
     destroyer.position = HexCoord(5, 5)
     submerged_uboat.position = HexCoord(7, 5)  # Range > 1
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = submerged_uboat
+    mock_game_state.u_boat = submerged_uboat
     
     action = EscortDepthChargeAction(entity_index=0, detection_level=2)
     can_attack, reason = action.validate(mock_game_state)
@@ -526,7 +526,7 @@ def test_escort_depth_charge_execution(mock_game_state: MockGameState, destroyer
     destroyer.position = HexCoord(5, 5)
     submerged_uboat.position = HexCoord(5, 5)
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = submerged_uboat
+    mock_game_state.u_boat = submerged_uboat
     
     action = EscortDepthChargeAction(entity_index=0, detection_level=2)
     action.validate(mock_game_state)
@@ -549,7 +549,7 @@ def test_full_escort_workflow(mock_game_state: MockGameState, destroyer: Ship, s
     destroyer.facing = Facing.SOUTHEAST
     surfaced_uboat.position = HexCoord(7, 5)
     mock_game_state.ships = [destroyer]
-    mock_game_state.uboat = surfaced_uboat
+    mock_game_state.u_boat = surfaced_uboat
     mock_game_state.escort_ai.dice = mock_dice
     mock_dice.set_roll_sequence([4, 2, 5, 6])  # 4 dice: destroyer (3 base + 1 DL bonus)
     

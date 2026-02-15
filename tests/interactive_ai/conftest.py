@@ -141,7 +141,7 @@ class MockGameState:
         self.detection_level = 1
         self.turn_manager = None
         # B-24 test attributes
-        self.aircraft_list = []
+        self.aircraft = []
         self.u_boat = self.uboat  # Alias for B-24 tests
         self.dice_roller: Any = None
         self.damage_resolver: Any = None

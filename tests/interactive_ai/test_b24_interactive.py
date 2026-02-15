@@ -26,7 +26,7 @@ def test_b24_move_two_hexes(hex_grid: Any):
     """Test B-24 moves 2 hexes forward."""
     aircraft = Aircraft(position=HexCoord(5, 5), facing=Facing.NORTH)
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.hex_grid = hex_grid
     
     action = B24MoveAction(aircraft_index=0)
@@ -45,7 +45,7 @@ def test_b24_move_off_map_first_hex(hex_grid: Any):
     # Place aircraft at edge facing off-map
     aircraft = Aircraft(position=HexCoord(0, 0), facing=Facing.NORTH)
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.hex_grid = hex_grid
     
     action = B24MoveAction(aircraft_index=0)
@@ -55,7 +55,7 @@ def test_b24_move_off_map_first_hex(hex_grid: Any):
     result = action.execute(game_state)
     assert result.success
     assert action.off_map
-    assert "moved off map" in result.message.lower()
+    assert "flew off map" in result.message.lower()
 
 
 def test_b24_move_off_map_second_hex(hex_grid: Any):
@@ -63,7 +63,7 @@ def test_b24_move_off_map_second_hex(hex_grid: Any):
     # Place aircraft 1 hex from edge
     aircraft = Aircraft(position=HexCoord(0, 1), facing=Facing.NORTH)
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.hex_grid = hex_grid
     
     action = B24MoveAction(aircraft_index=0)
@@ -79,7 +79,7 @@ def test_b24_move_off_map_second_hex(hex_grid: Any):
 def test_b24_move_validation_no_aircraft():
     """Test validation fails with no aircraft list."""
     game_state = MockGameState()
-    # No aircraft_list attribute
+    # No aircraft attribute
     
     action = B24MoveAction(aircraft_index=0)
     can_move, reason = action.validate(game_state)
@@ -90,7 +90,7 @@ def test_b24_move_validation_no_aircraft():
 def test_b24_move_validation_invalid_index(hex_grid: Any):
     """Test validation fails with invalid aircraft index."""
     game_state = MockGameState()
-    game_state.aircraft_list = []
+    game_state.aircraft = []
     game_state.hex_grid = hex_grid
     
     action = B24MoveAction(aircraft_index=0)
@@ -109,7 +109,7 @@ def test_b24_turn_requires_dl_2(hex_grid: Any, mock_dice: MockDice):
     u_boat = UBoat(position=HexCoord(6, 5), facing=Facing.SOUTH, depth=Depth.SURFACED)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -128,7 +128,7 @@ def test_b24_turn_toward_uboat(hex_grid: Any, mock_dice: MockDice):
     u_boat = UBoat(position=HexCoord(7, 5), facing=Facing.SOUTH, depth=Depth.SURFACED)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -150,7 +150,7 @@ def test_b24_no_turn_when_facing_uboat(hex_grid: Any, mock_dice: MockDice):
     u_boat = UBoat(position=HexCoord(5, 3), facing=Facing.SOUTH, depth=Depth.SURFACED)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -169,7 +169,7 @@ def test_b24_turn_randomly_when_facing_away(hex_grid: Any, mock_dice: MockDice):
     u_boat = UBoat(position=HexCoord(5, 7), facing=Facing.SOUTH, depth=Depth.SURFACED)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -190,7 +190,7 @@ def test_b24_turn_same_hex_facing_off_map(hex_grid: Any, mock_dice: MockDice):
     u_boat = UBoat(position=HexCoord(0, 0), facing=Facing.SOUTH, depth=Depth.SURFACED)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -213,7 +213,7 @@ def test_b24_bomb_critical_hit(hex_grid: Any, mock_dice: MockDice):
     u_boat = UBoat(position=HexCoord(5, 5), facing=Facing.SOUTH, depth=Depth.SURFACED)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -240,7 +240,7 @@ def test_b24_bomb_general_damage(hex_grid: Any, mock_dice: MockDice):
     u_boat = UBoat(position=HexCoord(5, 5), facing=Facing.SOUTH, depth=Depth.SURFACED)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -263,7 +263,7 @@ def test_b24_bomb_miss(hex_grid: Any, mock_dice: MockDice):
     u_boat = UBoat(position=HexCoord(5, 5), facing=Facing.SOUTH, depth=Depth.SURFACED)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -287,7 +287,7 @@ def test_b24_bomb_validation_range_too_far(hex_grid: Any):
     u_boat = UBoat(position=HexCoord(5, 8), facing=Facing.SOUTH, depth=Depth.SURFACED)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     
@@ -303,7 +303,7 @@ def test_b24_bomb_validation_uboat_too_deep(hex_grid: Any):
     u_boat = UBoat(position=HexCoord(5, 5), facing=Facing.SOUTH, depth=Depth.DEEP)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     
@@ -319,7 +319,7 @@ def test_b24_bomb_can_attack_at_periscope(hex_grid: Any, mock_dice: MockDice):
     u_boat = UBoat(position=HexCoord(5, 6), facing=Facing.SOUTH, depth=Depth.PERISCOPE)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -341,7 +341,7 @@ def test_flak_defense_shot_down(hex_grid: Any, mock_dice: MockDice):
     u_boat.lookout_alive = True
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -369,7 +369,7 @@ def test_flak_defense_scared_off(hex_grid: Any, mock_dice: MockDice):
     u_boat.lookout_alive = False
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -394,7 +394,7 @@ def test_flak_defense_miss(hex_grid: Any, mock_dice: MockDice):
     u_boat.lookout_alive = False
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -417,7 +417,7 @@ def test_flak_defense_validation_not_surfaced():
     u_boat = UBoat(position=HexCoord(5, 5), facing=Facing.SOUTH, depth=Depth.PERISCOPE)
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     
     action = FlakDefenseAction(aircraft_index=0)
@@ -433,7 +433,7 @@ def test_flak_defense_validation_gun_damaged():
     u_boat.flak_gun_damaged = True
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     
     action = FlakDefenseAction(aircraft_index=0)
@@ -449,7 +449,7 @@ def test_flak_defense_lookout_bonus(hex_grid: Any, mock_dice: MockDice):
     u_boat_with_lookout.lookout_alive = True
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat_with_lookout
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -476,7 +476,7 @@ def test_b24_full_sequence(hex_grid: Any, mock_dice: MockDice):
     u_boat.lookout_alive = False
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -515,7 +515,7 @@ def test_b24_flak_prevents_bombing(hex_grid: Any, mock_dice: MockDice):
     u_boat.lookout_alive = True
     
     game_state = MockGameState()
-    game_state.aircraft_list = [aircraft]
+    game_state.aircraft = [aircraft]
     game_state.u_boat = u_boat
     game_state.hex_grid = hex_grid
     game_state.dice_roller = mock_dice
@@ -528,4 +528,4 @@ def test_b24_flak_prevents_bombing(hex_grid: Any, mock_dice: MockDice):
     assert flak_action.b24_destroyed
     
     # B-24 is destroyed, cannot bomb
-    # (In real game, B-24 would be removed from aircraft_list)
+    # (In real game, B-24 would be removed from aircraft)

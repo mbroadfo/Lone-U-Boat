@@ -16,7 +16,7 @@ class FlakDefenseAction(AIAction):
         """Initialize flak defense action.
         
         Args:
-            aircraft_index: Index of attacking aircraft in game_state.aircraft_list
+            aircraft_index: Index of attacking aircraft in game_state.aircraft
         """
         super().__init__(entity_index=aircraft_index)
         self._aircraft_index = aircraft_index
@@ -37,8 +37,8 @@ class FlakDefenseAction(AIAction):
     
     def get_entity(self, game_state: Any) -> Optional[Aircraft]:
         """Get the B-24 aircraft being targeted."""
-        if hasattr(game_state, 'aircraft_list') and 0 <= self._aircraft_index < len(game_state.aircraft_list):
-            return game_state.aircraft_list[self._aircraft_index]
+        if hasattr(game_state, 'aircraft') and 0 <= self._aircraft_index < len(game_state.aircraft):
+            return game_state.aircraft[self._aircraft_index]
         return None
     
     def get_preview_data(self, game_state: Any) -> Dict[str, Any]:
@@ -110,10 +110,10 @@ class FlakDefenseAction(AIAction):
             return (False, "Flak gun damaged")
         
         # Check aircraft exists
-        if not hasattr(game_state, 'aircraft_list'):
+        if not hasattr(game_state, 'aircraft'):
             return (False, "No aircraft list in game state")
         
-        if self._aircraft_index >= len(game_state.aircraft_list):
+        if self._aircraft_index >= len(game_state.aircraft):
             return (False, f"Aircraft index {self._aircraft_index} out of range")
         
         return (True, "U-boat can fire flak gun")
@@ -136,8 +136,17 @@ class FlakDefenseAction(AIAction):
         Returns:
             ActionResult with flak defense details
         """
+        # Validate aircraft still exists (may have been removed by earlier action)
+        if self._aircraft_index >= len(game_state.aircraft):
+            return ActionResult(
+                success=False,
+                message=f"Aircraft no longer exists (removed earlier)",
+                ap_spent=0,
+                state_changes={}
+            )
+        
         u_boat: UBoat = game_state.u_boat
-        aircraft: Aircraft = game_state.aircraft_list[self._aircraft_index]
+        aircraft: Aircraft = game_state.aircraft[self._aircraft_index]
         dice = getattr(game_state, 'dice_roller', None)
         
         # Determine threshold

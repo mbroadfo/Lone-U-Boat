@@ -62,9 +62,9 @@ class EscortTurnAction(AIAction):
         
         # Determine target if not provided
         if self.target_hex is None:
-            if hasattr(game_state, 'escort_ai') and hasattr(game_state, 'uboat'):
+            if hasattr(game_state, 'escort_ai') and hasattr(game_state, 'u_boat'):
                 self.target_hex = game_state.escort_ai.get_turn_target(
-                    escort, game_state.uboat, self.detection_level
+                    escort, game_state.u_boat, self.detection_level
                 )
             else:
                 return False, "Cannot determine turn target"
@@ -114,8 +114,10 @@ class EscortTurnAction(AIAction):
         
         # Trigger rotation animation
         if hasattr(game_state, 'animation_manager') and game_state.animation_manager:
-            game_state.animation_manager.ship_rotations.append(
-                (self.entity_index, old_facing, self.new_facing)
+            game_state.animation_manager.start_ship_rotation(
+                self.entity_index,
+                old_facing,
+                self.new_facing
             )
         
         # Determine turn direction for message
