@@ -6,6 +6,7 @@ This directory contains current project documentation and architecture notes.
 
 ### Architecture
 - **ARCHITECTURE_BOARD_LAYOUT.md** - Board layout system and hex coordinate system
+- **STRANGLER_FIG_INTERACTIVE_AI.md** - Interactive AI architecture (queue-based execution system)
 
 ### Future Planning
 - **FUTURE_IDEAS.md** - Feature wishlist and enhancement proposals

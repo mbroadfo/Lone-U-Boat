@@ -82,6 +82,10 @@ def generate_detection_actions(game_state: Any) -> AIActionQueue:
     """
     queue = AIActionQueue()
     
+    # Skip detection if already at maximum
+    if game_state.detection_level >= 3:
+        return queue
+    
     # Escort detection checks (one per active escort)
     escorts = [(i, ship) for i, ship in enumerate(game_state.ships)
                if ship.ship_type in ['corvette', 'destroyer']]

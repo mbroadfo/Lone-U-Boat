@@ -43,18 +43,13 @@ class Game:
         mission_number: int = 1,
         initial_depth: Optional[Depth] = None,
         initial_facing: Optional[Facing] = None,
-        screen: Optional[pygame.Surface] = None,
-        interactive_ai_mode: bool = False
+        screen: Optional[pygame.Surface] = None
     ):
         pygame.init()
         if screen is None:
             self.screen = pygame.display.set_mode((cfg.SCREEN_WIDTH, cfg.SCREEN_HEIGHT))
         else:
             self.screen = screen
-        
-        # Interactive AI Mode: Execute AI actions one at a time with animations
-        # If False, use batch processing (original behavior)
-        self.interactive_ai_mode = interactive_ai_mode
         
         # Load mission configuration
         self.mission_number = mission_number
@@ -68,15 +63,18 @@ class Game:
         # Track entities destroyed this phase for visual feedback
         self.destroyed_this_phase: List[Dict[str, Any]] = []
         
-        # Interactive AI mode - strangler fig pattern
-        self.interactive_ai_mode = interactive_ai_mode
+        # AI action queue for interactive mode (solitaire gameplay)
         self.current_ai_queue: Optional[AIActionQueue] = None
+        self.current_ai_queue_phase: Optional[str] = None  # Track which phase the queue belongs to
         
         # Load mission rules from JSON
         self.mission_rules = load_mission_rules(mission_number)
         
         # Initialize turn manager
         self.turn_manager = TurnManager(self.mission_rules)
+        
+        # Make dice roller accessible on game_state for AI actions
+        self.dice_roller = self.turn_manager.dice
         
         # Initialize merchant AI
         self.merchant_ai = MerchantAI(
@@ -358,46 +356,39 @@ class Game:
         """Advance to next phase, executing phase-specific logic."""
         current_phase = self.turn_manager.current_phase
         
-        # Execute phase end logic
+        # Execute phase end logic for current phase
         if current_phase == GamePhase.UBOAT_PHASE:
             self._end_uboat_phase()
-        elif current_phase == GamePhase.MERCHANT_PHASE:
-            if self.interactive_ai_mode:
-                self._execute_merchant_phase_interactive()
-            else:
-                self._execute_merchant_phase()
-        elif current_phase == GamePhase.DETECTION_PHASE:
-            if self.interactive_ai_mode:
-                self._execute_detection_phase_interactive()
-            else:
-                self._execute_detection_phase()
-        elif current_phase == GamePhase.ESCORT_PHASE:
-            if self.interactive_ai_mode:
-                self._execute_escort_phase_interactive()
-            else:
-                self._execute_escort_phase()
-        elif current_phase == GamePhase.B24_PHASE:
-            if self.interactive_ai_mode:
-                self._execute_b24_phase_interactive()
-            else:
-                self._execute_b24_phase()
-        elif current_phase == GamePhase.END_TURN_EVENTS:
-            self._execute_end_turn_events()
-        elif current_phase == GamePhase.END_TURN_PHASE:
-            self._execute_end_turn_phase()
         
-        # Stop if game ended during phase execution
+        # Stop if game ended during phase cleanup
         if not self.running:
             return
         
-        # Advance phase (clean up destroyed entities before phase change)
+        # Cleanup destroyed entities before phase change
         self._cleanup_destroyed_entities()
         
+        # Advance to next phase
         _, turn_wrapped = self.turn_manager.advance_phase()
         
         # If wrapped to new turn, start it
         if turn_wrapped:
             self._start_new_turn()
+            return
+        
+        # Execute phase start logic for new phase
+        new_phase = self.turn_manager.current_phase
+        if new_phase == GamePhase.MERCHANT_PHASE:
+            self._execute_merchant_phase()
+        elif new_phase == GamePhase.DETECTION_PHASE:
+            self._execute_detection_phase()
+        elif new_phase == GamePhase.ESCORT_PHASE:
+            self._execute_escort_phase()
+        elif new_phase == GamePhase.B24_PHASE:
+            self._execute_b24_phase()
+        elif new_phase == GamePhase.END_TURN_EVENTS:
+            self._execute_end_turn_events()
+        elif new_phase == GamePhase.END_TURN_PHASE:
+            self._execute_end_turn_phase()
     
     def _end_uboat_phase(self):
         """Clean up U-Boat phase - clear action history (no undo across phases)."""
@@ -422,67 +413,29 @@ class Game:
         #                 f"✗ Action failed: {result.message}")
     
     def _execute_merchant_phase(self):
-        """Execute merchant ship movements."""
-        # Count merchants
+        """Execute merchant phase - generate action queue for player to execute."""
+        # Generate actions for player to execute
+        self.current_ai_queue = generate_merchant_actions(self)
+        self.current_ai_queue_phase = "Merchant Phase"
+        
+        # Log phase start
         merchant_count = sum(1 for ship in self.ships if ship.ship_type == 'merchant')
         if merchant_count == 0:
-            return  # Skip if no merchants
+            self.turn_manager.add_phase_log("Merchant Phase", "No merchants on map")
+            self.current_ai_queue = None  # Skip to next phase immediately
+            self.current_ai_queue_phase = None
+            return
         
-        # Show merchant damage status
-        for ship in self.ships:
-            if ship.ship_type == 'merchant':
-                status = "damaged" if ship.damaged else "undamaged"
-                self.turn_manager.add_phase_log("Merchant Phase", f"Merchant ({status})")
+        # If queue is empty even with merchants present, log it
+        if self.current_ai_queue.total_count() == 0:
+            self.turn_manager.add_phase_log("Merchant Phase", 
+                                           f"{merchant_count} merchant(s) - no actions needed")
+            self.current_ai_queue = None  # Skip to next phase immediately
+            self.current_ai_queue_phase = None
+            return
         
-        # Store ship states before movement for animation
-        ship_states_before: List[Dict[str, Any]] = []
-        for ship in self.ships:
-            ship_states_before.append({
-                'position': ship.position,
-                'facing': ship.facing
-            })
-        
-        # Execute merchant AI
-        messages = self.merchant_ai.execute_merchant_phase(self.ships)
-        
-        # Trigger animations for ships that moved or rotated
-        if hasattr(self, 'animation_manager'):
-            for ship_idx, ship in enumerate(self.ships):
-                if ship.ship_type == 'merchant':
-                    old_state = ship_states_before[ship_idx]
-                    
-                    # Trigger rotation animation if facing changed
-                    if old_state['facing'] != ship.facing:
-                        self.animation_manager.start_ship_rotation(
-                            ship_idx,
-                            old_state['facing'],
-                            ship.facing
-                        )
-                    
-                    # Trigger movement animation if position changed
-                    if old_state['position'] != ship.position:
-                        self.animation_manager.start_ship_movement(
-                            ship_idx,
-                            old_state['position'],
-                            ship.position
-                        )
-        
-        # Log all merchant movements
-        for message in messages:
-            self.turn_manager.add_phase_log("Merchant Phase", message)
-        
-        # Check if any merchants have exited - this is a DEFEAT condition!
-        exited = self.merchant_ai.check_merchant_exit(self.ships)
-        if exited:
-            msg = f"{len(exited)} merchant(s) exited map"
-            self.turn_manager.add_phase_log("Merchant Phase", msg)
-            
-            # Remove exited merchants from the map
-            exited_indices = [idx for idx, _ in exited]
-            self.ships = [ship for i, ship in enumerate(self.ships) if i not in exited_indices]
-            
-            # Trigger defeat - mission objective failed
-            self._trigger_merchant_escape_defeat(len(exited))
+        self.turn_manager.add_phase_log("Merchant Phase", 
+                                       f"{merchant_count} merchant(s) - {self.current_ai_queue.total_count()} actions queued")
     
     def _trigger_merchant_escape_defeat(self, merchant_count: int):
         """Trigger defeat when merchant(s) escape."""
@@ -499,144 +452,60 @@ class Game:
         self.running = False
     
     def _execute_detection_phase(self):
-        """Calculate detection level changes."""
-        # Execute detection AI
-        new_detection_level, messages = self.detection_ai.execute_detection_phase(
-            ships=self.ships,
-            u_boat=self.u_boat,
-            current_detection_level=self.detection_level,
-            land_hexes=self.land_hexes,
-            hex_grid=self.hex_grid
-        )
+        """Execute detection phase - generate action queue for player to execute."""
+        # Skip detection if already at maximum
+        if self.detection_level >= 3:
+            self.turn_manager.add_phase_log("Detection Phase", 
+                                           "Detection already at maximum - no checks needed")
+            return
         
-        # Log all detection messages
-        for message in messages:
-            self.turn_manager.add_phase_log("Detection Phase", message)
+        # Generate actions for player to execute
+        self.current_ai_queue = generate_detection_actions(self)
+        self.current_ai_queue_phase = "Detection Phase"
         
-        # Update detection level
-        if new_detection_level != self.detection_level:
-            self.turn_manager.add_phase_log("Detection Phase", f"Detection Level: {self.detection_level} -> {new_detection_level}")
-        self.detection_level = min(3, new_detection_level)  # Ensure cap at 3
+        # Log phase start
+        action_count = self.current_ai_queue.total_count()
+        if action_count == 0:
+            self.turn_manager.add_phase_log("Detection Phase", "No detection checks")
+            self.current_ai_queue = None  # Skip to next phase immediately
+            self.current_ai_queue_phase = None
+            return
+        
+        self.turn_manager.add_phase_log("Detection Phase",
+                                       f"{action_count} detection check(s) queued")
     
     def _execute_escort_phase(self):
-        """Execute escort ship behaviors."""
-        # Count escorts
+        """Execute escort phase - generate action queue for player to execute."""
+        # Generate actions for player to execute
+        self.current_ai_queue = generate_escort_actions(self)
+        self.current_ai_queue_phase = "Escort Phase"
+        
+        # Log phase start
         escort_count = sum(1 for ship in self.ships if ship.ship_type in ['corvette', 'destroyer'])
         if escort_count == 0:
-            return  # Skip if no escorts
-        
-        # Store ship states before movement for animation
-        ship_states_before: List[Dict[str, Any]] = []
-        for ship in self.ships:
-            ship_states_before.append({
-                'position': ship.position,
-                'facing': ship.facing
-            })
-        
-        # Execute escort AI
-        new_detection_level, messages = self.escort_ai.execute_escort_phase(
-            ships=self.ships,
-            u_boat=self.u_boat,
-            detection_level=self.detection_level,
-            land_hexes=self.land_hexes,
-            hex_grid=self.hex_grid,
-            mission_hexes=self.mission_hexes,
-            shallow_hexes=self.shallow_hexes,
-            turn_manager=self.turn_manager
-        )
-        
-        # Trigger animations for ships that moved or rotated
-        if hasattr(self, 'animation_manager'):
-            for ship_idx, ship in enumerate(self.ships):
-                if ship.ship_type in ['corvette', 'destroyer']:
-                    old_state = ship_states_before[ship_idx]
-                    
-                    # Trigger rotation animation if facing changed
-                    if old_state['facing'] != ship.facing:
-                        self.animation_manager.start_ship_rotation(
-                            ship_idx,
-                            old_state['facing'],
-                            ship.facing
-                        )
-                    
-                    # Trigger movement animation if position changed
-                    if old_state['position'] != ship.position:
-                        self.animation_manager.start_ship_movement(
-                            ship_idx,
-                            old_state['position'],
-                            ship.position
-                        )
-        
-        # Log all escort action messages
-        for message in messages:
-            self.turn_manager.add_phase_log("Escort Phase", message)
-        
-        # Update detection level (can be increased by FIRE action or forced dive)
-        if new_detection_level != self.detection_level:
-            self.turn_manager.add_phase_log("Escort Phase", 
-                f"Detection Level changed: {self.detection_level} -> {new_detection_level}")
-        self.detection_level = min(3, new_detection_level)  # Ensure cap at 3
-        
-        # Check if U-boat was destroyed during escort phase
-        is_destroyed, reason = self.escort_ai.damage_resolver.check_destruction(self.u_boat)
-        if is_destroyed:
-            self.defeat_reason = 'destroyed'
-            print(f"\n{'='*60}")
-            print("MISSION FAILED - U-BOAT DESTROYED BY ESCORT!")
-            print(f"{'='*60}")
-            print(f"Reason: {reason}")
-            print(f"Turn: {self.turn_manager.turn_number}")
-            print(f"{'='*60}\n")
-            self.running = False
+            self.turn_manager.add_phase_log("Escort Phase", "No escorts on map")
+            self.current_ai_queue = None  # Skip to next phase immediately
+            self.current_ai_queue_phase = None
             return
+        
+        self.turn_manager.add_phase_log("Escort Phase",
+                                       f"{escort_count} escort(s) - {self.current_ai_queue.total_count()} actions queued")
     
     def _execute_b24_phase(self):
-        """Execute B24 aircraft phase."""
+        """Execute B-24 phase - generate action queue for player to execute."""
+        # Generate actions for player to execute
+        self.current_ai_queue = generate_b24_actions(self)
+        self.current_ai_queue_phase = "B24 Phase"
+        
+        # Log phase start
         if not self.aircraft:
-            msg = "No aircraft on map"
-            self.turn_manager.add_phase_log("B24 Phase", msg)
-            print(f"[EVENT] {msg}")
+            self.turn_manager.add_phase_log("B24 Phase", "No aircraft on map")
+            self.current_ai_queue = None  # Skip to next phase immediately
+            self.current_ai_queue_phase = None
             return
         
-        msg = f"{len(self.aircraft)} aircraft active"
-        self.turn_manager.add_phase_log("B24 Phase", msg)
-        print(f"[EVENT] {msg}")
-        
-        # Execute B-24 phase (passes self to record destroyed entities)
-        messages, new_dl = self.b24_ai.execute_b24_phase(
-            aircraft_list=self.aircraft,  # Modified in place (off-map aircraft removed)
-            u_boat=self.u_boat,
-            detection_level=self.detection_level,
-            game_state=self  # Pass self so B24 AI can record destroyed entities
-        )
-        
-        # Log all messages
-        for msg in messages:
-            self.turn_manager.add_phase_log("B24 Phase", msg)
-            print(f"[EVENT]   {msg}")
-        
-        # Update detection level
-        if new_dl > self.detection_level:
-            self.detection_level = min(3, new_dl)  # Ensure cap at 3
-            msg = f"Detection Level increased to {new_dl}"
-            self.turn_manager.add_phase_log("B24 Phase", msg)
-            print(f"[EVENT] {msg}")
-        
-        # Check if U-boat was destroyed during B24 phase
-        is_destroyed, reason = self.b24_ai.damage_resolver.check_destruction(self.u_boat)
-        if is_destroyed:
-            self.defeat_reason = 'destroyed'
-            print(f"\n{'='*60}")
-            print("MISSION FAILED - U-BOAT DESTROYED BY AIRCRAFT!")
-            print(f"{'='*60}")
-            print(f"Reason: {reason}")
-            print(f"Turn: {self.turn_manager.turn_number}")
-            print(f"{'='*60}\n")
-            self.running = False
-            return
-            msg = f"Detection Level increased to {new_dl}"
-            self.turn_manager.add_phase_log("B24 Phase", msg)
-            print(f"[EVENT] {msg}")
+        self.turn_manager.add_phase_log("B24 Phase",
+                                       f"{len(self.aircraft)} aircraft - {self.current_ai_queue.total_count()} actions queued")
     
     def _execute_end_turn_events(self):
         """Execute end-of-turn events (Phase 6)."""
@@ -853,71 +722,6 @@ class Game:
     
     # ========== INTERACTIVE AI MODE METHODS (Strangler Fig Pattern) ==========
     
-    def _execute_merchant_phase_interactive(self):
-        """Execute merchant phase in interactive mode - generate action queue."""
-        # Generate actions for player to execute
-        self.current_ai_queue = generate_merchant_actions(self)
-        
-        # Log phase start
-        merchant_count = sum(1 for ship in self.ships if ship.ship_type == 'merchant')
-        if merchant_count == 0:
-            self.turn_manager.add_phase_log("Merchant Phase", "No merchants on map")
-            self.current_ai_queue = None  # Skip to next phase immediately
-            return
-        
-        # If queue is empty even with merchants present, log it
-        if self.current_ai_queue.total_count() == 0:
-            self.turn_manager.add_phase_log("Merchant Phase", 
-                                           f"{merchant_count} merchant(s) - no actions needed")
-            self.current_ai_queue = None  # Skip to next phase immediately
-            return
-        
-        self.turn_manager.add_phase_log("Merchant Phase", 
-                                       f"{merchant_count} merchant(s) - {self.current_ai_queue.total_count()} actions queued")
-    
-    def _execute_detection_phase_interactive(self):
-        """Execute detection phase in interactive mode - generate action queue."""
-        # Generate actions for player to execute
-        self.current_ai_queue = generate_detection_actions(self)
-        
-        # Log phase start
-        action_count = self.current_ai_queue.total_count()
-        if action_count == 0:
-            self.turn_manager.add_phase_log("Detection Phase", "No detection checks")
-            self.current_ai_queue = None  # Skip to next phase immediately
-            return
-        
-        self.turn_manager.add_phase_log("Detection Phase",
-                                       f"{action_count} detection check(s) queued")
-    
-    def _execute_escort_phase_interactive(self):
-        """Execute escort phase in interactive mode - generate action queue."""
-        # Generate actions for player to execute
-        self.current_ai_queue = generate_escort_actions(self)
-        
-        # Log phase start
-        escort_count = sum(1 for ship in self.ships if ship.ship_type in ['corvette', 'destroyer'])
-        if escort_count == 0:
-            self.turn_manager.add_phase_log("Escort Phase", "No escorts on map")
-            self.current_ai_queue = None  # Skip to next phase immediately
-            return
-        
-        self.turn_manager.add_phase_log("Escort Phase",
-                                       f"{escort_count} escort(s) - {self.current_ai_queue.total_count()} actions queued")
-    
-    def _execute_b24_phase_interactive(self):
-        """Execute B-24 phase in interactive mode - generate action queue."""
-        # Generate actions for player to execute
-        self.current_ai_queue = generate_b24_actions(self)
-        
-        # Log phase start
-        if not self.aircraft:
-            self.turn_manager.add_phase_log("B24 Phase", "No aircraft on map")
-            self.current_ai_queue = None  # Skip to next phase immediately
-            return
-        
-        self.turn_manager.add_phase_log("B24 Phase",
-                                       f"{len(self.aircraft)} aircraft - {self.current_ai_queue.total_count()} actions queued")
     
     def execute_next_ai_action(self) -> Tuple[bool, Optional[str]]:
         """Execute next action in current AI queue (called from UI).
@@ -937,8 +741,10 @@ class Game:
         result_message = None
         if result and result.success:
             result_message = result.message
+            # Use the phase that created the queue for logging
+            phase_name = self.current_ai_queue_phase or self.turn_manager.get_current_phase_name()
             self.turn_manager.add_phase_log(
-                self.turn_manager.get_current_phase_name(),
+                phase_name,
                 result.message
             )
         
@@ -955,6 +761,7 @@ class Game:
         # If queue exhausted, clear it and allow phase advance
         if not has_more:
             self.current_ai_queue = None
+            self.current_ai_queue_phase = None
         
         return (has_more, result_message)
     

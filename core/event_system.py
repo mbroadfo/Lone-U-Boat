@@ -404,9 +404,12 @@ class EventSystem:
                     longest_distance = len(line_hexes)
                     longest_line = line_hexes
             
-            # Return the last hex in the longest line (edge of map)
-            if longest_line:
-                return longest_line[-1]
+            # Return second-to-last hex to avoid visual edge issues
+            # (B24s at extreme edge hexes may be off-screen)
+            if longest_line and len(longest_line) >= 2:
+                return longest_line[-2]  # One hex in from edge
+            elif longest_line:
+                return longest_line[-1]  # Fallback if line is only 1 hex
         
         # Fallback
         return HexCoord(uboat_pos.q + 10, uboat_pos.r)

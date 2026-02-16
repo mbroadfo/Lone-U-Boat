@@ -1,8 +1,8 @@
 """
-Test interactive AI mode - strangler fig pattern verification.
+Test interactive AI mode - queue-based execution.
 
-Tests that interactive_ai_mode=True routes through AIActionQueue
-instead of batch AI execution.
+Tests that AI phases route through AIActionQueue for solitaire gameplay
+where the player controls all dice rolls and action execution.
 """
 
 # pyright: reportPrivateUsage=false
@@ -17,11 +17,11 @@ from core.models import GamePhase
 
 
 def test_interactive_merchant_phase():
-    """Test that merchant phase generates action queue in interactive mode."""
+    """Test that merchant phase generates action queue."""
     print("\n=== Test: Interactive Merchant Phase ===")
     
-    # Create game with interactive mode enabled
-    game = Game(mission_number=1, interactive_ai_mode=True)
+    # Create game (now always uses interactive mode)
+    game = Game(mission_number=1)
     game.turn_manager.start_new_turn(game.u_boat)
     
     print(f"Merchants: {sum(1 for s in game.ships if s.ship_type == 'merchant')}")
@@ -45,10 +45,10 @@ def test_interactive_merchant_phase():
 
 
 def test_interactive_detection_phase():
-    """Test that detection phase generates action queue in interactive mode."""
+    """Test that detection phase generates action queue."""
     print("\n=== Test: Interactive Detection Phase ===")
     
-    game = Game(mission_number=1, interactive_ai_mode=True)
+    game = Game(mission_number=1)
     game.turn_manager.start_new_turn(game.u_boat)
     
     # Advance to detection phase
@@ -67,10 +67,10 @@ def test_interactive_detection_phase():
 
 
 def test_interactive_escort_phase():
-    """Test that escort phase generates action queue in interactive mode."""
+    """Test that escort phase generates action queue."""
     print("\n=== Test: Interactive Escort Phase ===")
     
-    game = Game(mission_number=1, interactive_ai_mode=True)
+    game = Game(mission_number=1)
     game.turn_manager.start_new_turn(game.u_boat)
     
     # Advance to escort phase
@@ -89,28 +89,37 @@ def test_interactive_escort_phase():
     return True
 
 
-def test_batch_mode_still_works():
-    """Test that batch mode (default) still works without queues."""
-    print("\n=== Test: Batch Mode Still Works ===")
+def test_queue_execution_workflow():
+    """Test complete workflow of AI action queue execution (formerly batch mode test)."""
+    print("\n=== Test: Queue Execution Workflow ===")
     
-    # Create game with batch mode (default)
-    game = Game(mission_number=1, interactive_ai_mode=False)
+    # Create game (always uses queue-based execution)
+    game = Game(mission_number=1)
     game.turn_manager.start_new_turn(game.u_boat)
     
     # Advance to merchant phase
     game._advance_to_next_phase()
     assert game.turn_manager.current_phase == GamePhase.MERCHANT_PHASE
     
-    # Advance through merchant phase (batch execution)
-    game._advance_to_next_phase()
+    # Merchant phase may have actions or may be empty (depending on AI state)
+    # Either way, we should be able to advance
+    initial_phase = game.turn_manager.current_phase
     
-    # Should NOT have created queue (batch mode doesn't use queues)
-    assert game.current_ai_queue is None, "Batch mode should not create queues"
+    # If queue exists and has actions, execute them all
+    if game.has_pending_ai_actions():
+        while game.has_pending_ai_actions():
+            _, _ = game.execute_next_ai_action()
+        print(f"✓ Executed all pending actions")
+    else:
+        print(f"✓ No actions needed (acceptable)")
+    
+    # Advance to next phase
+    game._advance_to_next_phase()
     
     # Should have moved to detection phase
     assert game.turn_manager.current_phase == GamePhase.DETECTION_PHASE
     
-    print("✓ Batch mode works without queues")
+    print("✓ Queue-based execution works correctly")
     
     return True
 
@@ -119,7 +128,7 @@ def test_has_pending_ai_actions():
     """Test has_pending_ai_actions() helper method."""
     print("\n=== Test: Pending AI Actions Check ===")
     
-    game = Game(mission_number=1, interactive_ai_mode=True)
+    game = Game(mission_number=1)
     game.turn_manager.start_new_turn(game.u_boat)
     
     # Initially no pending actions
@@ -153,7 +162,7 @@ def run_all_tests():
         test_interactive_merchant_phase,
         test_interactive_detection_phase,
         test_interactive_escort_phase,
-        test_batch_mode_still_works,
+        test_queue_execution_workflow,
         test_has_pending_ai_actions
     ]
     

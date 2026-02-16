@@ -32,7 +32,11 @@ def test_merchant_phase_integration():
     # Now in merchant phase
     assert game.turn_manager.current_phase == GamePhase.MERCHANT_PHASE
     
-    # Advance through merchant phase (this executes merchant AI)
+    # Execute all queued merchant actions
+    while game.has_pending_ai_actions():
+        game.execute_next_ai_action()
+    
+    # Advance through merchant phase
     game._advance_to_next_phase()
     
     # Check merchant position changed (should have moved from (1,4) to (1,5))
@@ -46,8 +50,8 @@ def test_merchant_phase_integration():
     for log in logs:
         print(f"  {log}")
     
-    assert len(logs) >= 2  # Should have "Merchant ships acting..." and movement message
-    assert any("moves to [1,5]" in log for log in logs)
+    assert len(logs) >= 2  # Should have queue message and movement result
+    assert any("moved to [1,5]" in log for log in logs)  # Check for past tense
     
     print("✓ Merchant phase executed correctly")
 
@@ -76,6 +80,10 @@ def test_merchant_movement_multiple_turns():
         else:
             # Advance through U-Boat phase
             game._advance_to_next_phase()
+            
+            # Execute queued merchant actions
+            while game.has_pending_ai_actions():
+                game.execute_next_ai_action()
             
             # Advance through merchant phase
             game._advance_to_next_phase()
@@ -108,7 +116,13 @@ def test_damaged_merchant_movement():
     
     # Advance through U-Boat phase then merchant phase
     game._advance_to_next_phase()
-    game._advance_to_next_phase()
+    
+    # Now in merchant phase
+    assert game.turn_manager.current_phase == GamePhase.MERCHANT_PHASE
+    
+    # Execute all queued merchant actions
+    while game.has_pending_ai_actions():
+        game.execute_next_ai_action()
     
     # Check logs mention dice roll
     logs = game.turn_manager.get_phase_log("Merchant Phase")

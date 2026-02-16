@@ -53,8 +53,7 @@ class UnifiedGameScreen(BaseScreen):
                 mission_number=mission_number,
                 initial_depth=None,  # Will be set by player
                 initial_facing=None,
-                screen=self.screen,  # Pass existing screen to avoid creating new display
-                interactive_ai_mode=True  # Phase 7.4: Enable interactive AI mode
+                screen=self.screen  # Pass existing screen to avoid creating new display
             )
             # Share animation manager with game state
             self.game.animation_manager = self.animation_manager
@@ -416,18 +415,16 @@ class UnifiedGameScreen(BaseScreen):
                             exit_button_clicked = False
                             if 'move' in self.action_button_rects:
                                 move_rect, is_clickable = self.action_button_rects['move']
-                                can_exit, _ = self.game.can_exit_map()
+                                can_exit, reason = self.game.can_exit_map()
+                                # Only intercept the move button click if we CAN exit (on hex, facing right, merchants dead)
                                 if move_rect.collidepoint(mouse_pos) and can_exit:
                                     exit_button_clicked = True
-                                    if is_clickable and self.game.running:  # Only trigger if game still running
+                                    if is_clickable and self.game.running:
+                                        # Actually trigger exit
                                         self.add_event("=== EXITING MAP ===")
                                         self.game.trigger_victory()
-                                    elif not self.game.running:
-                                        # Game already over, ignore clicks
-                                        pass
-                                    else:
-                                        _, reason = self.game.can_exit_map()
-                                        self.add_event(f"Cannot exit: {reason}")
+                                    # If button not clickable (not enough AP), silently consume click
+                                    # User needs to spend more AP first, then button will become clickable
                             
                             # Phase 2C: Check UNDO button
                             undo_button_clicked = False
@@ -443,19 +440,14 @@ class UnifiedGameScreen(BaseScreen):
                                     ai_button_clicked = True
                                     has_more, result_message = self.game.execute_next_ai_action()
                                     
-                                    # Display result immediately in event log
-                                    if result_message:
-                                        self.add_event(result_message)
+                                    # AI action results are logged to turn_manager.phase_logs
+                                    # They will be displayed when advancing to next phase
+                                    # (no immediate logging to avoid duplication)
                                     
                                     # If game ended, render one final frame to show the message before game-over overlay
                                     if not self.game.running:
                                         self.render()
                                         pygame.time.wait(100)  # Brief pause to ensure player sees final message
-                                    
-                                    if not has_more:
-                                        # Queue exhausted, show completion message
-                                        phase_name = self.game.turn_manager.get_current_phase_name()
-                                        self.add_event(f"{phase_name} AI actions complete")
                             
                             # Phase 2D: Check NEXT PHASE button
                             phase_button_clicked = False
@@ -553,6 +545,7 @@ class UnifiedGameScreen(BaseScreen):
     
     def _advance_phase_and_update_ui(self):
         """Advance to next phase and update UI with phase information."""
+        
         # Don't advance if game is over
         if not self.game.running:
             return

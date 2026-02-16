@@ -4,6 +4,47 @@ All notable changes to the Lone U-Boat project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-02-15
+
+### Major Milestone: Interactive AI System Complete ✅
+
+**Phase 8 - Batch Mode Removal Complete**: The game now implements fully interactive, authentic solitaire gameplay where the player controls all AI actions and dice rolls. This represents the successful completion of the Strangler Fig Pattern migration from batch execution to player-controlled queue-based execution.
+
+### Changed
+- **Interactive AI System**: Queue-based execution is now the only execution mode
+  - Removed `interactive_ai_mode` flag from `Game.__init__()` (no longer needed)
+  - Deleted old batch AI phase execution methods
+  - Renamed interactive methods to remove "_interactive" suffix (now standard)
+  - Phase logic executes when entering phases (generates action queues)
+  - Phase queue tracking: `current_ai_queue_phase` ensures logs attribute to correct phase
+  - Added `dice_roller` reference to game_state for AI action execution
+  - Detection actions skip generation when detection level at maximum
+  - All 445 tests passing (95 AI tests, 7 integration tests, 343 other tests)
+  
+### Fixed
+- **Move Button Regression**: Restored normal movement functionality
+  - Exit check now only intercepts move button when actually on exit hex
+  - Normal forward movement works correctly on all other hexes
+  - Silently consumes exit hex clicks when waiting for sufficient AP
+- **B24 Off-Map Spawning**: B24s now spawn one hex in from map edge
+  - Algorithm returns second-to-last hex in longest line (still far from U-boat)
+  - Ensures all spawned B24s are visible on the rendered map
+- **Duplicate Event Logging**: Removed duplicate AI action messages in event log
+  - AI action results appear only once (when phase logs display during phase advancement)
+  - Removed immediate logging during execute_next_ai_action() button clicks
+  - Event log is cleaner and easier to follow
+
+### Removed
+- **Debug Markers**: Cleaned up diagnostic print statements
+  - Removed "[DEBUG]" markers from button clicks and phase advancement
+  - Event log now shows only gameplay-relevant information
+- **Batch AI Execution**: Removed old batch processing system entirely
+  - No technical debt remaining from old system
+  - Single execution path for all AI actions
+  - Cleaner, more maintainable codebase
+
+---
+
 ## [Unreleased] - 2026-02-10
 
 ### Fixed

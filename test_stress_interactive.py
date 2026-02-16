@@ -219,7 +219,7 @@ def run_game(game_num: int, verbose: bool = False) -> Tuple[bool, str, int, Opti
             print(f"{'='*60}")
         
         # Create game in interactive mode
-        game = Game(mission_number=1, interactive_ai_mode=True)
+        game = Game(mission_number=1)
         
         # Initialize U-boat position
         game.u_boat.position = HexCoord(9, 1)

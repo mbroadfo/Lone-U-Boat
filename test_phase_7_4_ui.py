@@ -20,9 +20,9 @@ def test_ui_integration():
     from core.models import GamePhase
     
     # Create game in interactive AI mode
-    print("Creating game with interactive_ai_mode=True...")
-    game = Game(mission_number=1, interactive_ai_mode=True)
-    print(f"  \u2713 Game created with interactive_ai_mode={game.interactive_ai_mode}")
+    print("Creating game...")
+    game = Game(mission_number=1)
+    print(f"  ✓ Game created")
     
     # Set initial position to skip setup
     from core.models import Depth, Facing, HexCoord

@@ -29,45 +29,38 @@ python main.py
 
 ## Development Status
 
-**Current Phase**: Phase 7 - Interactive AI Mode (Strangler Fig Pattern) 🚧  
-**Latest Completion**: Phase 7.3 - Backend Routing ✅ **COMPLETE**
+**Status**: Production Ready ✅  
+**Version**: 0.8.0 - Interactive Solitaire AI
 
-### Completed Phases
+### Core Features
 
-- ✅ **Phase 1**: Turn system with 6-phase cycle and AP rolling
-- ✅ **Phase 2**: Immediate execution UI with multi-level undo (January 2026)
-- ✅ **Phase 2 (Validators)**: LOS, range, movement, torpedoes, repairs, combat, depth  
-- ✅ **Phase 3**: All 7 U-boat actions (Move, Rotate, DepthChange, Repair, DeckGun, LoadTorpedo, FireTorpedo)
-- ✅ **Phase 3.6**: Complete damage resolution system
-- ✅ **Refactoring**: All game rules moved to JSON (zero redundancy)
-- ✅ **Phase 4**: All enemy AI complete - Merchants, Detection, Escorts (with depth charges), B-24 Aircraft, Event System
-- ✅ **Phase 6**: AIActionQueue - Queue manager for player-controlled AI actions (445 tests)
-- ✅ **Phase 7.1-7.3**: Strangler Fig Backend - Dual-mode routing system (450 tests)
+- ✅ **Turn System**: 6-phase cycle with AP rolling and depth management
+- ✅ **Immediate Execution UI**: Instant action execution with multi-level undo
+- ✅ **Validators**: LOS, range, movement, torpedoes, repairs, combat, depth
+- ✅ **U-Boat Actions**: All 7 player actions (Move, Rotate, DepthChange, Repair, DeckGun, LoadTorpedo, FireTorpedo)
+- ✅ **Damage System**: Complete damage resolution for U-boats and ships
+- ✅ **JSON Rules Engine**: All game rules in JSON configuration (zero hardcoding)
+- ✅ **Enemy AI**: Merchants, Detection, Escorts (depth charges), B-24 Aircraft, Event System
+- ✅ **Interactive Solitaire AI**: Player-controlled AI execution with step-by-step action resolution
 
-**Test Coverage**: 450 tests across 34 test files + 5 integration tests, **all passing** ✓
+**Test Coverage**: 445 tests across 34 test files, **all passing** ✓
 
-**The game is fully playable in batch mode!** Enemy AI executes automatically.  
-**Interactive AI mode is 90% complete** - awaiting UI integration (Phase 7.4).
+**The game is fully playable!** Authentic solitaire gameplay with player-controlled AI actions.
 
-### Interactive AI Mode (February 2026) 🚧
+### Interactive AI System
 
-**Status**: Backend complete, UI pending
+The game implements true solitaire gameplay where the player controls all AI actions:
 
-**Strangler Fig Pattern Implementation:**
-- ✅ 15 interactive AI action classes (Phases 1-6)
-- ✅ AIActionQueue orchestrator for player-executed actions
-- ✅ Action generators wrapping existing AI logic
-- ✅ Dual-mode routing (batch vs interactive)
-- ✅ Backward compatibility (0 breaking changes)
-- ⏳ UI integration (Phase 7.4)
+**Features:**
+- 15 interactive AI action classes covering all AI behaviors
+- AIActionQueue orchestrator for step-by-step execution
+- Player controls ALL dice rolls (authentic solitaire experience)
+- Action preview before execution
+- Progress tracking (e.g., "Action 2 of 5")
+- Execute AI Action button with purple tint
+- Animations trigger for each action
 
-**What Works:**
-- Player can control ALL dice rolls (true solitaire)
-- Actions preview before execution
-- Progress tracking for multi-action sequences
-- Both systems coexist via `interactive_ai_mode` flag
-
-**Documentation**: See [docs/STRANGLER_FIG_INTERACTIVE_AI.md](docs/STRANGLER_FIG_INTERACTIVE_AI.md) for complete architecture.
+**Architecture**: Queue-based execution with action generators using AI decision logic.
 
 ### Recent Updates (February 2026)
 
@@ -91,25 +84,22 @@ python main.py
 - No more accidental actions during combat
 - Zero type errors, fully type-safe codebase
 
-### Previous Updates (January 2026)
+### Recent Updates (January 2026)
 
-#### Phase 2: Immediate Execution UI ✅ Complete
-Converted from queue-based action system to immediate execution with undo:
+#### Immediate Execution UI
+The game features instant action execution with multi-level undo support:
 
-**New Features:**
-- ✅ **Immediate Execution** - Actions execute instantly when clicked (no commit step)
-- ✅ **Multi-Level Undo** - UNDO button appears after actions, restores state with AP refund
-- ✅ **Cleaner UI** - Removed queue preview box and commit button
-- ✅ **Better Flow** - NEXT PHASE button consistently available at bottom of control panel
-- ✅ **Type Safety** - All type hint errors resolved
+**Features:**
+- **Immediate Execution** - Actions execute instantly when clicked (no commit step)
+- **Multi-Level Undo** - UNDO button appears after actions, restores state with AP refund
+- **Cleaner UI** - Streamlined control panel without action queue preview
+- **Consistent Flow** - NEXT PHASE button always available at bottom of control panel
 
 **User Experience:**
 - Click action → Executes immediately → See results instantly
 - Made a mistake? Click UNDO to revert with full AP refund
 - Multiple undos available within phase (clears on phase advance)
-- More intuitive and forgiving gameplay
-
-See [docs/PHASE_2_COMPLETION.md](docs/PHASE_2_COMPLETION.md) for detailed implementation notes.
+- Intuitive and forgiving gameplay
 
 #### Critical Bug Fixes (January 24, 2026)
 **GAMEPLAY-BREAKING BUG FIXED:**
@@ -642,12 +632,9 @@ To create a new mission:
 This is a personal implementation of the board game for educational purposes.
 All game rules and artwork belong to the original publisher.
 
----
+## Technical Details
 
-**Last Updated**: January 1, 2026  
-**Version**: 0.1.0 (Refactored Architecture)
-
-## Type Hints
+### Type Hints
 
 The codebase uses Python type hints extensively for better code quality and IDE support:
 
@@ -691,5 +678,5 @@ This is a personal implementation of the board game for educational purposes. Al
 
 ---
 
-**Last Updated**: January 17, 2026  
-**Version**: 0.5.0 (Torpedo State System + Gameplay Fixes)
+**Last Updated**: February 15, 2026  
+**Version**: 0.8.0 (Interactive Solitaire AI)
