@@ -115,6 +115,8 @@ class MockAnimationManager:
     def __init__(self):
         self.ship_movements: List[Tuple[int, HexCoord, HexCoord]] = []  # Track (ship_idx, old_pos, new_pos)
         self.ship_rotations: List[Tuple[int, Facing, Facing]] = []  # Track (ship_idx, old_facing, new_facing)
+        self.aircraft_movements: List[Tuple[int, HexCoord, HexCoord]] = []  # Track (aircraft_idx, old_pos, new_pos)
+        self.aircraft_rotations: List[Tuple[int, Facing, Facing]] = []  # Track (aircraft_idx, old_facing, new_facing)
     
     def start_ship_movement(self, ship_idx: int, old_pos: HexCoord, new_pos: HexCoord):
         """Record ship movement animation."""
@@ -123,6 +125,14 @@ class MockAnimationManager:
     def start_ship_rotation(self, ship_idx: int, old_facing: Facing, new_facing: Facing):
         """Record ship rotation animation."""
         self.ship_rotations.append((ship_idx, old_facing, new_facing))
+    
+    def start_aircraft_movement(self, aircraft_idx: int, old_pos: HexCoord, new_pos: HexCoord):
+        """Record aircraft movement animation."""
+        self.aircraft_movements.append((aircraft_idx, old_pos, new_pos))
+    
+    def start_aircraft_rotation(self, aircraft_idx: int, old_facing: Facing, new_facing: Facing):
+        """Record aircraft rotation animation."""
+        self.aircraft_rotations.append((aircraft_idx, old_facing, new_facing))
 
 
 class MockGameState:

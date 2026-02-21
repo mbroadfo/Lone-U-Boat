@@ -90,7 +90,8 @@ class FireTorpedoAction(Action):
         fire_direction: Facing,
         ships: List[Ship],
         mission_hexes: set[HexCoord],
-        land_hexes: set[HexCoord]
+        land_hexes: set[HexCoord],
+        destroyed_this_phase: List[dict]
     ) -> List[Tuple[Ship, int, str]]:
         """
         Trace torpedo path and find all ships in line.
@@ -103,6 +104,7 @@ class FireTorpedoAction(Action):
             ships: List of all ships in game
             mission_hexes: Set of valid mission hexes
             land_hexes: Set of land hexes (torpedo stops)
+            destroyed_this_phase: List of entities destroyed this phase
             
         Returns:
             List of (ship, distance, aspect) tuples, ordered by distance
@@ -126,10 +128,22 @@ class FireTorpedoAction(Action):
             # Check if any ship is at this hex
             for ship in ships:
                 if ship.position == next_hex:
-                    # Calculate aspect
-                    aspect = self._calculate_aspect(ship, fire_direction)
-                    targets.append((ship, distance, aspect))
-                    # Don't break - continue to find all ships in line
+                    # Check if ship was destroyed earlier this turn
+                    ship_was_destroyed = False
+                    for destroyed in destroyed_this_phase:
+                        destroyed_pos = destroyed.get('position')
+                        if (destroyed_pos and 
+                            destroyed_pos.q == ship.position.q and 
+                            destroyed_pos.r == ship.position.r and 
+                            destroyed.get('type') == ship.ship_type):
+                            ship_was_destroyed = True
+                            break
+                    
+                    if not ship_was_destroyed:
+                        # Calculate aspect
+                        aspect = self._calculate_aspect(ship, fire_direction)
+                        targets.append((ship, distance, aspect))
+                        # Don't break - continue to find all ships in line
             
             current_hex = next_hex
         
@@ -214,7 +228,8 @@ class FireTorpedoAction(Action):
             fire_direction,
             game_state.ships, 
             game_state.mission_hexes,
-            game_state.land_hexes
+            game_state.land_hexes,
+            game_state.destroyed_this_phase
         )
         
         # Unload fired tubes immediately (convert 1-based to 0-based)

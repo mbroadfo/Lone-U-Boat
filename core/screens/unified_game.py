@@ -149,6 +149,10 @@ class UnifiedGameScreen(BaseScreen):
         self.confirm_load_button_rect: Optional[pygame.Rect] = None
         self.cancel_load_button_rect: Optional[pygame.Rect] = None
         
+        # AI dice roll state (for player-controlled AI dice rolls)
+        self.ai_dice_roll_state: Optional[Dict[str, Any]] = None
+        self.ai_dice_roll_button_rect: Optional[pygame.Rect] = None
+        
         # Torpedo firing selection state (for interactive tube selection)
         self.fire_torpedo_selection_state: Optional[Dict[str, Any]] = None
         
@@ -393,6 +397,10 @@ class UnifiedGameScreen(BaseScreen):
                     elif self.deck_gun_resolution_state and self.deck_gun_roll_button_rect and self.deck_gun_roll_button_rect.collidepoint(mouse_pos):
                         self._handle_deck_gun_roll()
                     
+                    # Check if clicking AI dice roll button
+                    elif self.ai_dice_roll_state and self.ai_dice_roll_button_rect and self.ai_dice_roll_button_rect.collidepoint(mouse_pos):
+                        self._handle_ai_dice_roll()
+                    
                     # Check if clicking torpedo resolution button
                     elif self.torpedo_resolution_state and self.torpedo_roll_button_rect and self.torpedo_roll_button_rect.collidepoint(mouse_pos):
                         self._handle_torpedo_roll()
@@ -415,7 +423,7 @@ class UnifiedGameScreen(BaseScreen):
                             exit_button_clicked = False
                             if 'move' in self.action_button_rects:
                                 move_rect, is_clickable = self.action_button_rects['move']
-                                can_exit, reason = self.game.can_exit_map()
+                                can_exit, _ = self.game.can_exit_map()
                                 # Only intercept the move button click if we CAN exit (on hex, facing right, merchants dead)
                                 if move_rect.collidepoint(mouse_pos) and can_exit:
                                     exit_button_clicked = True
@@ -438,16 +446,31 @@ class UnifiedGameScreen(BaseScreen):
                             if not exit_button_clicked and not undo_button_clicked and hasattr(self, 'execute_ai_action_button_rect') and self.execute_ai_action_button_rect:
                                 if self.execute_ai_action_button_rect.collidepoint(mouse_pos):
                                     ai_button_clicked = True
-                                    has_more, result_message = self.game.execute_next_ai_action()
                                     
-                                    # AI action results are logged to turn_manager.phase_logs
-                                    # They will be displayed when advancing to next phase
-                                    # (no immediate logging to avoid duplication)
+                                    # Check if current action needs dice roll
+                                    current_action = self.game.current_ai_queue.current_action() if self.game.current_ai_queue else None
+                                    needs_dice_roll = current_action and getattr(current_action, 'requires_player_input', False)
                                     
-                                    # If game ended, render one final frame to show the message before game-over overlay
-                                    if not self.game.running:
-                                        self.render()
-                                        pygame.time.wait(100)  # Brief pause to ensure player sees final message
+                                    if needs_dice_roll:
+                                        # Enter AI dice roll mode
+                                        action_preview = self.game.get_current_ai_action_preview()
+                                        self.ai_dice_roll_state = {
+                                            'action_name': action_preview.get('action_name', 'AI Action') if action_preview else 'AI Action',
+                                            'details': action_preview.get('details', '') if action_preview else '',
+                                            'waiting_for_roll': True
+                                        }
+                                    else:
+                                        # Execute immediately (no dice needed)
+                                        _, _ = self.game.execute_next_ai_action()
+                                        
+                                        # AI action results are logged to turn_manager.phase_logs
+                                        # They will be displayed when advancing to next phase
+                                        # (no immediate logging to avoid duplication)
+                                        
+                                        # If game ended, render one final frame to show the message before game-over overlay
+                                        if not self.game.running:
+                                            self.render()
+                                            pygame.time.wait(100)  # Brief pause to ensure player sees final message
                             
                             # Phase 2D: Check NEXT PHASE button
                             phase_button_clicked = False
@@ -3561,6 +3584,15 @@ class UnifiedGameScreen(BaseScreen):
     
     def _draw_next_phase_button_at_bottom(self, x: int, y: int, width: int, height: int) -> None:
         """Draw NEXT PHASE button at bottom of control panel."""
+        # Don't draw phase button if in interactive resolution mode
+        if (self.torpedo_resolution_state or 
+            self.deck_gun_resolution_state or 
+            self.ai_dice_roll_state or
+            self.load_torpedo_selection_state or
+            self.fire_torpedo_selection_state or
+            self.repair_selection_state):
+            return
+        
         button_x = x + 10
         button_width = width - 20
         
@@ -3719,11 +3751,20 @@ class UnifiedGameScreen(BaseScreen):
     
     def _draw_execute_ai_action_button(self, x: int, y: int, width: int, height: int) -> None:
         """Draw button to execute current AI action (Phase 7.4: Interactive AI Mode)."""
+        # Check if we're in AI dice roll mode
+        if self.ai_dice_roll_state:
+            self._draw_ai_dice_roll_ui(x, y, width, height)
+            return
+        
         # Get action preview
         preview = self.game.get_current_ai_action_preview()
         if not preview:
             # No action available, fall back to phase advance
             return
+        
+        # Get the actual action object to check if it needs player input
+        current_action = self.game.current_ai_queue.current_action() if self.game.current_ai_queue else None
+        needs_dice_roll = current_action and getattr(current_action, 'requires_player_input', False)
         
         # Get progress info
         progress = self.game.current_ai_queue.get_progress() if self.game.current_ai_queue else None
@@ -3737,14 +3778,22 @@ class UnifiedGameScreen(BaseScreen):
         button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
         
         # Button styling (distinct color for AI actions)
-        button_color = (100, 50, 120)  # Purple tint for AI
-        border_color = (180, 100, 220)
-        text_color = (240, 220, 255)
+        if needs_dice_roll:
+            # Different color for dice rolls
+            button_color = (80, 100, 40)  # Greenish tint for dice
+            border_color = (140, 180, 80)
+            text_color = (220, 255, 180)
+            button_text = "ROLL DICE FOR AI"
+        else:
+            button_color = (100, 50, 120)  # Purple tint for AI
+            border_color = (180, 100, 220)
+            text_color = (240, 220, 255)
+            button_text = "EXECUTE AI ACTION"
         
         pygame.draw.rect(self.screen, button_color, button_rect)
         pygame.draw.rect(self.screen, border_color, button_rect, 3)
         self.draw_text(
-            "EXECUTE AI ACTION",
+            button_text,
             button_rect.centerx,
             button_rect.centery - 8,
             self.font_medium,
@@ -3792,7 +3841,7 @@ class UnifiedGameScreen(BaseScreen):
         # Add technical context from preview_data if available
         preview_data = preview.get('preview_data', {})
         if preview_data:
-            extra_info = []
+            extra_info: List[str] = []
             
             # Add range information if present
             if 'range' in preview_data:
@@ -3813,7 +3862,7 @@ class UnifiedGameScreen(BaseScreen):
         
         # Simple word wrapping
         words = details.split()
-        lines = []
+        lines: List[str] = []
         current_line = []
         max_width = width - 60
         
@@ -4886,6 +4935,134 @@ class UnifiedGameScreen(BaseScreen):
         self.deck_gun_resolution_state = None
         self.deck_gun_roll_button_rect = None
     
+    def _handle_ai_dice_roll(self) -> None:
+        """Handle clicking the AI dice roll button."""
+        state = self.ai_dice_roll_state
+        if not state or not state.get('waiting_for_roll'):
+            return
+        
+        # Player has clicked to roll dice - execute the AI action
+        # The action will perform its own dice roll using game_state.dice_roller
+        _, result_message = self.game.execute_next_ai_action()
+        
+        # Log the action result to the dice roll history
+        if result_message:
+            self.add_dice_roll(
+                state.get('action_name', 'AI Action'),
+                "AI Roll",
+                result_message
+            )
+        
+        # Clear AI dice roll state
+        self.ai_dice_roll_state = None
+        self.ai_dice_roll_button_rect = None
+        
+        # If game ended, render one final frame
+        if not self.game.running:
+            self.render()
+            pygame.time.wait(100)
+    
+    def _draw_ai_dice_roll_ui(self, x: int, y: int, width: int, height: int) -> None:
+        """Draw UI for player to roll dice for AI action."""
+        state = self.ai_dice_roll_state
+        if not state:
+            return
+        
+        action_name = state.get('action_name', 'AI Action')
+        details = state.get('details', '')
+        
+        # Title
+        title_y = y + 30
+        self.draw_text(
+            f"AI NEEDS DICE ROLL",
+            x + width // 2,
+            title_y,
+            self.font_medium,
+            color=(255, 220, 100),
+            center=True
+        )
+        
+        # Action name
+        name_y = title_y + 40
+        self.draw_text(
+            action_name,
+            x + width // 2,
+            name_y,
+            self.font_medium,
+            color=(200, 200, 200),
+            center=True
+        )
+        
+        # Details (wrapped)
+        details_y = name_y + 35
+        words = details.split()
+        lines: List[str] = []
+        current_line = []
+        max_width = width - 60
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            text_surface = self.font_small.render(test_line, True, (200, 200, 200))
+            if text_surface.get_width() <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        for line in lines[:3]:
+            self.draw_text(
+                line,
+                x + width // 2,
+                details_y,
+                self.font_small,
+                color=(180, 180, 180),
+                center=True
+            )
+            details_y += 20
+        
+        # Roll dice button
+        button_y = details_y + 30
+        button_width = width - 80
+        button_height = 60
+        button_x = x + (width - button_width) // 2
+        
+        button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+        
+        # Button styling (dice roll colors)
+        mouse_pos = pygame.mouse.get_pos()
+        is_hover = button_rect.collidepoint(mouse_pos)
+        button_color = (80, 120, 40) if is_hover else (60, 100, 30)
+        border_color = (140, 200, 80)
+        
+        pygame.draw.rect(self.screen, button_color, button_rect)
+        pygame.draw.rect(self.screen, border_color, button_rect, 3)
+        
+        self.draw_text(
+            "ROLL DICE",
+            button_rect.centerx,
+            button_rect.centery,
+            self.font_large,
+            color=(240, 255, 200),
+            center=True
+        )
+        
+        # Store rect for click detection
+        self.ai_dice_roll_button_rect = button_rect
+        
+        # Hint
+        hint_y = button_rect.bottom + 25
+        self.draw_text(
+            "Click to roll dice on behalf of AI",
+            x + width // 2,
+            hint_y,
+            self.font_small,
+            color=(120, 140, 100),
+            center=True
+        )
+    
     def _handle_torpedo_roll(self) -> None:
         """Handle clicking the torpedo resolution button."""
         state = self.torpedo_resolution_state
@@ -5893,8 +6070,14 @@ class UnifiedGameScreen(BaseScreen):
                 los_calc = LOSCalculator(self.game.land_hexes)
                 
                 # Find all valid targets from CURRENT position
+                # Exclude ships that were destroyed earlier this turn
                 current_targets: List[Tuple[Ship, int]] = []
                 for ship in self.game.ships:
+                    # Skip ships destroyed earlier this turn (still visible but not valid targets)
+                    if any(d.get('type') == ship.ship_type and d.get('position') == ship.position 
+                           for d in self.game.destroyed_this_phase):
+                        continue
+                    
                     distance = HexGrid.hex_distance(u_boat.position, ship.position)
                     if 1 <= distance <= 3:
                         has_los, _blocking_reason = los_calc.has_line_of_sight(
@@ -6057,7 +6240,7 @@ class UnifiedGameScreen(BaseScreen):
                         if (destroyed_pos and 
                             destroyed_pos.q == ship.position.q and 
                             destroyed_pos.r == ship.position.r and 
-                            destroyed.get('entity_type') == ship.ship_type):
+                            destroyed.get('type') == ship.ship_type):
                             ship_was_destroyed = True
                             break
                     

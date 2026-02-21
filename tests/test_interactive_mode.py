@@ -40,8 +40,6 @@ def test_interactive_merchant_phase():
     # Merchant might have no path or be at destination - that's OK for first turn
     # Just check that batch mode wasn't used
     print("✓ Interactive mode attempted (queue may be empty if no moves available)")
-    
-    return True
 
 
 def test_interactive_detection_phase():
@@ -62,8 +60,6 @@ def test_interactive_detection_phase():
     assert game.current_ai_queue.total_count() > 0
     
     print(f"✓ Detection phase created queue with {game.current_ai_queue.total_count()} actions")
-    
-    return True
 
 
 def test_interactive_escort_phase():
@@ -85,8 +81,6 @@ def test_interactive_escort_phase():
     assert game.current_ai_queue.total_count() > 0
     
     print(f"✓ Escort phase created queue with {game.current_ai_queue.total_count()} actions")
-    
-    return True
 
 
 def test_queue_execution_workflow():
@@ -120,8 +114,6 @@ def test_queue_execution_workflow():
     assert game.turn_manager.current_phase == GamePhase.DETECTION_PHASE
     
     print("✓ Queue-based execution works correctly")
-    
-    return True
 
 
 def test_has_pending_ai_actions():
@@ -152,8 +144,6 @@ def test_has_pending_ai_actions():
         print("✓ All actions executed")
     else:
         print("✓ No actions needed (acceptable)")
-    
-    return True
 
 
 def run_all_tests():

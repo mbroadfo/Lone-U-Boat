@@ -54,7 +54,7 @@ def generate_merchant_actions(game_state: Any) -> AIActionQueue:
             ))
         
         # Get next move from merchant AI
-        target_hex, _new_facing, _message = game_state.merchant_ai.get_merchant_movement(
+        target_hex, new_facing, _message = game_state.merchant_ai.get_merchant_movement(
             merchant,
             ship_idx
         )
@@ -62,7 +62,8 @@ def generate_merchant_actions(game_state: Any) -> AIActionQueue:
         if target_hex:
             queue.add(MerchantMoveAction(
                 entity_index=ship_idx,
-                target_hex=target_hex
+                target_hex=target_hex,
+                new_facing=new_facing  # Pass the facing from merchant AI!
             ))
     
     return queue

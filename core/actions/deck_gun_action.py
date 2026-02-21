@@ -86,8 +86,15 @@ class DeckGunAction(Action):
         u_boat = game_state.u_boat
         
         # Filter out sunk/destroyed ships (targets captured at queue time, validate at execution)
-        # Ships are removed from game_state.ships when sunk, so check if still in that list
-        active_targets = [(ship, distance) for ship, distance in self.targets if ship in game_state.ships]
+        # Check both: ships must still be in game_state.ships AND not in destroyed_this_phase
+        destroyed_this_phase = getattr(game_state, 'destroyed_this_phase', [])
+        active_targets = [
+            (ship, distance) for ship, distance in self.targets 
+            if ship in game_state.ships and not any(
+                d.get('type') == ship.ship_type and d.get('position') == ship.position
+                for d in destroyed_this_phase
+            )
+        ]
         
         if not active_targets:
             ap_cost = self.get_cost(u_boat)

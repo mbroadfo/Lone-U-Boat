@@ -174,14 +174,15 @@ class MerchantAI:
         if next_waypoint is None:
             return None, None, f"Merchant has reached end of path"
         
-        # Calculate facing for the OUTBOUND direction (from next_waypoint to the waypoint after that)
-        # This way, when the ship arrives at next_waypoint, it's already facing the right direction
+        # Calculate facing for where ship will be AFTER the move
+        # Ship should face the direction of the NEXT leg when it arrives at destination
+        # This handles turn points correctly: when arriving at [1,7], face toward [2,7]
         waypoint_after_next = path.get_next_waypoint(next_waypoint)
         if waypoint_after_next:
-            # Face the direction for the next move
+            # Turn point: face the direction of the next leg
             new_facing = path.get_facing_for_next_waypoint(next_waypoint, waypoint_after_next)
         else:
-            # This is the last waypoint, face the direction we're moving
+            # Last waypoint: face the direction we're moving to get there
             new_facing = path.get_facing_for_next_waypoint(ship.position, next_waypoint)
         
         # Determine movement rules based on damage status

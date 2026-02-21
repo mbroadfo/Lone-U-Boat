@@ -92,7 +92,13 @@ class AIActionQueue:
         if action is None:
             return None
         
-        result = action.execute(game_state)
+        # Check if action supports animation and has execute_with_animation method
+        if (hasattr(action, 'triggers_animation') and action.triggers_animation and
+            hasattr(action, 'execute_with_animation')):
+            result = action.execute_with_animation(game_state)
+        else:
+            result = action.execute(game_state)
+        
         self._execution_history.append(result)
         return result
     

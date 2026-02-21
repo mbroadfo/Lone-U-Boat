@@ -4,6 +4,66 @@ All notable changes to the Lone U-Boat project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-02-20
+
+### Fixed
+- **B24 Animation**: B24 aircraft now display smooth movement and rotation animations
+  - Modified `AIActionQueue.execute_current()` to check `triggers_animation` property
+  - B24 move and turn actions now call `execute_with_animation()` instead of `execute()`
+  - Animation system properly interpolates B24 positions and rotations
+  - Extended `MockAnimationManager` in tests with `start_aircraft_movement()` and `start_aircraft_rotation()` methods
+- **B24 Spawn Position**: B24s now spawn at correct map edge position per game rules
+  - Fixed `_get_furthest_edge_position()` to return actual edge hex (`longest_line[-1]`)
+  - Previously returned second-to-last hex, causing B24s to spawn one hex in from edge
+  - Follows rule: "place B24 on edge hex of Map which is furthest from and on same hex-line as U-Boat"
+- **Deck Gun Targeting**: Deck gun no longer targets ships destroyed earlier in same turn
+  - Added `destroyed_this_phase` filtering when building deck gun target list in immediate execution flow
+  - Added `destroyed_this_phase` filtering in `DeckGunAction.execute()` for queued actions
+  - Added `destroyed_this_phase` filtering in `FireTorpedoAction.trace_torpedo_path()` for torpedo targeting
+  - Fixed dictionary key error: using correct 'type' key instead of 'entity_type'
+  - Prevents deck gun and torpedoes from attacking ships already sunk earlier in same turn
+  - Ships remain visible with destroyed overlay until phase advance, but are not valid targets
+
+---
+
+## [Unreleased] - 2026-02-16
+
+### Added
+- **AI Dice Roll UI**: Player-controlled dice rolling for AI actions
+  - Green "ROLL DICE FOR AI" button appears when AI action requires player input
+  - Displays action name and details before roll
+  - Dice roll results logged to event history
+  - Applies to: MerchantDamageCheckAction, EscortActivationAction, EscortDetectionAction, B24TurnAction, FlakDefenseAction
+
+### Fixed
+- **Torpedo Targeting**: Torpedoes no longer target destroyed ships
+  - Fixed torpedo path tracing to check `destroyed_this_phase` list instead of non-existent `ship.destroyed` attribute
+  - Added `destroyed_this_phase` parameter to `trace_torpedo_path()` method
+  - Prevents wasting torpedoes on ships sunk earlier in the same turn
+  - Torpedoes correctly pass through destroyed ship positions to hit ships beyond
+  - Critical fix for torpedo attack logic in `core/actions/fire_torpedo_action.py`
+  - Updated `MockGameState` in tests to include `destroyed_this_phase` attribute
+- **Phase Advance Blocking**: Phase advance button now properly blocked during resolution modes
+  - Fixed critical bug where torpedo resolutions could span multiple turns
+  - Phase button no longer appears during: torpedo resolution, deck gun resolution, AI dice rolls, loading, firing, or repair selection
+  - Guard clause returns early if any resolution state is active
+  - Ensures all resolutions complete within their proper turn
+- **Merchant AI Facing**: Ships now turn at the correct time
+  - Fixed merchant ships to face the direction of their NEXT move when arriving at turn points
+  - Ships turn when they ARRIVE at a waypoint to face the next leg of their journey
+  - Example: At [1,7], ship faces SOUTHEAST toward [2,7] (not SOUTH from previous move)
+  - Uses look-ahead logic: facing from `next_waypoint → waypoint_after_next`
+  - Fixed action generator to pass new_facing from merchant AI to move action
+  - Modified `core/merchant_ai.py` facing calculation logic
+  - Modified `core/ai_action_generators.py` to pass facing to MerchantMoveAction
+  - Merchants correctly orient toward their current destination
+- **Type Hints**: Fixed all type hint errors in unified_game.py
+  - Added explicit `List[str]` type annotations for list variables
+  - Changed unused return values to underscore `_` convention
+  - Zero type errors remaining across entire codebase
+
+---
+
 ## [Unreleased] - 2026-02-15
 
 ### Major Milestone: Interactive AI System Complete ✅

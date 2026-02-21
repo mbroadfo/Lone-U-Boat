@@ -43,6 +43,7 @@ class MockGameState:
         self.ships = ships or []
         self.land_hexes = set()
         self.mission_hexes = set()  # Empty set for testing
+        self.destroyed_this_phase = []  # Track destroyed entities
 
 
 def test_repair_action_engine():
