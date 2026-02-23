@@ -4,9 +4,33 @@ All notable changes to the Lone U-Boat project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-02-22
+
+### Fixed
+- **Undo System**: Fixed depth change actions not being re-addable after undo
+  - Action snapshots now save and restore `depth_changed_this_turn` flag
+  - Allows changing depth, undoing it, and changing depth again in the same turn
+  - Applies to all action types: depth change, load torpedoes, repairs
+- **Undo System**: Prevent undoing dice-rolled actions (deck gun, torpedoes)
+  - Undo buffer is now cleared immediately when starting deck gun/torpedo resolution
+  - Prevents exploiting undo to retry random outcomes
+  - Failed torpedo actions refund AP directly instead of using undo system
+- **Torpedo Tubes**: Fixed tubes becoming empty after canceled torpedo firing
+  - Tube states are now backed up before torpedo execution
+  - Tubes restored to LOADED state if torpedo action fails
+  - Tubes remain EMPTY only when torpedoes successfully fire (with or without targets)
+  - Properly handles three outcomes: needs resolution, no targets, failure
+
+---
+
 ## [Unreleased] - 2026-02-20
 
 ### Fixed
+- **Undo System**: Fixed depth change actions being blocked after undo
+  - Undo now properly restores `depth_changed_this_turn` flag from turn_manager
+  - Players can now re-add depth change actions in the same turn after undoing them
+  - Snapshots now include turn_manager state for all action types (depth change, deck gun, torpedoes, repair, load)
+  - Modified `_undo_last_action()` and `_execute_action_immediate()` in unified_game.py
 - **B24 Animation**: B24 aircraft now display smooth movement and rotation animations
   - Modified `AIActionQueue.execute_current()` to check `triggers_animation` property
   - B24 move and turn actions now call `execute_with_animation()` instead of `execute()`

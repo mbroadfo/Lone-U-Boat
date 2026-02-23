@@ -4723,8 +4723,8 @@ class UnifiedGameScreen(BaseScreen):
                     self.add_event(f"Not enough AP (need {ap_cost}, have {remaining})")
                     return
                 
-                # Create snapshot for undo
-                snapshot = create_u_boat_snapshot(u_boat)
+                # Save tube state before execution (in case we need to restore it)
+                tube_state_backup = [u_boat.torpedo_tubes[idx - 1] for idx in tube_indices]
                 
                 # Get targets from action
                 result = action.execute(self.game)
@@ -4738,6 +4738,10 @@ class UnifiedGameScreen(BaseScreen):
                     target_count = len(targets)
                     target_text = f"{target_count} ship(s)" if target_count > 0 else "no targets in line"
                     
+                    # Torpedoes use dice rolls - CLEAR undo buffer immediately
+                    # (cannot undo actions that involve random dice outcomes)
+                    self.game.action_history.clear()
+                    
                     self.torpedo_resolution_state = {
                         'targets': targets,
                         'current_target_idx': 0,
@@ -4747,16 +4751,25 @@ class UnifiedGameScreen(BaseScreen):
                         'waiting_for': 'hit',
                         'results': [],
                         'action': action,
-                        'snapshot': snapshot,
                         'ap_cost': ap_cost
                     }
                     self.add_event(f"=== TORPEDO ATTACK: {len(tube_indices)} torpedo(es) vs {target_text} ===")
                     
                     # Close selection UI - moving to resolution
                     self.fire_torpedo_selection_state = None
+                elif result.success:
+                    # Torpedoes fired successfully but no targets in path
+                    # Tubes are already unloaded, AP already spent
+                    # Clear undo buffer since torpedoes were fired (even if they missed)
+                    self.game.action_history.clear()
+                    self.add_event(result.message)
+                    self.fire_torpedo_selection_state = None
                 else:
-                    # Action failed validation - this shouldn't happen after UI validation
-                    self.add_event("✗ Torpedo firing failed validation")
+                    # Action execution failed - restore tube state and refund AP
+                    for i, tube_idx in enumerate(tube_indices):
+                        u_boat.torpedo_tubes[tube_idx - 1] = tube_state_backup[i]
+                    self.game.turn_manager.remaining_ap += ap_cost
+                    self.add_event(f"✗ Torpedo firing failed: {result.message} (AP refunded, tubes restored)")
                     self.fire_torpedo_selection_state = None
                     return
             else:
@@ -4928,10 +4941,8 @@ class UnifiedGameScreen(BaseScreen):
         # Log result
         self.add_event(f"✓ Deck Gun: {message}")
         
-        # Deck gun attack uses dice rolls - CLEAR undo buffer (cannot undo dice-rolled actions)
-        self.game.action_history.clear()
-        
         # Clear resolution state
+        # (undo buffer was already cleared when resolution started)
         self.deck_gun_resolution_state = None
         self.deck_gun_roll_button_rect = None
     
@@ -5314,10 +5325,8 @@ class UnifiedGameScreen(BaseScreen):
         # Summary
         self.add_event(f"=== TORPEDO ATTACK COMPLETE: {hits}/{torpedo_count} hits ===")
         
-        # Torpedo attack uses dice rolls - CLEAR undo buffer (cannot undo dice-rolled actions)
-        self.game.action_history.clear()
-        
         # Clear resolution state
+        # (undo buffer was already cleared when resolution started)
         self.torpedo_resolution_state = None
         self.torpedo_roll_button_rect = None
     
@@ -5385,6 +5394,8 @@ class UnifiedGameScreen(BaseScreen):
                 
                 # Create snapshot for undo
                 snapshot = create_u_boat_snapshot(u_boat)
+                # Also save turn_manager state that may be modified by actions
+                snapshot['depth_changed_this_turn'] = self.game.turn_manager.depth_changed_this_turn
                 
                 # Execute action immediately
                 result = action.execute(self.game)
@@ -5649,6 +5660,8 @@ class UnifiedGameScreen(BaseScreen):
             
             # Create snapshot for undo
             snapshot = create_u_boat_snapshot(u_boat)
+            # Also save turn_manager state that may be modified by actions
+            snapshot['depth_changed_this_turn'] = self.game.turn_manager.depth_changed_this_turn
             
             # Execute action immediately
             result = action.execute(self.game)
@@ -5712,6 +5725,8 @@ class UnifiedGameScreen(BaseScreen):
                     
                     # Create snapshot for undo (only for tubes that cost AP)
                     snapshot = create_u_boat_snapshot(u_boat)
+                    # Also save turn_manager state that may be modified by actions
+                    snapshot['depth_changed_this_turn'] = self.game.turn_manager.depth_changed_this_turn
                 else:
                     snapshot = {}  # Empty snapshot for free repairs
                 
@@ -6000,6 +6015,10 @@ class UnifiedGameScreen(BaseScreen):
         # Restore U-boat state from snapshot
         restore_u_boat_snapshot(self.game.u_boat, snapshot)
         
+        # Restore turn_manager state if present in snapshot
+        if 'depth_changed_this_turn' in snapshot:
+            self.game.turn_manager.depth_changed_this_turn = snapshot['depth_changed_this_turn']
+        
         # Refund AP
         self.game.turn_manager.remaining_ap += ap_refund
         
@@ -6098,8 +6117,9 @@ class UnifiedGameScreen(BaseScreen):
                     self.add_event(f"Not enough AP (need {ap_cost}, have {remaining})")
                     return
                 
-                # Create snapshot for undo BEFORE opening resolution
-                snapshot = create_u_boat_snapshot(u_boat)
+                # Deck gun uses dice rolls - CLEAR undo buffer immediately
+                # (cannot undo actions that involve random dice outcomes)
+                self.game.action_history.clear()
                 
                 # Open interactive resolution UI
                 self.deck_gun_resolution_state = {
@@ -6109,8 +6129,7 @@ class UnifiedGameScreen(BaseScreen):
                     'results': [],
                     'last_hit_roll': None,
                     'last_damage_roll': None,
-                    'ap_cost': ap_cost,
-                    'snapshot': snapshot
+                    'ap_cost': ap_cost
                 }
                 self.add_event(f"Deck gun targeting {len(current_targets)} ship(s) - Click to attack")
                 return  # Don't continue with normal action execution
@@ -6138,6 +6157,8 @@ class UnifiedGameScreen(BaseScreen):
             
             # Create snapshot for undo BEFORE executing
             snapshot = create_u_boat_snapshot(u_boat)
+            # Also save turn_manager state that may be modified by actions
+            snapshot['depth_changed_this_turn'] = self.game.turn_manager.depth_changed_this_turn
             
             # Execute action immediately
             result = action.execute(self.game)
