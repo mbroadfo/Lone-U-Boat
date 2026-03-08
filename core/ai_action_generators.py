@@ -5,15 +5,13 @@ These functions implement the strangler fig pattern by routing old batch AI
 through the new interactive action system when interactive_ai_mode=True.
 """
 
+import random
 from typing import Any
 from core.actions.ai import (
     AIActionQueue,
     MerchantMoveAction,
     MerchantDamageCheckAction,
     EscortActivationAction,
-    EscortMoveAction,
-    EscortFireAction,
-    EscortDepthChargeAction,
     EscortDetectionAction,
     MerchantVisualAction,
     B24MoveAction,
@@ -46,25 +44,26 @@ def generate_merchant_actions(game_state: Any) -> AIActionQueue:
     
     # For each merchant, determine action based on AI logic
     for ship_idx, merchant in merchants:
-        # Damaged merchants need damage check first
         if merchant.damaged:
+            # Damaged merchant: queue ONLY the damage check.
+            # MerchantDamageCheckAction injects a MerchantMoveAction via
+            # insert_after_current() if and only if the 4+ roll succeeds.
             queue.add(MerchantDamageCheckAction(
                 entity_index=ship_idx,
-                required_roll=4  # Standard damage check roll
+                required_roll=4
             ))
-        
-        # Get next move from merchant AI
-        target_hex, new_facing, _message = game_state.merchant_ai.get_merchant_movement(
-            merchant,
-            ship_idx
-        )
-        
-        if target_hex:
-            queue.add(MerchantMoveAction(
-                entity_index=ship_idx,
-                target_hex=target_hex,
-                new_facing=new_facing  # Pass the facing from merchant AI!
-            ))
+        else:
+            # Undamaged merchant: move directly.
+            target_hex, new_facing, _message = game_state.merchant_ai.get_merchant_movement(
+                merchant,
+                ship_idx
+            )
+            if target_hex:
+                queue.add(MerchantMoveAction(
+                    entity_index=ship_idx,
+                    target_hex=target_hex,
+                    new_facing=new_facing
+                ))
     
     return queue
 
@@ -91,7 +90,13 @@ def generate_detection_actions(game_state: Any) -> AIActionQueue:
     escorts = [(i, ship) for i, ship in enumerate(game_state.ships)
                if ship.ship_type in ['corvette', 'destroyer']]
     
-    for ship_idx, _escort in escorts:
+    detection_range = 3  # Rules: escorts may only detect within 3 hexes
+    for ship_idx, escort in escorts:
+        range_to_uboat = game_state.hex_grid.hex_distance(
+            escort.position, game_state.u_boat.position
+        )
+        if range_to_uboat > detection_range:
+            continue  # Escort out of detection range — skip
         queue.add(EscortDetectionAction(
             ship_index=ship_idx,
             current_detection_level=game_state.detection_level
@@ -112,57 +117,42 @@ def generate_detection_actions(game_state: Any) -> AIActionQueue:
 
 def generate_escort_actions(game_state: Any) -> AIActionQueue:
     """Generate interactive actions for escort phase.
-    
-    Creates basic escort actions - the action classes themselves handle
-    the logic for determining targets and behavior.
-    
+
+    Escorts activate in order from closest to the U-boat (random shuffle resolves
+    ties). For each escort, a single EscortActivationAction is queued; when the
+    player rolls its dice, the action injects one EscortDieAction per die so the
+    player resolves them individually (lowest die first).
+
     Args:
         game_state: Game state with ships, u_boat, escort_ai, etc.
-    
+
     Returns:
-        AIActionQueue with escort actions for player to execute
+        AIActionQueue with one EscortActivationAction per escort, ordered closest first.
     """
     queue = AIActionQueue()
-    
+
     # Find all escorts
-    escorts = [(i, ship) for i, ship in enumerate(game_state.ships)
-               if ship.ship_type in ['corvette', 'destroyer']]
-    
-    if not escorts:
+    escorts_raw = [(i, ship) for i, ship in enumerate(game_state.ships)
+                   if ship.ship_type in ['corvette', 'destroyer']]
+
+    if not escorts_raw:
         return queue
-    
-    # For each escort, create basic action sequence
-    # The actions themselves will determine targets and behavior
-    for ship_idx, escort in escorts:
-        # 1. Activation check (escort die roll)
+
+    # Compute distances and shuffle first for random tie-breaking, then stable-sort by distance
+    escorts_with_dist = [
+        (i, ship, game_state.hex_grid.hex_distance(ship.position, game_state.u_boat.position))
+        for i, ship in escorts_raw
+    ]
+    random.shuffle(escorts_with_dist)
+    escorts_with_dist.sort(key=lambda x: x[2])  # stable sort keeps ties in random order
+
+    # Queue only the activation action — it dynamically injects EscortDieActions when rolled
+    for ship_idx, _ship, _dist in escorts_with_dist:
         queue.add(EscortActivationAction(
             entity_index=ship_idx,
             detection_level=game_state.detection_level
         ))
-        
-        # 2. Movement (action determines if it should move or turn)
-        queue.add(EscortMoveAction(
-            entity_index=ship_idx,
-            target_hex=None  # Action calculates target
-        ))
-        
-        # 3. Attack actions if in range
-        distance = game_state.hex_grid.hex_distance(escort.position, game_state.u_boat.position)
-        
-        # Depth charge if adjacent
-        if distance == 1:
-            queue.add(EscortDepthChargeAction(
-                entity_index=ship_idx,
-                detection_level=game_state.detection_level
-            ))
-        
-        # Gunfire if in range (2-3 hexes)
-        if 2 <= distance <= 3:
-            queue.add(EscortFireAction(
-                entity_index=ship_idx,
-                detection_level=game_state.detection_level
-            ))
-    
+
     return queue
 
 

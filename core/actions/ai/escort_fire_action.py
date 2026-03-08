@@ -78,9 +78,11 @@ class EscortFireAction(AIAction):
             return False, "No hex grid in game"
         
         self._range = game_state.hex_grid.hex_distance(escort.position, u_boat.position)
-        
-        if self._range > 6:
-            return False, f"FIRE not possible: Range {self._range} > 6"
+
+        # Rules: escort gunfire is restricted to Range 1-3 (same as U-boat deck gun).
+        # RULES.md: "If U-Boat is Surfaced, in LoS and at Range 1-3, Set DL to 3..."
+        if self._range < 1 or self._range > 3:
+            return False, f"FIRE not possible: Range {self._range} (must be 1-3)"
         
         # Check LOS
         land_hexes: set[HexCoord] = getattr(game_state, 'land_hexes', set())

@@ -94,9 +94,7 @@ class MovementValidator:
             
             # If ship is destroyed, U-boat can move through it at any depth
             if ship_is_destroyed:
-                print(f"[MOVEMENT] Ship at {target_hex} is destroyed, can move through")
-                # Remove destroyed ship visual when U-boat moves through
-                # (This will be handled by the caller)
+                pass  # Destroyed ship — U-boat can always move through at any depth
             elif u_boat.depth not in [Depth.MEDIUM, Depth.DEEP]:
                 print(f"[MOVEMENT] Cannot move to ship hex: u_boat.depth={u_boat.depth} ({u_boat.depth.name}), need MEDIUM or DEEP")
                 return False, f"Cannot enter ship hex unless Medium or Deep (currently {u_boat.depth.name})"

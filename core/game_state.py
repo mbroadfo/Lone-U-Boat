@@ -66,6 +66,7 @@ class Game:
         # AI action queue for interactive mode (solitaire gameplay)
         self.current_ai_queue: Optional[AIActionQueue] = None
         self.current_ai_queue_phase: Optional[str] = None  # Track which phase the queue belongs to
+        self.last_escort_roll: Optional[Dict[str, Any]] = None  # Last escort dice roll for right-panel display
         
         # Load mission rules from JSON
         self.mission_rules = load_mission_rules(mission_number)
@@ -495,16 +496,16 @@ class Game:
         """Execute B-24 phase - generate action queue for player to execute."""
         # Generate actions for player to execute
         self.current_ai_queue = generate_b24_actions(self)
-        self.current_ai_queue_phase = "B24 Phase"
+        self.current_ai_queue_phase = "B24 Aircraft Phase"
         
         # Log phase start
         if not self.aircraft:
-            self.turn_manager.add_phase_log("B24 Phase", "No aircraft on map")
+            self.turn_manager.add_phase_log("B24 Aircraft Phase", "No aircraft on map")
             self.current_ai_queue = None  # Skip to next phase immediately
             self.current_ai_queue_phase = None
             return
         
-        self.turn_manager.add_phase_log("B24 Phase",
+        self.turn_manager.add_phase_log("B24 Aircraft Phase",
                                        f"{len(self.aircraft)} aircraft - {self.current_ai_queue.total_count()} actions queued")
     
     def _execute_end_turn_events(self):
@@ -596,6 +597,7 @@ class Game:
         self.turn_manager.ap_tracker = None  # Player must click to roll
         self.turn_manager.phase_logs.clear()
         self.turn_manager.depth_changed_this_turn = False
+        self.last_escort_roll = None
         
         # Reset AP to 0 until player rolls
         self.u_boat.action_points = 0
@@ -706,14 +708,11 @@ class Game:
         is_destroyed, reason = self.escort_ai.damage_resolver.check_destruction(self.u_boat)
         if is_destroyed:
             self.defeat_reason = 'destroyed'
-            print(f"\n{'='*60}")
-            print("MISSION FAILED - U-BOAT DESTROYED!")
-            print(f"{'='*60}")
-            print(f"Reason: {reason}")
-            print(f"Turn: {self.turn_manager.turn_number}")
-            print(f"Final Position: {self.u_boat.position}")
-            print(f"Hull Damage: {self.u_boat.hull_damage}/4")
-            print(f"{'='*60}\n")
+            # Don't print the banner here — the UI adds the triggering die/event
+            # to the event log AFTER execute_next_ai_action() returns, so printing
+            # here would make the banner appear before the [EVENT] that caused it.
+            # The banner is printed by the UI (unified_game._print_game_over_banner)
+            # after add_event() to guarantee correct ordering.
             self.running = False
             return
         
@@ -741,12 +740,9 @@ class Game:
         result_message = None
         if result and result.success:
             result_message = result.message
-            # Use the phase that created the queue for logging
-            phase_name = self.current_ai_queue_phase or self.turn_manager.get_current_phase_name()
-            self.turn_manager.add_phase_log(
-                phase_name,
-                result.message
-            )
+            # NOTE: Do NOT add to phase_log here.  The UI shows results live via
+            # add_event() as each action is executed, so storing them in phase_log
+            # would cause duplicates and out-of-order display.
         
         # Check if U-boat was destroyed by this action
         self._check_game_over_conditions()

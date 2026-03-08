@@ -479,25 +479,22 @@ class UBoatDamageResolver:
             # Gunfire is automatic critical hit (roll 1 on chart)
             chart_roll = 1
             dice_info = "Gunfire attack → automatic critical hit [1]"
-            print(f"[DAMAGE] {dice_info}")
+
         elif ship_type == "destroyer" and attack_type == "depth_charge":
             # Destroyer rolls 2d6, takes lowest
             roll1 = self.dice.roll_1d6()
             roll2 = self.dice.roll_1d6()
             chart_roll = min(roll1, roll2)
             dice_info = f"Destroyer depth charge: rolled 2d6 [{roll1},{roll2}], taking lowest [{chart_roll}]"
-            print(f"[DAMAGE] {dice_info}")
         elif attack_type == "b24":
             # B-24 attack: roll 1d6
             chart_roll = self.dice.roll_1d6()
             dice_info = f"B-24 attack: rolled 1d6 [{chart_roll}]"
-            print(f"[DAMAGE] {dice_info}")
         else:
             # Corvette or other: roll 1d6
             chart_roll = self.dice.roll_1d6()
             attack_source = ship_type.capitalize() if ship_type else "Unknown"
             dice_info = f"{attack_source} depth charge: rolled 1d6 [{chart_roll}]"
-            print(f"[DAMAGE] {dice_info}")
         
         hull_damage = 0
         systems_damaged: List[str] = []
@@ -510,7 +507,6 @@ class UBoatDamageResolver:
             # Critical Hit!
             crit_roll = self.dice.roll_1d6()
             crit_info = f"Critical hit sub-table: rolled 1d6 [{crit_roll}]"
-            print(f"[DAMAGE] {crit_info}")
             dice_info += f"\n        {crit_info}"  # Add to dice_info for description
             
             if crit_roll == 1:
@@ -633,7 +629,6 @@ class UBoatDamageResolver:
             (systems_damaged, hull_damage, effect_description, roll)
         """
         roll = self.dice.roll_1d6()
-        print(f"[DAMAGE] General damage sub-table: rolled 1d6 [{roll}]")
         systems: List[str] = []
         hull = 0
         

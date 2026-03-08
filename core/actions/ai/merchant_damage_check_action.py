@@ -103,6 +103,26 @@ class MerchantDamageCheckAction(AIAction):
             message = f"Merchant (damaged) rolled 1d6 [{self.roll_result}] - cannot move"
             success = True  # Action succeeded (roll was made), even though merchant can't move
         
+        # If the merchant CAN move, inject a MerchantMoveAction immediately after
+        # this action in the queue so it executes next.
+        if self.can_move and hasattr(game_state, 'current_ai_queue') and game_state.current_ai_queue:
+            from core.actions.ai.merchant_move_action import MerchantMoveAction
+            ship = game_state.ships[self.entity_index]
+            target_hex = None
+            new_facing = None
+            if hasattr(game_state, 'merchant_ai'):
+                target_hex, new_facing, _ = game_state.merchant_ai.get_merchant_movement(
+                    ship, self.entity_index
+                )
+            if target_hex is not None:
+                game_state.current_ai_queue.insert_after_current([
+                    MerchantMoveAction(
+                        entity_index=self.entity_index,
+                        target_hex=target_hex,
+                        new_facing=new_facing
+                    )
+                ])
+
         return ActionResult(
             success=success,
             message=message,

@@ -95,10 +95,11 @@ class EscortActivationAction(AIAction):
     
     def execute_with_animation(self, game_state: Any) -> ActionResult:
         """
-        Roll dice for escort activation.
+        Roll all dice for escort activation, then inject one EscortDieAction per die.
         
         Returns:
-            ActionResult with dice rolls in state_changes
+            ActionResult with roll summary; EscortDieActions are inserted after current
+            position so the player executes each die in order (low → high).
         """
         escort = self.get_entity(game_state)
         if escort is None:
@@ -109,19 +110,55 @@ class EscortActivationAction(AIAction):
                 state_changes={}
             )
         
-        # Roll dice using escort AI's dice roller
+        # Ensure dice_count is computed (validate may not have been called by the queue)
+        self.validate(game_state)
+        
+        if self.dice_count == 0:
+            return ActionResult(
+                success=False,
+                message=f"{escort.ship_type.capitalize()} at [{escort.position.q},{escort.position.r}] has 0 dice",
+                ap_spent=0,
+                state_changes={}
+            )
+        
+        # Roll all dice at once, sorted low → high
         if hasattr(game_state, 'escort_ai') and hasattr(game_state.escort_ai, 'dice'):
             dice_roller = game_state.escort_ai.dice
+        elif hasattr(game_state, 'dice_roller'):
+            dice_roller = game_state.dice_roller
+        else:
+            dice_roller = None
+        
+        if dice_roller is not None:
             self.rolls = sorted([dice_roller.roll_1d6() for _ in range(self.dice_count)])
         else:
             # Fallback - shouldn't happen in real game
-            self.rolls = [3] * self.dice_count
+            self.rolls = sorted([3] * self.dice_count)
         
-        rolls_str = ", ".join(str(r) for r in self.rolls)
+        q, r = escort.position.q, escort.position.r
+        ship_label = f"{escort.ship_type.capitalize()} at [{q},{r}]"
         
+        # Store on game_state so the right panel can display the dice
+        game_state.last_escort_roll = {
+            'ship_label': ship_label,
+            'ship_type': escort.ship_type,
+            'rolls': list(self.rolls),
+            'dice_count': self.dice_count,
+        }
+        
+        # Inject one EscortDieAction per die (low → high) immediately after this action
+        from core.actions.ai.escort_die_action import EscortDieAction  # local import avoids circular dep
+        die_actions = [
+            EscortDieAction(self.entity_index, die_val, self.detection_level)
+            for die_val in self.rolls
+        ]
+        if hasattr(game_state, 'current_ai_queue') and game_state.current_ai_queue:
+            game_state.current_ai_queue.insert_after_current(die_actions)
+        
+        rolls_str = " | ".join(str(v) for v in self.rolls)
         return ActionResult(
             success=True,
-            message=f"{escort.ship_type.capitalize()} activated: rolled {rolls_str}",
+            message=f"{ship_label} activated: rolled [{rolls_str}]",
             ap_spent=0,
             state_changes={
                 'escort_index': self.entity_index,
@@ -130,6 +167,19 @@ class EscortActivationAction(AIAction):
                 'detection_level': self.detection_level
             }
         )
+    
+    def get_description(self) -> str:
+        """Return human-readable description for the UI preview."""
+        dice_str = f"{self.dice_count} dice" if self.dice_count else "dice"
+        return f"Roll {dice_str} (DL {self.detection_level})"
+    
+    def get_entity_description(self, game_state: Any) -> str:
+        """Return entity label for the UI preview."""
+        escort = self.get_entity(game_state)
+        if escort is None:
+            return f"Ship {self.entity_index}"
+        q, r = escort.position.q, escort.position.r
+        return f"{escort.ship_type.capitalize()} at [{q},{r}]"
     
     def get_preview_data(self, game_state: Any) -> Dict[str, Any]:
         """Get preview data for UI."""

@@ -102,6 +102,20 @@ class AIActionQueue:
         self._execution_history.append(result)
         return result
     
+    def insert_after_current(self, actions: List[AIAction]) -> None:
+        """
+        Insert actions immediately after the current position in the queue.
+        
+        Used by actions that dynamically determine follow-up work at execution
+        time (e.g., EscortActivationAction injecting per-die EscortDieActions).
+        
+        Args:
+            actions: List of actions to insert right after the current action
+        """
+        insert_pos = self._current_index + 1
+        for i, action in enumerate(actions):
+            self._actions.insert(insert_pos + i, action)
+
     def next(self) -> bool:
         """
         Move to next action in queue.

@@ -153,14 +153,16 @@ def test_die_action_mapping_2(simple_game_state: Any):
 
 
 def test_die_action_mapping_3(simple_game_state: Any):
-    """Test die 3 maps to MOVE only."""
+    """Test die 3 maps to MOVE + DEPTH_CHARGE (per rules: MOVE – If DL=1-3: DC)."""
     print("\n=== Test: Die 3 Action Mapping ===")
     
     action = EscortDieAction(entity_index=0, die_value=3)
     action.validate(simple_game_state)  # Initializes actions_granted
     actions = action.actions_granted
-    assert actions == [EscortActionType.MOVE]
-    print("✓ Die 3 -> MOVE")
+    assert EscortActionType.MOVE in actions
+    assert EscortActionType.DEPTH_CHARGE in actions
+    assert EscortActionType.TURN not in actions
+    print("✓ Die 3 -> MOVE + DEPTH_CHARGE")
 
 
 def test_die_action_mapping_4_and_6(simple_game_state: Any):
@@ -177,14 +179,16 @@ def test_die_action_mapping_4_and_6(simple_game_state: Any):
 
 
 def test_die_action_mapping_5(simple_game_state: Any):
-    """Test die 5 maps to TURN only."""
+    """Test die 5 maps to MOVE + DEPTH_CHARGE (per rules: MOVE – If DL=1-3: DC)."""
     print("\n=== Test: Die 5 Action Mapping ===")
     
     action = EscortDieAction(entity_index=0, die_value=5)
     action.validate(simple_game_state)  # Initializes actions_granted
     actions = action.actions_granted
-    assert actions == [EscortActionType.TURN]
-    print("✓ Die 5 -> TURN")
+    assert EscortActionType.MOVE in actions
+    assert EscortActionType.DEPTH_CHARGE in actions
+    assert EscortActionType.TURN not in actions
+    print("✓ Die 5 -> MOVE + DEPTH_CHARGE")
 
 
 # =============================================================================
@@ -542,7 +546,7 @@ def test_escort_depth_charge_execution(mock_game_state: MockGameState, destroyer
 # =============================================================================
 
 def test_full_escort_workflow(mock_game_state: MockGameState, destroyer: Ship, surfaced_uboat: UBoat, mock_dice: MockDice):
-    """Test complete escort workflow: activate -> roll -> move -> turn -> fire."""
+    """Test complete escort workflow: activate -> roll -> die actions execute inline."""
     print("\n=== Test: Full Escort Workflow ===")
     
     destroyer.position = HexCoord(3, 5)
@@ -553,7 +557,7 @@ def test_full_escort_workflow(mock_game_state: MockGameState, destroyer: Ship, s
     mock_game_state.escort_ai.dice = mock_dice
     mock_dice.set_roll_sequence([4, 2, 5, 6])  # 4 dice: destroyer (3 base + 1 DL bonus)
     
-    # Step 1: Activate escort
+    # Step 1: Activate escort — rolls and stores last_escort_roll on game_state
     activate_action = EscortActivationAction(entity_index=0, detection_level=1)
     activate_action.validate(mock_game_state)
     activate_result = activate_action.execute(mock_game_state)
@@ -561,21 +565,14 @@ def test_full_escort_workflow(mock_game_state: MockGameState, destroyer: Ship, s
     assert activate_action.rolls == [2, 4, 5, 6]
     print(f"  Step 1: Activated with rolls {activate_action.rolls}")
     
-    # Step 2: Process die 2 (MOVE + TURN)
+    # Step 2: Execute die 2 — die action runs MOVE inline (and tries DEPTH_CHARGE at DL 1)
+    pos_before = destroyer.position  # HexCoord(3, 5)
     die_action = EscortDieAction(entity_index=0, die_value=2, detection_level=1)
-    die_action.validate(mock_game_state)
-    _ = die_action.execute(mock_game_state)
-    assert EscortActionType.MOVE in die_action.actions_granted
-    print(f"  Step 2: Die 2 grants {[a.value for a in die_action.actions_granted]}")
-    
-    # Step 3: Execute MOVE
-    move_action = EscortMoveAction(entity_index=0)
-    can_move, _ = move_action.validate(mock_game_state)
-    if can_move:
-        move_result = move_action.execute(mock_game_state)
-        assert move_result.success is True
-        assert destroyer.position == HexCoord(4, 5)  # Moved east
-        print(f"  Step 3: Moved to {destroyer.position}")
+    die_result = die_action.execute(mock_game_state)
+    assert die_result.success is True
+    # After inline execution, ship should have moved (MOVE sub-action fired)
+    assert destroyer.position != pos_before, "Destroyer should have moved after die 2"
+    print(f"  Step 2: Die 2 executed inline → ship now at {destroyer.position}")
     
     print("✓ Full escort workflow completed")
 

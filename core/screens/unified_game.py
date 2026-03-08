@@ -461,11 +461,14 @@ class UnifiedGameScreen(BaseScreen):
                                         }
                                     else:
                                         # Execute immediately (no dice needed)
-                                        _, _ = self.game.execute_next_ai_action()
+                                        _, result_msg = self.game.execute_next_ai_action()
                                         
-                                        # AI action results are logged to turn_manager.phase_logs
-                                        # They will be displayed when advancing to next phase
-                                        # (no immediate logging to avoid duplication)
+                                        # Log result FIRST so it precedes the game-over banner
+                                        if result_msg:
+                                            self.add_event(result_msg)
+                                        
+                                        # Print banner after event is logged (correct ordering)
+                                        self._print_game_over_banner()
                                         
                                         # If game ended, render one final frame to show the message before game-over overlay
                                         if not self.game.running:
@@ -573,43 +576,31 @@ class UnifiedGameScreen(BaseScreen):
         if not self.game.running:
             return
         
-        # Capture the phase name BEFORE advancing
-        # NOTE: Phase logic executes when LEAVING a phase, so logs will be added for the current phase
-        old_phase_name = self.game.turn_manager.get_current_phase_name()
-        
-        # Forward phase advancement to game (this executes the phase logic for old phase)
+        # Forward phase advancement to game.
+        # Phase entry logic (e.g. _execute_merchant_phase) runs inside here and
+        # adds startup messages to turn_manager.phase_logs for the NEW phase.
         self.game._advance_to_next_phase()  # type: ignore[attr-defined]
         
         # Sync UI depth with actual U-boat depth (in case escorts forced a dive)
         self.selected_depth = self.game.u_boat.depth
         
-        # Show logs from the phase that just executed
-        # Phase logs should have been added during _advance_to_next_phase() execution
-        phase_logs = self.game.turn_manager.get_phase_log(old_phase_name)
-        
-        if phase_logs:
-            # Phase had logs - show them with phase name header
-            self.add_event(f"→ {old_phase_name}")
-            for log_msg in phase_logs:
-                self.add_event(f"  {log_msg}")
-        # Don't show anything if no logs - the next phase will announce itself when it has logs
-        
-        # If we just started U-Boat phase (new turn), prompt for AP roll
+        # Handle new turn (turn wrapped back to U-Boat phase)
         from ..models import GamePhase
         if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
-            if self.game.turn_manager.ap_tracker is None:
-                pass  # Player will see "Roll for AP" button in UI
-            elif self.game.turn_manager.last_ap_roll:
-                # This shouldn't happen with new flow, but keep for safety
-                roll_info = self.game.turn_manager.last_ap_roll
-                rolls_str = "][".join([str(r) for r in roll_info['rolls']])
-                
-                event_msg = f"Turn {self.game.turn_manager.turn_number}: Rolled [{rolls_str}] → {roll_info['highest']}"
-                if roll_info['captain_bonus'] > 0:
-                    event_msg += f" +{roll_info['captain_bonus']} (Captain)"
-                event_msg += f" = {roll_info['total_ap']} AP"
-                
-                self.add_event(event_msg)
+            # _start_new_turn() already cleared phase_logs; nothing more to show here.
+            return
+        
+        # Show startup logs for the NEW phase we just entered.
+        # Action results are not in phase_logs - they are logged live as the player
+        # executes each AI action.  Only static startup context ("N merchants queued",
+        # "N checks queued", event roll results, etc.) is logged here.
+        new_phase_name = self.game.turn_manager.get_current_phase_name()
+        phase_logs = self.game.turn_manager.get_phase_log(new_phase_name)
+        
+        if phase_logs:
+            self.add_event(f"→ {new_phase_name}")
+            for log_msg in phase_logs:
+                self.add_event(f"  {log_msg}")
     
     def _handle_alignment_input(self, event: pygame.event.Event) -> None:
         """Handle input during alignment mode (editor)."""
@@ -2968,50 +2959,44 @@ class UnifiedGameScreen(BaseScreen):
             
             dice_y = y + 45
             dice_x = x + 10
-            
-            # Show AP roll details if available
-            if hasattr(self.game, 'turn_manager') and self.game.turn_manager.last_ap_roll:
-                roll_info = self.game.turn_manager.last_ap_roll
-                
-                # Dice type label
-                num_dice = roll_info['num_dice']
-                dice_label = f"{num_dice}d6"
-                if roll_info['engine_damaged']:
-                    dice_label += " (Engine Dmg)"
-                
+
+            # The dice panel shows ONE thing at a time:
+            #   • Escort phase with escort roll active → teal escort dice
+            #   • U-boat phase (or any other phase) → green AP roll
+            # This prevents the AP roll from persisting into later phases and
+            # the escort dice from stacking below it.
+            escort_roll_info = getattr(self.game, 'last_escort_roll', None)
+
+            if escort_roll_info:
+                # ── Escort dice ──────────────────────────────────────────────
+                ship_label = escort_roll_info.get('ship_label', 'Escort')
+                rolls = escort_roll_info.get('rolls', [])
+
                 self.draw_text(
-                    f"AP Roll [{dice_label}]:",
+                    f"Escort Dice [{ship_label}]:",
                     dice_x,
                     dice_y,
                     self.font_small,
-                    color=(200, 200, 200)
+                    color=(160, 220, 220)
                 )
                 dice_y += 20
-                
-                # Individual dice with colored boxes
-                rolls = roll_info['rolls']
-                highest = roll_info['highest']
-                
-                # Draw dice as small colored boxes
+
+                lowest = min(rolls) if rolls else None
                 box_x = dice_x + 10
                 box_size = 20
                 box_spacing = 5
-                
-                for _, roll_val in enumerate(rolls):
+
+                for roll_val in rolls:
                     box_rect = pygame.Rect(box_x, dice_y, box_size, box_size)
-                    
-                    # Highlight highest die
-                    if roll_val == highest:
-                        box_color = (100, 200, 100)  # Green for highest
+                    if roll_val == lowest:
+                        box_color = (40, 180, 180)
                         text_color = (255, 255, 255)
                     else:
-                        box_color = (60, 60, 80)
-                        text_color = (180, 180, 180)
-                    
+                        box_color = (30, 80, 90)
+                        text_color = (160, 220, 220)
+
                     pygame.draw.rect(self.screen, box_color, box_rect)
-                    pygame.draw.rect(self.screen, (150, 150, 150), box_rect, 1)
-                    
-                    # Draw die value centered
+                    pygame.draw.rect(self.screen, (80, 180, 180), box_rect, 1)
                     self.draw_text(
                         str(roll_val),
                         box_rect.centerx,
@@ -3020,17 +3005,71 @@ class UnifiedGameScreen(BaseScreen):
                         color=text_color,
                         center=True
                     )
-                    
                     box_x += box_size + box_spacing
-                
+
+                dice_y += 28
+                self.draw_text(
+                    "Resolve: lowest \u2192 highest",
+                    dice_x,
+                    dice_y,
+                    self.font_small,
+                    color=(100, 200, 200)
+                )
+                dice_y += 22
+
+            elif hasattr(self.game, 'turn_manager') and self.game.turn_manager.last_ap_roll \
+                    and self.game.turn_manager.current_phase.name == 'UBOAT_PHASE':
+                # ── U-boat AP roll ────────────────────────────────────────────
+                roll_info = self.game.turn_manager.last_ap_roll
+
+                num_dice = roll_info['num_dice']
+                dice_label = f"{num_dice}d6"
+                if roll_info['engine_damaged']:
+                    dice_label += " (Engine Dmg)"
+
+                self.draw_text(
+                    f"AP Roll [{dice_label}]:",
+                    dice_x,
+                    dice_y,
+                    self.font_small,
+                    color=(200, 200, 200)
+                )
+                dice_y += 20
+
+                rolls = roll_info['rolls']
+                highest = roll_info['highest']
+                box_x = dice_x + 10
+                box_size = 20
+                box_spacing = 5
+
+                for roll_val in rolls:
+                    box_rect = pygame.Rect(box_x, dice_y, box_size, box_size)
+                    if roll_val == highest:
+                        box_color = (100, 200, 100)
+                        text_color = (255, 255, 255)
+                    else:
+                        box_color = (60, 60, 80)
+                        text_color = (180, 180, 180)
+
+                    pygame.draw.rect(self.screen, box_color, box_rect)
+                    pygame.draw.rect(self.screen, (150, 150, 150), box_rect, 1)
+                    self.draw_text(
+                        str(roll_val),
+                        box_rect.centerx,
+                        box_rect.centery,
+                        self.font_small,
+                        color=text_color,
+                        center=True
+                    )
+                    box_x += box_size + box_spacing
+
                 dice_y += 30
-                
-                # Result breakdown
+
                 result_text = f"Highest: {highest}"
                 if roll_info['captain_bonus'] > 0:
                     result_text += f" +{roll_info['captain_bonus']} (Captain)"
                 result_text += f" = {roll_info['total_ap']} AP"
-                
+
                 self.draw_text(
                     result_text,
                     dice_x,
@@ -3777,15 +3816,21 @@ class UnifiedGameScreen(BaseScreen):
         
         button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
         
-        # Button styling (distinct color for AI actions)
-        if needs_dice_roll:
-            # Different color for dice rolls
-            button_color = (80, 100, 40)  # Greenish tint for dice
-            border_color = (140, 180, 80)
+        # Button styling — use context-aware label and colour
+        ptype = preview.get('preview_data', {}).get('type', '')
+        if needs_dice_roll or ptype == 'escort_activation':
+            button_color = (50, 110, 40)   # Green for dice rolls
+            border_color = (120, 200, 70)
             text_color = (220, 255, 180)
-            button_text = "ROLL DICE FOR AI"
+            button_text = "ROLL ESCORT DICE" if ptype == 'escort_activation' else "ROLL DICE"
+        elif ptype == 'escort_die_action':
+            die_val = preview.get('preview_data', {}).get('die_value', '?')
+            button_color = (60, 80, 140)   # Blue for die resolution
+            border_color = (120, 160, 240)
+            text_color = (210, 230, 255)
+            button_text = f"RESOLVE DIE [{die_val}]"
         else:
-            button_color = (100, 50, 120)  # Purple tint for AI
+            button_color = (100, 50, 120)  # Purple tint for generic AI
             border_color = (180, 100, 220)
             text_color = (240, 220, 255)
             button_text = "EXECUTE AI ACTION"
@@ -3821,44 +3866,43 @@ class UnifiedGameScreen(BaseScreen):
         self.phase_advance_button_rect = None  # Clear phase button rect
         
         # Display action preview below button
-        preview_y = button_rect.bottom + 25
-        
-        # Action name (larger, highlighted)
-        action_name = preview.get('action_name', 'Unknown Action')
-        self.draw_text(
-            f"Next: {action_name}",
-            x + width // 2,
-            preview_y,
-            self.font_medium,
-            color=(255, 220, 100),
-            center=True
-        )
-        preview_y += 30
-        
-        # Action details (wrapped text)
-        details = preview.get('details', 'No details available')
-        
-        # Add technical context from preview_data if available
+        preview_y = button_rect.bottom + 15
+
+        # Split "Entity: description" into two separate display lines.
+        # get_current_ai_action_preview() builds details as "Entity: description"
+        # when get_entity_description() is available on the action.
+        details_raw = preview.get('details', '')
         preview_data = preview.get('preview_data', {})
-        if preview_data:
-            extra_info: List[str] = []
-            
-            # Add range information if present
-            if 'range' in preview_data:
-                extra_info.append(f"Range: {preview_data['range']}")
-            
-            # Add detection level if present
-            if 'detection_level' in preview_data:
-                extra_info.append(f"DL: {preview_data['detection_level']}")
-            
-            # Add position info if present
-            if 'current_position' in preview_data and preview_data['current_position']:
-                pos = preview_data['current_position']
-                extra_info.append(f"At [{pos.q},{pos.r}]")
-            
-            # Append extra info to details
-            if extra_info:
-                details += f" ({', '.join(extra_info)})"
+
+        if ': ' in details_raw:
+            entity_label, action_desc = details_raw.split(': ', 1)
+        else:
+            entity_label = ''
+            action_desc = details_raw or preview.get('action_name', 'AI action')
+
+        # Entity label line (yellow)
+        if entity_label:
+            self.draw_text(
+                entity_label,
+                x + width // 2,
+                preview_y,
+                self.font_medium,
+                color=(255, 220, 100),
+                center=True
+            )
+            preview_y += 26
+
+        # Append lightweight context (range / DL) — but NOT position since
+        # it's already embedded in entity_label.
+        extra_info: List[str] = []
+        if 'range' in preview_data:
+            extra_info.append(f"Range: {preview_data['range']}")
+        if 'detection_level' in preview_data:
+            extra_info.append(f"DL: {preview_data['detection_level']}")
+        if extra_info:
+            action_desc += f" ({', '.join(extra_info)})"
+
+        details = action_desc
         
         # Simple word wrapping
         words = details.split()
@@ -4946,6 +4990,42 @@ class UnifiedGameScreen(BaseScreen):
         self.deck_gun_resolution_state = None
         self.deck_gun_roll_button_rect = None
     
+    def _print_game_over_banner(self) -> None:
+        """Print the game-over console banner AFTER the triggering event is logged.
+
+        Must be called after add_event(result_msg) so that in the console the
+        [EVENT] die-result line appears before the banner, not after.
+        """
+        if self.game.running:
+            return
+
+        # Guard against printing twice if called from multiple code paths
+        if getattr(self, '_game_over_banner_printed', False):
+            return
+        self._game_over_banner_printed = True
+
+        u = self.game.u_boat
+        turn = self.game.turn_manager.turn_number
+
+        if self.game.defeat_reason == 'destroyed':
+            is_dest, reason = self.game.escort_ai.damage_resolver.check_destruction(u)
+            reason_text = reason if is_dest else "Hull damage critical (4/4)"
+            print(f"\n{'='*60}")
+            print("MISSION FAILED - U-BOAT DESTROYED!")
+            print(f"{'='*60}")
+            print(f"Reason: {reason_text}")
+            print(f"Turn: {turn}")
+            print(f"Final Position: {u.position}")
+            print(f"Hull Damage: {u.hull_damage}/4")
+            print(f"{'='*60}\n")
+        elif self.game.defeat_reason == 'merchant_escaped':
+            print(f"\n{'='*60}")
+            print("MISSION FAILED - MERCHANT ESCAPED!")
+            print(f"{'='*60}")
+            print(f"Turn: {turn}")
+            print(f"Final Position: {u.position}")
+            print(f"{'='*60}\n")
+
     def _handle_ai_dice_roll(self) -> None:
         """Handle clicking the AI dice roll button."""
         state = self.ai_dice_roll_state
@@ -4956,13 +5036,25 @@ class UnifiedGameScreen(BaseScreen):
         # The action will perform its own dice roll using game_state.dice_roller
         _, result_message = self.game.execute_next_ai_action()
         
-        # Log the action result to the dice roll history
+        # Log result FIRST so it precedes the game-over banner in the console.
         if result_message:
-            self.add_dice_roll(
-                state.get('action_name', 'AI Action'),
-                "AI Roll",
-                result_message
-            )
+            self.add_event(result_message)
+            # Only record in dice history for actions that show a distinct dice
+            # panel (AP roll, combat). Escort activations use the teal dice panel;
+            # merchant damage checks are text-only; both would produce a garbled
+            # duplicate line in the dice history section.
+            escort_rolled = hasattr(self.game, 'last_escort_roll') and self.game.last_escort_roll
+            action_name = state.get('action_name', '')
+            is_text_only_roll = action_name in ('MerchantDamageCheck',)
+            if not escort_rolled and not is_text_only_roll:
+                self.add_dice_roll(
+                    action_name or 'AI Action',
+                    "AI Roll",
+                    result_message
+                )
+        
+        # Print game-over banner AFTER the event is logged (correct ordering).
+        self._print_game_over_banner()
         
         # Clear AI dice roll state
         self.ai_dice_roll_state = None
@@ -4974,43 +5066,79 @@ class UnifiedGameScreen(BaseScreen):
             pygame.time.wait(100)
     
     def _draw_ai_dice_roll_ui(self, x: int, y: int, width: int, height: int) -> None:
-        """Draw UI for player to roll dice for AI action."""
+        """Draw dice roll UI — styled consistently with _draw_execute_ai_action_button (green theme)."""
         state = self.ai_dice_roll_state
         if not state:
             return
-        
+
         action_name = state.get('action_name', 'AI Action')
         details = state.get('details', '')
-        
-        # Title
-        title_y = y + 30
+
+        # Get progress info from the live queue (same as execute button)
+        progress = self.game.current_ai_queue.get_progress() if self.game.current_ai_queue else None
+
+        # Button — same position/size as execute button, but green for dice rolls
+        button_width = width - 40
+        button_height = 60
+        button_x = x + 20
+        button_y = y + 30
+
+        button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
+
+        mouse_pos = pygame.mouse.get_pos()
+        is_hover = button_rect.collidepoint(mouse_pos)
+        button_color = (80, 120, 40) if is_hover else (60, 100, 30)
+        border_color = (140, 200, 80)
+        text_color = (240, 255, 200)
+
+        pygame.draw.rect(self.screen, button_color, button_rect)
+        pygame.draw.rect(self.screen, border_color, button_rect, 3)
         self.draw_text(
-            f"AI NEEDS DICE ROLL",
+            "ROLL DICE",
+            button_rect.centerx,
+            button_rect.centery - 8,
+            self.font_medium,
+            color=text_color,
+            center=True
+        )
+
+        # Progress counter (same style as execute button)
+        if progress:
+            current_num = progress['current_index'] + 1
+            total_num = progress['total_count']
+            self.draw_text(
+                f"(Action {current_num} of {total_num})",
+                button_rect.centerx,
+                button_rect.centery + 15,
+                self.font_small,
+                color=(180, 220, 140),
+                center=True
+            )
+
+        # Store rect for click detection (clear other buttons so only one is active)
+        self.ai_dice_roll_button_rect = button_rect
+        self.phase_advance_button_rect = None
+        self.execute_ai_action_button_rect = None
+
+        # Action preview below button — same layout as execute button
+        preview_y = button_rect.bottom + 25
+
+        self.draw_text(
+            f"Rolling: {action_name}",
             x + width // 2,
-            title_y,
+            preview_y,
             self.font_medium,
             color=(255, 220, 100),
             center=True
         )
-        
-        # Action name
-        name_y = title_y + 40
-        self.draw_text(
-            action_name,
-            x + width // 2,
-            name_y,
-            self.font_medium,
-            color=(200, 200, 200),
-            center=True
-        )
-        
-        # Details (wrapped)
-        details_y = name_y + 35
+        preview_y += 30
+
+        # Wrapped details
         words = details.split()
         lines: List[str] = []
-        current_line = []
+        current_line: List[str] = []
         max_width = width - 60
-        
+
         for word in words:
             test_line = ' '.join(current_line + [word])
             text_surface = self.font_small.render(test_line, True, (200, 200, 200))
@@ -5022,55 +5150,26 @@ class UnifiedGameScreen(BaseScreen):
                 current_line = [word]
         if current_line:
             lines.append(' '.join(current_line))
-        
-        for line in lines[:3]:
+
+        for line in lines[:6]:
             self.draw_text(
                 line,
                 x + width // 2,
-                details_y,
+                preview_y,
                 self.font_small,
-                color=(180, 180, 180),
+                color=(200, 200, 200),
                 center=True
             )
-            details_y += 20
-        
-        # Roll dice button
-        button_y = details_y + 30
-        button_width = width - 80
-        button_height = 60
-        button_x = x + (width - button_width) // 2
-        
-        button_rect = pygame.Rect(button_x, button_y, button_width, button_height)
-        
-        # Button styling (dice roll colors)
-        mouse_pos = pygame.mouse.get_pos()
-        is_hover = button_rect.collidepoint(mouse_pos)
-        button_color = (80, 120, 40) if is_hover else (60, 100, 30)
-        border_color = (140, 200, 80)
-        
-        pygame.draw.rect(self.screen, button_color, button_rect)
-        pygame.draw.rect(self.screen, border_color, button_rect, 3)
-        
+            preview_y += 18
+
+        # Hint at bottom (same position as execute button)
+        hint_y = y + height - 30
         self.draw_text(
-            "ROLL DICE",
-            button_rect.centerx,
-            button_rect.centery,
-            self.font_large,
-            color=(240, 255, 200),
-            center=True
-        )
-        
-        # Store rect for click detection
-        self.ai_dice_roll_button_rect = button_rect
-        
-        # Hint
-        hint_y = button_rect.bottom + 25
-        self.draw_text(
-            "Click to roll dice on behalf of AI",
+            "(click to execute)",
             x + width // 2,
             hint_y,
             self.font_small,
-            color=(120, 140, 100),
+            color=(120, 150, 90),
             center=True
         )
     

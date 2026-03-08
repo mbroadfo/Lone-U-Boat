@@ -4,6 +4,26 @@ All notable changes to the Lone U-Boat project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - 2026-03-07
+
+### Fixed
+- **Escort Detection Range**: Escorts beyond 3 hexes no longer make detection rolls
+  - `generate_detection_actions()` now skips escorts whose hex-distance to the U-boat exceeds 3
+  - RULES.txt line 315: "Roll a d6 for each Escort which has the U-Boat in LOS and **within 3 hexes**"
+  - Previously, `EscortDetectionAction.validate()` correctly rejected out-of-range escorts, but `AIActionQueue.execute_current()` does not call `validate()` before executing, so the check was never reached
+  - Fix is applied at queue-generation time in `core/ai_action_generators.py`
+
+- **Escort Activation Die Table**: Dies 3, 4, 5, and 6 now match the rules exactly
+  - Die **3** was `MOVE` only → corrected to `MOVE + DEPTH CHARGE (if DL ≥ 1)`
+  - Die **4** was `MOVE + TURN always` → corrected to `MOVE; if blocked TURN; + DEPTH CHARGE (if DL ≥ 1)`
+  - Die **5** was `TURN only` (completely wrong) → corrected to `MOVE + DEPTH CHARGE (if DL ≥ 1)`
+  - Die **6** was `MOVE + TURN` → corrected to `MOVE + TURN + DEPTH CHARGE (if DL ≥ 1)`
+  - Source: RULES.txt lines 355–363, Escorts Phase chart
+  - Updated `_map_die_to_actions()`, `execute_with_animation()`, `get_description()`, and docstrings in `core/actions/ai/escort_die_action.py`
+  - Updated two test assertions in `tests/interactive_ai/test_escort_interactive.py` that encoded the old (wrong) behaviour
+
+---
+
 ## [Unreleased] - 2026-02-22
 
 ### Fixed
