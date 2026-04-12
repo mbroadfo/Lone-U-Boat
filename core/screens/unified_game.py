@@ -3468,11 +3468,12 @@ class UnifiedGameScreen(BaseScreen):
 
         Renders large D6 pip-face dice in the top 150 px of the right panel.
         Context-sensitive per phase:
-          - U-Boat Phase  → remaining AP split into maxed-first D6 faces (steel gray)
+          - U-Boat Phase  → shows N dice (N = number rolled, e.g. 3 for undamaged engine).
+                            Remaining AP distributed maxed-first across slots; spent slots show 0 (greyed).
           - Detection / Escort Phase → last escort roll dice (red/orange)
           - Merchant Phase → empty tray
         Scramble animation: random pips for ~300 ms after a dice roll, then settle.
-        AP = 0 → shows a single greyed-out die face.
+        AP = 0 → all N dice shown greyed out.
         """
         import random
         from ..models import GamePhase
@@ -3535,17 +3536,21 @@ class UnifiedGameScreen(BaseScreen):
         if current_phase == GamePhase.UBOAT_PHASE:
             die_color = DIE_COLORS['uboat']
             ap = self.game.u_boat.action_points
+            # Determine how many dice were rolled (e.g. 3 for undamaged engine)
+            last_roll = self.game.turn_manager.last_ap_roll
+            n_dice = len(last_roll['rolls']) if last_roll else 1
             if ap == 0:
-                # AP exhausted — show single greyed-out die
-                die_values = [0]  # sentinel: will draw empty face
+                # AP exhausted — show all dice greyed out
+                die_values = [0] * n_dice
                 die_color = DIE_COLORS['empty']
                 label = "AP: 0"
             else:
-                # Maxed-first split: e.g. 7 → [6, 1], 9 → [6, 3], 5 → [5]
+                # Distribute remaining AP across n_dice slots, maxed-first, pad with 0.
+                # e.g. AP=5, n=3 → [5, 0, 0]; AP=7, n=3 → [6, 1, 0]
                 remaining = ap
-                while remaining > 0:
-                    die_values.append(min(6, remaining))
-                    remaining -= 6
+                for _ in range(n_dice):
+                    die_values.append(min(6, max(0, remaining)))
+                    remaining = max(0, remaining - 6)
                 label = f"AP: {ap}"
 
         elif current_phase in (GamePhase.DETECTION_PHASE, GamePhase.ESCORT_PHASE):
