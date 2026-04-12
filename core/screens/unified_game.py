@@ -3533,23 +3533,23 @@ class UnifiedGameScreen(BaseScreen):
         die_color: Tuple[int, int, int] = DIE_COLORS['uboat']
         label = ""
 
+        grey_count = 0  # number of rightmost dice to render greyed (AP spent)
+
         if current_phase == GamePhase.UBOAT_PHASE:
             die_color = DIE_COLORS['uboat']
             ap = self.game.u_boat.action_points
             last_roll = self.game.turn_manager.last_ap_roll
-            if ap == 0 and last_roll:
-                # AP exhausted — show rolled dice greyed out
+            if last_roll:
                 die_values = list(last_roll['rolls'])
-                die_color = DIE_COLORS['empty']
-                label = "AP: 0"
-            elif last_roll:
-                # Show the actual dice that were rolled (e.g. [4, 2, 6] for 3 dice)
-                # Label tracks remaining AP as it is spent
-                die_values = list(last_roll['rolls'])
+                total_ap = last_roll.get('total_ap', 1) or 1
+                spent = total_ap - ap
+                # Grey out rightmost dice proportionally to AP spent
+                grey_count = int(spent * len(die_values) / total_ap)
+                if ap == 0:
+                    grey_count = len(die_values)  # all spent
                 label = f"AP: {ap}"
             else:
-                # No roll yet — show a single placeholder die
-                die_values = [1]
+                # No roll yet — empty tray
                 label = "Roll dice"
 
         elif current_phase in (GamePhase.DETECTION_PHASE, GamePhase.ESCORT_PHASE):
@@ -3601,24 +3601,17 @@ class UnifiedGameScreen(BaseScreen):
         else:
             cx = tray_x_start + die_size // 2
             cy = tray_y_start + die_size // 2
-            for val in die_values:
-                if val == 0:
-                    # Empty/greyed face (AP=0 sentinel)
-                    _draw_die(
-                        self.screen, cx, cy, die_size,
-                        1,
-                        DIE_COLORS['empty'],
-                        (90, 90, 100),
-                        DIE_COLORS['border']
-                    )
-                else:
-                    _draw_die(
-                        self.screen, cx, cy, die_size,
-                        val,
-                        die_color,
-                        DIE_COLORS['pip'],
-                        DIE_COLORS['border']
-                    )
+            n = len(die_values)
+            for i, val in enumerate(die_values):
+                # Grey out rightmost dice to show AP consumed
+                greyed = (i >= n - grey_count)
+                _draw_die(
+                    self.screen, cx, cy, die_size,
+                    val,
+                    DIE_COLORS['empty'] if greyed else die_color,
+                    (90, 90, 100) if greyed else DIE_COLORS['pip'],
+                    DIE_COLORS['border']
+                )
                 cx += die_size + die_padding
 
         # ── Separator at bottom of tray area ─────────────────────────────────────
