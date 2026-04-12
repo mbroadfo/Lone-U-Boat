@@ -1,0 +1,296 @@
+{
+  "mission_id": 2,
+  "title": "Mission 2: Supply Ship Attack: North East of Scotland",
+  "objective": "Destroy the Merchant Ship before it exits the map, then exit the map in the direction of the red arrow.",
+  "phases": [
+    {
+      "id": 1,
+      "name": "U-Boat Phase",
+      "header_band_color": "yellow",
+      "header_text": "If Medium, DL -1   |   If Deep, DL -2",
+      "sections": [
+        {
+          "type": "text_block",
+          "style": "intro_box",
+          "text": "Roll 3 dice (2 dice if Engine is Damaged); AP this turn = highest die rolled + 1 AP if Captain is alive"
+        },
+        {
+          "type": "table",
+          "id": "uboat_action_ap_costs",
+          "style": "action_table_card",
+          "columns": ["Action", "Surf", "Peri", "Med", "Deep"],
+          "rows": [
+            {
+              "cells": ["MOVE", "1", "2", "3", "3"],
+              "comment": "Can only enter a ship's hex if Medium/Deep. Can only enter land or shallow hexes if Surfaced or at Periscope depth."
+            },
+            {
+              "cells": ["TURN", "1", "1", "2", "3"],
+              "comment": "Turn 1 hex edge left or right."
+            },
+            {
+              "cells": ["CHANGE DEPTH", "1", "2", "2", "1"],
+              "comment": "Once per turn, one level only. Cannot go below Periscope in shallows or above Medium underneath a ship."
+            },
+            {
+              "cells": ["REPAIR (Eng)", "2", "4", "4", "4"],
+              "comment": "Remove 1 damage marker, or fix up to 2 Torp tubes (Hull cannot be repaired). Only Surface repairs if Engineer is KIA. Flak and Deck Gun repairs only when Surfaced."
+            },
+            {
+              "cells": ["FIRE DECK GUN", "2", "4", "-", "-"],
+              "comment": "At Ships in LoS (R1-3). Roll 2d6: 7+ to Hit at R1-2, 8+ to Hit at R3. On Hit, set DL to 3 and roll on Allied Ship Damage Chart."
+            },
+            {
+              "cells": ["LOAD TORPS", "1", "4", "-", "-"],
+              "comment": "Load 2 tubes; 1 if Weapons Officer is KIA."
+            },
+            {
+              "cells": ["FIRE TORPS", "2", "2", "-", "-"],
+              "comment": "Fire 1-3 Torpedoes (R1-9). Roll d6 per Torp. If Fire 3, DL +1. Target first ship along line of fire. Missed torps continue to other Ships beyond."
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "id": "torpedo_attack",
+          "style": "attack_table",
+          "title": "Torpedo Attack",
+          "columns": ["", "Range", "1-2", "3-4", "5-6"],
+          "rows": [
+            { "cells": ["Attack Type", "R1-9", "", "", ""] },
+            { "cells": ["To Hit Side", "", "3+", "4+", "5+"] },
+            { "cells": ["To Hit Front/Rear", "", "4+", "5+", "6+"] }
+          ],
+          "notes": [
+            "Fire 1-3 torpedoes (R1-9). Roll 1d6 per torpedo.",
+            "If Fire 3 torpedoes, DL +1. If any hit, DL +1.",
+            "Target first ship along line of fire. Missed torpedoes continue to other ships beyond."
+          ]
+        },
+        {
+          "type": "table",
+          "id": "allied_ship_damage",
+          "style": "damage_chart",
+          "title": "Allied Ship Damage Chart (for each Torpedo / Deck Gun Hit on a Ship, roll d6)",
+          "columns": ["Ship", "1", "2-3", "4-6"],
+          "rows": [
+            {
+              "cells": ["Merchant", "No damage", "Damaged \u2192 Sunk", "Catastrophic \u2192 Sunk"],
+              "styles": ["", "result_ok", "result_warning", "result_critical"]
+            },
+            {
+              "cells": ["Corvette", "1-2: No damage", "3-4: Damaged \u2192 Sunk", "5-6: Catastrophic \u2192 Sunk"],
+              "styles": ["", "result_ok", "result_warning", "result_critical"]
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "id": "torpedo_attack",
+          "style": "attack_table",
+          "title": "FIRE TORPS",
+          "columns": ["", "Range", "1\u20132", "3\u20134", "5\u20136"],
+          "rows": [
+            { "cells": ["Attack Type", "R1\u20139", "", "", ""], "style": "header" },
+            { "cells": ["To Hit Side", "", "3+", "4+", "5+"], "style": "to_hit_side" },
+            { "cells": ["To Hit Front/Rear", "", "4+", "5+", "6+"], "style": "to_hit_front_rear" }
+          ],
+          "notes": [
+            "Fire 1\u20133 torpedoes (R1\u20139). Roll 1d6 per torpedo.",
+            "Target first ship along line of fire. Missed torpedoes continue to other ships beyond.",
+            "If Fire 3 torpedoes, DL +1. If any hit, DL +1."
+          ]
+        },
+        {
+          "type": "table",
+          "id": "allied_ship_damage",
+          "style": "damage_chart",
+          "title": "Allied Ship Damage Chart (for each Torpedo / Deck Gun hit on a Ship, roll d6 for damage)",
+          "columns": ["Ship", "1", "2\u20133", "4\u20136"],
+          "rows": [
+            { "cells": ["Merchant", "No significant damage", "Damaged \u2192 Sunk", "Catastrophic Hit \u2192 Sunk"], "styles": ["", "result_ok", "result_warning", "result_critical"] },
+            { "cells": ["Corvette", "1\u20132: No significant damage", "3\u20134: Damaged \u2192 Sunk", "5\u20136: Catastrophic Hit \u2192 Sunk"], "styles": ["", "result_ok", "result_warning", "result_critical"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Merchant Ships Phase",
+      "header_band_color": "yellow",
+      "header_text": "",
+      "sections": [
+        {
+          "type": "text_block",
+          "style": "phase_intro",
+          "text": "If Undamaged: MOVE 1 hex. If Damaged: roll 1d6; on 4+ MOVE 1 hex. Always face dotted line direction."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Detection Phase",
+      "header_band_color": "yellow",
+      "header_text": "",
+      "sections": [
+        {
+          "type": "text_block",
+          "style": "phase_intro",
+          "text": "Roll a d6 for each Escort which has the U-Boat in LoS and within 3 hexes. Each success = +1 DL."
+        },
+        {
+          "type": "table",
+          "id": "base_detection_roll",
+          "style": "detection_table",
+          "title": "Base Detection Roll needed",
+          "columns": ["U-Boat is\u2026", "Surfaced", "Periscope", "Medium", "Deep"],
+          "rows": [
+            { "cells": ["Target number", "1+", "2+", "4+", "5+"], "style": "base_values" }
+          ]
+        },
+        {
+          "type": "table",
+          "id": "detection_modifiers",
+          "style": "modifier_table",
+          "title": "Modify as follows",
+          "columns": ["Condition", "Effect"],
+          "rows": [
+            { "cells": ["Engine Damage", "Decrease roll required by 1"], "style": "negative" },
+            { "cells": ["Sonar Operator alive", "Increase roll required by 1"], "style": "positive" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Escorts Phase",
+      "header_band_color": "yellow",
+      "header_text": "Activate closest first (you choose for ties). Resolve dice in order.",
+      "sections": [
+        {
+          "type": "table",
+          "id": "escort_actions",
+          "style": "escort_table",
+          "columns": ["d6", "CORVETTE 1: Dice = 2 + DL (2 if damaged)", "CORVETTE 2: Dice = 2 + DL (2 if damaged)"],
+          "rows": [
+            { "cells": ["1", "If blocked, TURN   |   If DL = 1\u20133: DEPTH CHARGE", "If blocked, TURN   |   If DL = 1\u20133: DEPTH CHARGE"], "style": "row1" },
+            { "cells": ["2", "If DL = 1\u20133: FIRE", "If DL = 1\u20133: FIRE"], "style": "row2" },
+            { "cells": ["3", "If DL = 1\u20133: DEPTH CHARGE", "If DL = 1\u20133: DEPTH CHARGE"], "style": "row3" },
+            { "cells": ["4", "If blocked, TURN   |   If DL = 1\u20133: DEPTH CHARGE", "If blocked, TURN   |   If DL = 1\u20133: DEPTH CHARGE"], "style": "row4" },
+            { "cells": ["5", "If DL = 1\u20133: FIRE", "If DL = 1\u20133: FIRE"], "style": "row5" },
+            { "cells": ["6", "TURN   |   If DL = 1\u20133: DEPTH CHARGE", "TURN   |   If DL = 1\u20133: DEPTH CHARGE"], "style": "row6" }
+          ]
+        },
+        {
+          "type": "text_block",
+          "style": "rules_depth_charge",
+          "text": "DEPTH CHARGE: If U-Boat is not Surfaced and is at Range 0\u20131, roll 1d6 on U-Boat Damage Chart."
+        },
+        {
+          "type": "text_block",
+          "style": "rules_turn",
+          "text": "TURN: If DL = 0\u20131, turn 1 hex edge towards Anchor. If DL = 2\u20133, turn 1 hex edge towards U-Boat. If facing U-Boat/Anchor, only turn if blocked (turn randomly). If facing away, turn randomly. If on same hex as U-Boat/Anchor, only turn if blocked (turn randomly)."
+        },
+        {
+          "type": "text_block",
+          "style": "rules_fire",
+          "text": "FIRE: If U-Boat is Surfaced, in LoS and at Range 1\u20133, set DL to 3 and roll as a Critical Hit on U-Boat Damage Chart below."
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Allied B24 Phase",
+      "header_band_color": "yellow",
+      "header_text": "",
+      "sections": [
+        {
+          "type": "text_block",
+          "style": "phase_intro",
+          "text": "MOVE 2 hexes. Remove B24 if it exits the map. If DL = 2\u20133, TURN 1 hex edge in direction of U-Boat. If facing U-Boat, do not turn. If facing away, turn randomly."
+        },
+        {
+          "type": "text_block",
+          "style": "rules_attack",
+          "text": "ATTACK (R0\u20131): If U-Boat Surfaced or Periscope depth and Flak Gun undamaged & U-Boat surfaced, roll 2d6: destroy B24 on 7+ if Lookout is alive. If B24 survives, roll 1d6: 1\u20132 +2 Hull Damage, 3\u20134: roll on U-Boat Damage Chart below, 5\u20136: Miss."
+        },
+        {
+          "type": "table",
+          "id": "uboat_damage_chart",
+          "style": "damage_chart",
+          "title": "U-Boat Damage Chart (Depth Charge, Ship Gun Fire and B24 Aircraft attacks)",
+          "columns": ["d6", "Result"],
+          "rows": [
+            { "cells": ["1", "Critical Hit: U-Boat Destroyed   (+2 Hull Damage)   3\u20134: Torp tubes 3d6   5\u20136: Damage \u00d7 2 (roll twice at 3\u20134 below)"], "style": "critical" },
+            { "cells": ["2", "Hull Damage: +1 Hull Damage"], "style": "hull" },
+            { "cells": ["3\u20134", "Damage: Roll 1d6. 1: +1 Hull Damage, 2: Flak gun, 3: Torp tubes 2d6, 4\u20135: Engine, 6: Deck gun (no effect if already damaged)."], "style": "damage" },
+            { "cells": ["5\u20136", "Crew KIA: Roll d6 for Crew member (no effect if already KIA). If Medic is alive, roll d6 to avoid KIA on 5+."], "style": "crew" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "End of Turn Events Phase",
+      "header_band_color": "yellow",
+      "header_text": "Roll 2d6",
+      "sections": [
+        {
+          "type": "table",
+          "id": "end_of_turn_events",
+          "style": "events_table",
+          "columns": ["Roll", "Effect"],
+          "rows": [
+            {
+              "cells": [
+                "2\u20135",
+                "If DL = 2\u20133: place B24 facing U-Boat, on edge hex of map which is furthest from and on same hex-line as U-Boat."
+              ],
+              "style": "event_b24_spawn"
+            },
+            {
+              "cells": [
+                "6",
+                "Escort Detection: If DL is not already at 3, perform Phase 3 (Detection Phase) again now."
+              ],
+              "style": "event_escort_detection"
+            },
+            {
+              "cells": [
+                "7",
+                "If U-Boat is Surfaced or at Periscope depth, radio intercepted by Allies: If DL = 0 then set DL to 1."
+              ],
+              "style": "event_radio"
+            },
+            {
+              "cells": [
+                "8",
+                "Hull Pressure: If Deep, Hull groans under the pressure: +1 Hull Damage (U-Boat must ascend to Medium depth)."
+              ],
+              "style": "event_hull_pressure"
+            },
+            {
+              "cells": [
+                "9+",
+                "If U-Boat not Surfaced and Engine is not damaged, U-Boat runs silently for a while: -1 DL."
+              ],
+              "style": "event_silent_running"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "global_notes": [
+    {
+      "id": "ship_movement_forced_dive",
+      "title": "Ship Movement and Forced Dive",
+      "style": "global_note",
+      "text": [
+        "Ships cannot enter a hex with another Ship. 'Blocked' = Land, off-map or another Ship.",
+        "If a Ship enters a hex with Surfaced or Periscope depth U-Boat, it is Forced to Dive to Medium: DL +1 now, and -2 AP next turn.",
+        "Hull Damage: U-Boat immediately ascends to permitted depth. If it cannot Dive/Ascend as required here, it is Destroyed."
+      ]
+    }
+  ]
+}

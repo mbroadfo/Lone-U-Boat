@@ -1,0 +1,266 @@
+---
+name: lone-uboat-mission
+description: >
+  Build a new mission for the Lone U-Boat game. Use this skill when the user
+  wants to add a mission, says "create mission 3", "build a new mission",
+  "add another scenario", or "implement mission N". Guides the full process
+  from data files through terrain capture, starting positions, merchant path,
+  exit positions, rule deltas, and playtesting. Also use when debugging an
+  existing mission that has terrain, path, or exit position issues.
+---
+
+# Lone U-Boat Mission Builder Skill
+
+A new mission requires exactly 4 data files and one terrain capture session.
+Follow these steps in order. Do not skip steps — each one feeds the next.
+
+---
+
+## Step 0 — Establish mission number
+
+Ask the user: "What mission number are we building?" then set N = that number.
+All file names below use N as the suffix (e.g. mission_3_config.py).
+
+Check what already exists:
+```powershell
+Get-ChildItem missions/ | Where-Object { $_.Name -match "mission_$N" }
+```
+
+If files already exist, ask the user whether to overwrite or continue from
+where they left off.
+
+---
+
+## Step 1 — Create mission_N_briefing.json
+
+Purpose: In-game rules panel content shown to the player during gameplay.
+
+Structure to follow (copy from mission_2_briefing.json and adapt):
+```powershell
+Get-Content missions/mission_2_briefing.json
+```
+
+Key sections to include:
+- AP cost tables for this mission
+- Torpedo attack charts
+- Detection rules summary
+- Escort behavior summary
+- B24 rules (or note if disabled)
+- Mission objectives
+
+Ask the user for any mission-specific rule differences before writing this file.
+Save to: `missions/mission_N_briefing.json`
+
+---
+
+## Step 2 — Create mission_N_rules.json
+
+Purpose: Data-driven rule overrides. Extends core rules with mission-specific
+deltas. Never duplicates rules that are inherited from the base files.
+
+Template structure:
+```json
+{
+  "extends": [
+    "core_system_rules.json",
+    "u_boat_ruleset_default.json",
+    "escort_ai_baseline.json"
+  ],
+  "overrides": {
+    "b24_phase": {
+      "enabled": true
+    },
+    "estimated_turns": 12
+  }
+}
+```
+
+Key questions to ask the user:
+- Is B24 aircraft enabled for this mission? (Mission 2 had it disabled)
+- Are there any AP cost differences from the default?
+- Any special victory/defeat conditions?
+- Estimated turn count?
+
+Save to: `missions/mission_N_rules.json`
+
+---
+
+## Step 3 — Create mission_N_config.py
+
+Purpose: Hex-level mission data. This is the largest file and requires the
+most input from the user (terrain, positions, paths).
+
+Copy the structure from mission_2_config.py:
+```powershell
+Get-Content missions/mission_2_config.py
+```
+
+Sections to populate — gather each from the user:
+
+### 3a. Map image
+```python
+MAP_IMAGE = "mN.png"  # must exist in assets/maps/
+```
+Verify the map image exists:
+```powershell
+Get-ChildItem assets/maps/ | Where-Object { $_.Name -match "m$N" }
+```
+
+### 3b. Terrain hexes
+**Do not guess these.** They must be captured using the F3 terrain editor
+(see Step 4). Leave as empty lists for now:
+```python
+SHALLOW_HEXES = []  # fill after F3 session
+LAND_HEXES = []     # fill after F3 session
+```
+
+### 3c. Starting positions
+Ask the user for:
+- U-boat: hex (q,r), facing direction, starting depth
+- Merchant(s): hex, facing, path destination
+- Escort(s): hex, facing, anchor hex for orbiting
+
+### 3d. Merchant path
+Ask the user for the waypoint sequence from the physical map's dotted line.
+Format:
+```python
+MERCHANT_PATHS = [{
+    "waypoints": [(q1,r1), (q2,r2), ...],
+    "exit_hex": (qN, rN),  # must match last waypoint
+    "exit_facing": "SOUTHEAST"
+}]
+```
+
+WARNING: exit_hex must exactly match the last waypoint coordinate.
+This was a bug in Mission 2 — double-check this every time.
+
+### 3e. Exit positions
+```python
+EXIT_POSITIONS = {
+    "uboat": {"hex": (q,r), "facing": "SOUTH"},
+    "merchant": {"hex": (q,r), "facing": "SOUTHEAST"}
+}
+```
+
+WARNING: Exit positions are easy to swap. Verify with the terrain editor
+console output, not the map image alone.
+
+### 3f. Anchor positions
+Corvettes orbit an anchor hex when detection level is low.
+Ask the user for the anchor hex (usually marked on the physical map).
+
+Save to: `missions/mission_N_config.py`
+
+---
+
+## Step 4 — Terrain capture (F3 editor session)
+
+This step cannot be automated — it requires the user to run the game and
+click hexes manually. Prepare them for the session:
+
+Tell the user:
+1. Run: `python main.py --mission N`
+2. Press F3 to enter terrain edit mode
+3. Click each shallow water hex on the map — the console will print coordinates
+4. Click each land hex
+5. Copy the printed coordinates back here
+
+Once coordinates are provided, fill in SHALLOW_HEXES and LAND_HEXES in
+mission_N_config.py.
+
+---
+
+## Step 5 — Create mission_N_layout.json
+
+Purpose: Hex-to-pixel calibration constants for this map image. These are
+unique per map because each physical map image has different dimensions and
+hex grid alignment.
+
+This file is generated by the in-game alignment tool, not written by hand.
+
+Tell the user:
+1. Run: `python main.py --mission N`
+2. Press F2 to enter alignment mode
+3. Use arrow keys to align the hex grid overlay with the map image
+4. Press L to save — this writes missions/mission_N_layout.json automatically
+5. Press F2 to exit and verify alignment looks correct
+
+After this step, verify the file was created:
+```powershell
+Get-Content missions/mission_N_layout.json
+```
+
+---
+
+## Step 6 — Register the mission
+
+Check how missions are registered (look at how mission 2 was added):
+```powershell
+Get-Content main.py | Select-String -Pattern "mission" -CaseSensitive
+Get-Content core/screens/main_menu.py | Select-String "mission"
+```
+
+Add mission N to the mission selection list following the same pattern.
+
+---
+
+## Step 7 — Run tests and verify
+
+```powershell
+python -m pytest tests/ -v --tb=short 2>&1 | tail -30
+```
+
+All existing tests must still pass. If any fail, fix before proceeding.
+
+Then do a manual smoke test:
+```powershell
+python main.py --mission N
+```
+
+Check:
+- Map loads correctly
+- U-boat starts in correct position and facing
+- Merchant appears and follows the correct path
+- Escorts appear at correct positions
+- Depth changes cost the correct AP (diving=2, ascending=1)
+- Exit arrows hidden if decided (set in config)
+
+---
+
+## Known bugs to watch for
+
+### Bug 1 — Exit positions swapped
+Symptom: U-boat or merchant exits from wrong side of map.
+Fix: Cross-check EXIT_POSITIONS dict against terrain editor console output.
+Never rely on visual inspection of the map image alone.
+
+### Bug 2 — exit_hex mismatch
+Symptom: Merchant stops before reaching exit or teleports at end of path.
+Fix: Verify MERCHANT_PATHS[0]['exit_hex'] exactly matches the last
+coordinate in the waypoints list.
+
+### Bug 3 — Dive cost wrong
+Symptom: Diving costs 1 AP instead of 2.
+Root cause: depth_change_action.py cost lookup by current depth key.
+Fix already applied in v0.8.0 — but verify if adding new depth rules:
+- Diving (increasing depth value): cost = 2
+- Ascending (decreasing depth value): cost = 1
+
+### Bug 4 — B24 phase enabled by default
+Symptom: Aircraft appear in a mission where they should not.
+Fix: Set `"b24_phase": {"enabled": false}` in mission_N_rules.json overrides.
+
+---
+
+## Checklist before marking mission complete
+
+- [ ] mission_N_briefing.json created
+- [ ] mission_N_rules.json created with correct rule deltas
+- [ ] mission_N_config.py created with all positions and paths
+- [ ] mission_N_layout.json generated via F2 alignment tool
+- [ ] Terrain hexes captured via F3 editor
+- [ ] Exit positions verified (not swapped)
+- [ ] exit_hex matches last waypoint
+- [ ] Mission registered in main menu
+- [ ] All existing tests pass
+- [ ] Manual smoke test completed

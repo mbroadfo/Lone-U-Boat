@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:code.claude.com)",
+      "WebSearch",
+      "WebFetch(domain:code.visualstudio.com)",
+      "WebFetch(domain:github.blog)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(mkdir -p \"/c/Users/Mike/.claude/hooks\")",
+      "Bash(cp \"/c/Users/Mike/Documents/Code/get-shit-done/hooks/gsd-context-monitor.js\" \"/c/Users/Mike/.claude/hooks/\")",
+      "Bash(cp \"/c/Users/Mike/Documents/Code/get-shit-done/hooks/gsd-statusline.js\" \"/c/Users/Mike/.claude/hooks/\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

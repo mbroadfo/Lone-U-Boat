@@ -22,8 +22,12 @@ class MainMenuScreen(BaseScreen):
                 'unlocked': True,
                 'description': 'Destroy the merchant ship and escape'
             },
-            # Future missions will be added here
-            {'number': 2, 'name': 'Convoy Raid', 'unlocked': False, 'description': 'Coming soon...'},
+            {
+                'number': 2,
+                'name': 'Supply Ship Attack: North East of Scotland',
+                'unlocked': True,
+                'description': 'Two corvettes escort the merchant. Destroy it before it escapes.'
+            },
             {'number': 3, 'name': 'Escort Hunter', 'unlocked': False, 'description': 'Coming soon...'},
             {'number': 4, 'name': 'Wolf Pack', 'unlocked': False, 'description': 'Coming soon...'},
         ]
