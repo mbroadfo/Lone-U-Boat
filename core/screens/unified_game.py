@@ -3597,12 +3597,7 @@ class UnifiedGameScreen(BaseScreen):
             )
 
         if not die_values:
-            # Empty tray — draw a single placeholder outline
-            placeholder_rect = pygame.Rect(
-                tray_x_start, tray_y_start, die_size, die_size
-            )
-            pygame.draw.rect(self.screen, (40, 40, 55), placeholder_rect, border_radius=5)
-            pygame.draw.rect(self.screen, (70, 70, 90), placeholder_rect, 1, border_radius=5)
+            pass  # Nothing to draw — phase has no dice
         else:
             cx = tray_x_start + die_size // 2
             cy = tray_y_start + die_size // 2
