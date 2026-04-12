@@ -3468,8 +3468,8 @@ class UnifiedGameScreen(BaseScreen):
 
         Renders large D6 pip-face dice in the top 150 px of the right panel.
         Context-sensitive per phase:
-          - U-Boat Phase  → shows N dice (N = number rolled, e.g. 3 for undamaged engine).
-                            Remaining AP distributed maxed-first across slots; spent slots show 0 (greyed).
+          - U-Boat Phase  → shows the actual rolled dice values (e.g. [4,2,6] for 3 dice).
+                            Label tracks remaining AP. AP=0 greys all dice out.
           - Detection / Escort Phase → last escort roll dice (red/orange)
           - Merchant Phase → empty tray
         Scramble animation: random pips for ~300 ms after a dice roll, then settle.
@@ -3536,22 +3536,21 @@ class UnifiedGameScreen(BaseScreen):
         if current_phase == GamePhase.UBOAT_PHASE:
             die_color = DIE_COLORS['uboat']
             ap = self.game.u_boat.action_points
-            # Determine how many dice were rolled (e.g. 3 for undamaged engine)
             last_roll = self.game.turn_manager.last_ap_roll
-            n_dice = len(last_roll['rolls']) if last_roll else 1
-            if ap == 0:
-                # AP exhausted — show all dice greyed out
-                die_values = [0] * n_dice
+            if ap == 0 and last_roll:
+                # AP exhausted — show rolled dice greyed out
+                die_values = list(last_roll['rolls'])
                 die_color = DIE_COLORS['empty']
                 label = "AP: 0"
-            else:
-                # Distribute remaining AP across n_dice slots, maxed-first, pad with 0.
-                # e.g. AP=5, n=3 → [5, 0, 0]; AP=7, n=3 → [6, 1, 0]
-                remaining = ap
-                for _ in range(n_dice):
-                    die_values.append(min(6, max(0, remaining)))
-                    remaining = max(0, remaining - 6)
+            elif last_roll:
+                # Show the actual dice that were rolled (e.g. [4, 2, 6] for 3 dice)
+                # Label tracks remaining AP as it is spent
+                die_values = list(last_roll['rolls'])
                 label = f"AP: {ap}"
+            else:
+                # No roll yet — show a single placeholder die
+                die_values = [1]
+                label = "Roll dice"
 
         elif current_phase in (GamePhase.DETECTION_PHASE, GamePhase.ESCORT_PHASE):
             die_color = DIE_COLORS['escort']
