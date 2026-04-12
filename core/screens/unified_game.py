@@ -4345,7 +4345,7 @@ class UnifiedGameScreen(BaseScreen):
             label,
             button_rect.centerx,
             button_rect.centery,
-            self.font_large,
+            self.font_medium,
             color=(255, 255, 255),
             center=True,
         )
