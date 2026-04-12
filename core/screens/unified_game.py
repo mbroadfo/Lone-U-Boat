@@ -3535,15 +3535,16 @@ class UnifiedGameScreen(BaseScreen):
 
         grey_count = 0  # number of rightmost dice to render greyed (AP spent)
         ap_fraction = 1.0  # remaining AP as fraction of total (for color coding)
-        remaining_ap = 0   # live remaining AP from action queue
+        remaining_ap = 0   # live remaining AP from ap_tracker
 
         if current_phase == GamePhase.UBOAT_PHASE:
             die_color = DIE_COLORS['uboat']
             last_roll = self.game.turn_manager.last_ap_roll
-            if last_roll:
+            ap_tracker = self.game.turn_manager.ap_tracker
+            if last_roll and ap_tracker:
                 die_values = list(last_roll['rolls'])
-                total_ap = last_roll.get('total_ap', 1) or 1
-                remaining_ap = self.game.action_queue.get_remaining_ap(self.game)
+                total_ap = ap_tracker.total_ap or 1
+                remaining_ap = ap_tracker.remaining()
                 spent = total_ap - remaining_ap
                 ap_fraction = remaining_ap / total_ap
                 n = len(die_values)
@@ -3620,7 +3621,7 @@ class UnifiedGameScreen(BaseScreen):
                 cx += die_size + die_padding
 
         # ── AP remaining counter (U-boat phase only) ──────────────────────────────
-        if current_phase == GamePhase.UBOAT_PHASE and self.game.turn_manager.last_ap_roll:
+        if current_phase == GamePhase.UBOAT_PHASE and self.game.turn_manager.ap_tracker:
             # Color: green → yellow → red as AP depletes
             if ap_fraction > 0.6:
                 ap_color = (80, 200, 80)
