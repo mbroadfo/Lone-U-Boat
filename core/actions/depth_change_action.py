@@ -34,9 +34,10 @@ class DepthChangeAction(Action):
         self.validator = validator
     
     def get_cost(self, u_boat: UBoat) -> int:
-        """Get AP cost based on current depth."""
-        cost = self.cost_lookup.get_cost("CHANGE DEPTH", u_boat.depth)
-        return cost if cost is not None else 1  # Default to 1 if cost not found
+        """Get AP cost: 2 to dive deeper, 1 to ascend shallower."""
+        if self.new_depth.value > u_boat.depth.value:
+            return 2  # Diving
+        return 1  # Ascending
     
     def validate(self, game_state: Any) -> Tuple[bool, str]:
         """
