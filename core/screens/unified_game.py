@@ -95,6 +95,10 @@ class UnifiedGameScreen(BaseScreen):
         
         # Dice roll history
         self.dice_rolls: List[Dict[str, Any]] = []
+
+        # Dice tray scramble animation state (NEW_UI_DICE)
+        self.dice_scramble_start: Optional[int] = None   # pygame ticks when scramble started
+        self.dice_scramble_target: List[int] = []        # final pip values after scramble
         
         # Load mission briefing for left panel display
         self.mission_briefing: Optional[Dict[str, Any]] = None
@@ -172,6 +176,32 @@ class UnifiedGameScreen(BaseScreen):
         # Mission rules (loaded separately if needed)
         self.mission_rules: Optional[Any] = None
         self.mission_rules_view: Optional[Any] = None
+        
+        # Terrain edit mode (F3) - click to paint hex types for mission config
+        self.terrain_edit_mode = False
+        # Maps HexCoord -> terrain type string
+        self.terrain_edit_hexes: Dict[Any, str] = {}
+        # Maps position label -> HexCoord
+        self.terrain_edit_positions: Dict[str, Any] = {}
+        # Left-click cycles through these terrain types (None = clear)
+        self._terrain_cycle = ['shallow', 'land', None]
+        # Right-click cycles through these position labels
+        self._position_labels = [
+            'uboat_start', 'merchant_start',
+            'corvette_1_start', 'corvette_2_start',
+            'anchor', 'uboat_exit', 'merchant_exit',
+            None
+        ]
+        # Hover hex for display
+        self.terrain_edit_hover_hex: Optional[Any] = None
+        # Facing per position label (middle-click to cycle)
+        self.terrain_edit_facings: Dict[str, Any] = {}
+        # Current right-click placement mode (keys 1-8 to switch)
+        # Modes: uboat_start merchant_start corvette_1_start corvette_2_start
+        #        anchor uboat_exit merchant_exit merchant_path
+        self.terrain_edit_position_mode: str = 'uboat_start'
+        # Ordered merchant path waypoints (right-click in merchant_path mode)
+        self.terrain_edit_merchant_path: List[Any] = []
         
         # On-map action buttons (near status boxes)
         self.fire_torpedo_button_rect: Optional[pygame.Rect] = None
@@ -279,6 +309,46 @@ class UnifiedGameScreen(BaseScreen):
                     self.game.show_map = False  # Turn off map icons
                     self.game.show_status_boxes = False  # Disable status boxes when exiting edit mode
             
+            elif event.key == pygame.K_F3:
+                # Toggle terrain edit mode
+                self.terrain_edit_mode = not self.terrain_edit_mode
+                if self.terrain_edit_mode:
+                    self.game.show_grid = True
+                    self.game.show_map = True
+                    self.add_event("TERRAIN EDIT MODE ON")
+                    self.add_event("Left-click: cycle Shallow/Land/Clear")
+                    self.add_event("Right-click: place current mode marker")
+                    self.add_event("Middle-click: rotate facing | Keys 1-8: set mode")
+                    self.add_event("P=print config | C=clear all")
+                else:
+                    self.add_event("Terrain edit mode OFF")
+            
+            elif self.terrain_edit_mode and event.key in (
+                    pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
+                    pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8):
+                _mode_map = {
+                    pygame.K_1: 'uboat_start',
+                    pygame.K_2: 'merchant_start',
+                    pygame.K_3: 'corvette_1_start',
+                    pygame.K_4: 'corvette_2_start',
+                    pygame.K_5: 'anchor',
+                    pygame.K_6: 'uboat_exit',
+                    pygame.K_7: 'merchant_exit',
+                    pygame.K_8: 'merchant_path',
+                }
+                self.terrain_edit_position_mode = _mode_map[event.key]
+                self.add_event(f"Mode: {self.terrain_edit_position_mode}")
+            
+            elif self.terrain_edit_mode and event.key == pygame.K_p:
+                self._print_terrain_edit_config()
+            
+            elif self.terrain_edit_mode and event.key == pygame.K_c:
+                self.terrain_edit_hexes.clear()
+                self.terrain_edit_positions.clear()
+                self.terrain_edit_facings.clear()
+                self.terrain_edit_merchant_path.clear()
+                self.add_event("Terrain edit: cleared all")
+            
             # Alignment mode controls
             elif self.alignment_mode:
                 self._handle_alignment_input(event)
@@ -332,9 +402,26 @@ class UnifiedGameScreen(BaseScreen):
             elif event.y < 0:  # Scroll down
                 self.event_log_scroll = max(0, self.event_log_scroll - 3)
         
+        elif event.type == pygame.MOUSEMOTION:
+            # Track hover hex for terrain edit mode
+            if self.terrain_edit_mode:
+                self.terrain_edit_hover_hex = self.game.hex_grid.pixel_to_hex(*event.pos)
+        
         elif event.type == pygame.MOUSEBUTTONDOWN:
             # Block input during animations
             if self.animation_manager.is_animating():
+                return
+            
+            # Terrain edit mode: intercept all clicks
+            if self.terrain_edit_mode:
+                hex_coord = self.game.hex_grid.pixel_to_hex(*event.pos)
+                if hex_coord in self.game.mission_hexes:
+                    if event.button == 1:
+                        self._handle_terrain_edit_left_click(hex_coord)
+                    elif event.button == 2:
+                        self._handle_terrain_edit_middle_click(hex_coord)
+                    elif event.button == 3:
+                        self._handle_terrain_edit_right_click(hex_coord)
                 return
             
             if event.button == 1:  # Left click
@@ -386,6 +473,9 @@ class UnifiedGameScreen(BaseScreen):
                                     event_msg += f" +{roll_info['captain_bonus']} (Captain)"
                                 event_msg += f" = {roll_info['total_ap']} AP"
                                 self.add_event(event_msg)
+                                # Scramble trigger (NEW_UI_DICE) — only set here, not in AP-spend handlers
+                                self.dice_scramble_start = pygame.time.get_ticks()
+                                self.dice_scramble_target = list(roll_info['rolls'])
                     
                     # Check if clicking undo button (Phase 2C: use action_history)
                     elif self.undo_button_rect and self.undo_button_rect.collidepoint(mouse_pos):
@@ -755,6 +845,230 @@ class UnifiedGameScreen(BaseScreen):
         layout_cfg = self.game.layout.cfg
         save_mission_layout(self.mission_number, layout_cfg)
         self.add_event(f"Calibration saved to mission_{self.mission_number}_layout.json")
+    
+    def _handle_terrain_edit_left_click(self, hex_coord: Any) -> None:
+        """Cycle terrain type for a hex: unassigned → shallow → land → clear."""
+        current = self.terrain_edit_hexes.get(hex_coord)
+        idx = self._terrain_cycle.index(current) if current in self._terrain_cycle else -1
+        next_type = self._terrain_cycle[(idx + 1) % len(self._terrain_cycle)]
+        if next_type is None:
+            self.terrain_edit_hexes.pop(hex_coord, None)
+            self.add_event(f"Hex {hex_coord}: cleared")
+        else:
+            self.terrain_edit_hexes[hex_coord] = next_type
+            self.add_event(f"Hex {hex_coord}: {next_type}")
+    
+    def _handle_terrain_edit_right_click(self, hex_coord: Any) -> None:
+        """Place or toggle the current mode's marker at hex_coord.
+
+        * Single-point modes (1-7): right-clicking the same hex removes it;
+          right-clicking a different hex moves the marker there.
+        * Merchant path mode (8): each right-click appends a waypoint;
+          right-clicking an existing waypoint removes it from the path.
+        """
+        mode = self.terrain_edit_position_mode
+        if mode == 'merchant_path':
+            if hex_coord in self.terrain_edit_merchant_path:
+                self.terrain_edit_merchant_path.remove(hex_coord)
+                self.add_event(f"Path: removed waypoint {hex_coord}")
+            else:
+                self.terrain_edit_merchant_path.append(hex_coord)
+                self.add_event(f"Path: wp#{len(self.terrain_edit_merchant_path)} = {hex_coord}")
+        else:
+            if self.terrain_edit_positions.get(mode) == hex_coord:
+                # Toggle off — remove the marker
+                del self.terrain_edit_positions[mode]
+                self.terrain_edit_facings.pop(mode, None)
+                self.add_event(f"Hex {hex_coord}: {mode} removed")
+            else:
+                # Place (or move) the marker for this mode
+                self.terrain_edit_positions[mode] = hex_coord
+                if mode not in self.terrain_edit_facings:
+                    self.terrain_edit_facings[mode] = Facing.SOUTH
+                self.add_event(f"Hex {hex_coord}: {mode} placed")
+    
+    def _handle_terrain_edit_middle_click(self, hex_coord: Any) -> None:
+        """Cycle facing for the position icon at a hex (middle-click)."""
+        label = next((k for k, v in self.terrain_edit_positions.items() if v == hex_coord), None)
+        if label is None:
+            return
+        facings = list(Facing)
+        current = self.terrain_edit_facings.get(label, Facing.NORTH)
+        next_facing = facings[(facings.index(current) + 1) % len(facings)]
+        self.terrain_edit_facings[label] = next_facing
+        self.add_event(f"Hex {hex_coord}: {label} facing → {next_facing.name}")
+
+    def _draw_terrain_edit_overlay(self) -> None:
+        """Draw terrain edit mode overlay: painted hexes, icons, merchant path, hover, legend."""
+        COLOURS = {
+            'shallow': (0, 180, 255, 100),    # cyan
+            'land':    (140, 100, 40, 140),   # brown
+        }
+        _MODE_LABELS = {
+            'uboat_start':      '[1] U-Boat Start',
+            'merchant_start':   '[2] Merchant Start',
+            'corvette_1_start': '[3] Corvette 1 Start',
+            'corvette_2_start': '[4] Corvette 2 Start',
+            'anchor':           '[5] Anchor',
+            'uboat_exit':       '[6] U-Boat Exit',
+            'merchant_exit':    '[7] Merchant Exit',
+            'merchant_path':    '[8] Merchant Path Waypoints',
+        }
+        
+        font = self.game.font
+        
+        # Draw terrain hexes
+        for hex_coord, terrain in self.terrain_edit_hexes.items():
+            px, py = self.game.hex_grid.hex_to_pixel(hex_coord)
+            colour = COLOURS.get(terrain, (200, 200, 200, 80))
+            r = int(self.game.hex_grid.size * 0.85)
+            surf = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(surf, colour, (r, r), r)
+            self.screen.blit(surf, (int(px) - r, int(py) - r))
+        
+        # Draw merchant path (connecting lines then numbered waypoint dots)
+        path = self.terrain_edit_merchant_path
+        if len(path) >= 2:
+            pts = [self.game.hex_grid.hex_to_pixel(h) for h in path]
+            for i in range(len(pts) - 1):
+                pygame.draw.line(self.screen, (255, 180, 0),
+                                 (int(pts[i][0]), int(pts[i][1])),
+                                 (int(pts[i + 1][0]), int(pts[i + 1][1])), 2)
+        for idx, h in enumerate(path):
+            px, py = self.game.hex_grid.hex_to_pixel(h)
+            r = int(self.game.hex_grid.size * 0.35)
+            pygame.draw.circle(self.screen, (255, 180, 0), (int(px), int(py)), r)
+            pygame.draw.circle(self.screen, (0, 0, 0), (int(px), int(py)), r, 2)
+            num_surf = font.render(str(idx + 1), True, (0, 0, 0))
+            self.screen.blit(num_surf, (int(px) - num_surf.get_width() // 2,
+                                        int(py) - num_surf.get_height() // 2))
+        
+        # Draw position markers with real ship/u-boat icons
+        _ICON_MAP = {
+            'uboat_start':      ('uboat', None),
+            'uboat_exit':       ('uboat', None),
+            'merchant_start':   ('ship', 'merchant'),
+            'merchant_exit':    ('ship', 'merchant'),
+            'corvette_1_start': ('ship', 'corvette'),
+            'corvette_2_start': ('ship', 'corvette'),
+        }
+        _SHORT_MAP = {
+            'uboat_start':      'UB start',
+            'uboat_exit':       'UB exit →',
+            'merchant_start':   'M start',
+            'merchant_exit':    'M exit →',
+            'corvette_1_start': 'C1 start',
+            'corvette_2_start': 'C2 start',
+            'anchor':           'Anchor',
+        }
+        for label, hex_coord in self.terrain_edit_positions.items():
+            px, py = self.game.hex_grid.hex_to_pixel(hex_coord)
+            facing = self.terrain_edit_facings.get(label, Facing.SOUTH)
+            angle_deg = -60 * facing.value
+            icon_info = _ICON_MAP.get(label)
+            if icon_info:
+                kind, key = icon_info
+                image = (self.game.renderer.u_boat_images.get(Depth.SURFACED)
+                         if kind == 'uboat'
+                         else self.game.renderer.ship_images.get(key))
+                if image:
+                    rotated = pygame.transform.rotate(image, angle_deg)
+                    rect = rotated.get_rect(center=(int(px), int(py)))
+                    self.screen.blit(rotated, rect)
+            else:
+                # Anchor: coloured filled dot
+                pygame.draw.circle(self.screen, (200, 0, 200),
+                                   (int(px), int(py)), int(self.game.hex_grid.size * 0.4))
+            # Label below icon
+            short = _SHORT_MAP.get(label, label)
+            lbl_surf = font.render(short, True, (255, 255, 100))
+            self.screen.blit(lbl_surf, (int(px) - lbl_surf.get_width() // 2,
+                                        int(py) + int(self.game.hex_grid.size * 0.75)))
+        
+        # Hover hex info
+        if self.terrain_edit_hover_hex and self.terrain_edit_hover_hex in self.game.mission_hexes:
+            h = self.terrain_edit_hover_hex
+            px, py = self.game.hex_grid.hex_to_pixel(h)
+            terrain = self.terrain_edit_hexes.get(h, '-')
+            pos_label = next((k for k, v in self.terrain_edit_positions.items() if v == h), None)
+            path_idx = (self.terrain_edit_merchant_path.index(h) + 1
+                        if h in self.terrain_edit_merchant_path else None)
+            facing_name = self.terrain_edit_facings.get(pos_label, Facing.SOUTH).name if pos_label else '-'
+            info = (f"({h.q},{h.r})  terrain:{terrain}  "
+                    f"pos:{pos_label or '-'}  path_wp:{path_idx or '-'}  facing:{facing_name}")
+            info_surf = font.render(info, True, (255, 255, 180))
+            self.screen.blit(info_surf, (int(px) + 15, int(py) - 10))
+        
+        # Legend in top-left of board area
+        lx, ly = self.game.hex_grid.offset_x + 5, self.game.hex_grid.offset_y + 5
+        mode_label = _MODE_LABELS.get(self.terrain_edit_position_mode, self.terrain_edit_position_mode)
+        legend_items = [
+            (f"[F3] TERRAIN EDIT  |  Mode: {mode_label}  |  P=print  C=clear all", (255, 240, 80)),
+            ("Left-click: Shallow > Land > Clear terrain", (180, 200, 230)),
+            ("Right-click: Place / remove current mode marker", (180, 200, 230)),
+            ("Middle-click: Rotate icon facing (N>NE>SE>S>SW>NW)", (180, 200, 230)),
+            ("1=UB-start  2=M-start  3=C1-start  4=C2-start  5=Anchor  6=UB-exit  7=M-exit  8=M-path", (160, 190, 220)),
+        ]
+        for i, (text, colour) in enumerate(legend_items):
+            surf = font.render(text, True, colour)
+            bg = pygame.Surface((surf.get_width() + 6, surf.get_height() + 2), pygame.SRCALPHA)
+            bg.fill((0, 0, 0, 180))
+            self.screen.blit(bg, (int(lx), int(ly) + i * 16))
+            self.screen.blit(surf, (int(lx) + 3, int(ly) + i * 16 + 1))
+    
+    def _print_terrain_edit_config(self) -> None:
+        """Print mission config snippet to console based on current terrain edit state."""
+        shallow = sorted([h for h, t in self.terrain_edit_hexes.items() if t == 'shallow'], key=lambda h: (h.q, h.r))
+        land    = sorted([h for h, t in self.terrain_edit_hexes.items() if t == 'land'], key=lambda h: (h.q, h.r))
+        pos = self.terrain_edit_positions
+        
+        print("\n" + "="*60)
+        print("TERRAIN EDIT — paste into mission_config.py")
+        print("="*60)
+        print(f"\nSHALLOW_HEXES = [")
+        for h in shallow:
+            print(f"    ({h.q}, {h.r}),")
+        print(f"]\n")
+        print(f"LAND_HEXES = [")
+        for h in land:
+            print(f"    ({h.q}, {h.r}),")
+        print(f"]\n")
+        for label, h in sorted(pos.items()):
+            print(f"# {label}: ({h.q}, {h.r})")
+        if 'uboat_start' in pos:
+            h = pos['uboat_start']
+            facing = self.terrain_edit_facings.get('uboat_start', Facing.SOUTH)
+            print(f"\nU_BOAT_START['position'] = ({h.q}, {h.r})")
+            print(f"U_BOAT_START['facing'] = '{facing.name}'")
+        if 'anchor' in pos:
+            h = pos['anchor']
+            print(f"ANCHOR_POSITIONS = [({h.q}, {h.r})]")
+        if 'uboat_exit' in pos:
+            h = pos['uboat_exit']
+            print(f"U_BOAT_EXIT_HEX = ({h.q}, {h.r})")
+        if 'merchant_exit' in pos:
+            h = pos['merchant_exit']
+            print(f"EXIT_POSITIONS['merchant']['position'] = ({h.q}, {h.r})")
+        ship_types = {'merchant_start': 'merchant', 'corvette_1_start': 'corvette', 'corvette_2_start': 'corvette'}
+        print(f"\nSHIPS_START = [")
+        for label, stype in ship_types.items():
+            if label in pos:
+                h = pos[label]
+                facing = self.terrain_edit_facings.get(label, Facing.SOUTH)
+                print(f"    {{'type': '{stype}', 'position': ({h.q}, {h.r}), 'facing': '{facing.name}', 'damaged': False}},")
+        print("]")
+        if self.terrain_edit_merchant_path:
+            print(f"\nMERCHANT_PATHS = [")
+            print(f"    {{")
+            print(f"        'ship': 'merchant',")
+            print(f"        'waypoints': [")
+            for h in self.terrain_edit_merchant_path:
+                print(f"            ({h.q}, {h.r}),")
+            print(f"        ],")
+            print(f"    }},")
+            print(f"]")
+        print("="*60 + "\n")
+        self.add_event("Terrain config printed to console (P)")
     
     def handle_mouse_click_alignment(self, pos: tuple[int, int]) -> None:
         """Handle mouse click in alignment mode to select status boxes."""
@@ -2445,53 +2759,60 @@ class UnifiedGameScreen(BaseScreen):
                 show_all=True
             )
         
-        # Render ships
-        for ship_idx, ship in enumerate(self.game.ships):
-            # Get animated state if animating
-            if self.animation_manager.is_animating():
-                render_pos, render_angle = self.animation_manager.get_ship_render_state(
-                    ship_idx,
-                    ship.position,
-                    ship.facing
-                )
-                self.game.renderer.render_ship(ship, self.game.destroyed_this_phase, render_pos, render_angle)
-            else:
-                self.game.renderer.render_ship(ship, self.game.destroyed_this_phase)
+        # Render ships (hidden in terrain edit mode)
+        if not self.terrain_edit_mode:
+            for ship_idx, ship in enumerate(self.game.ships):
+                # Get animated state if animating
+                if self.animation_manager.is_animating():
+                    render_pos, render_angle = self.animation_manager.get_ship_render_state(
+                        ship_idx,
+                        ship.position,
+                        ship.facing
+                    )
+                    self.game.renderer.render_ship(ship, self.game.destroyed_this_phase, render_pos, render_angle)
+                else:
+                    self.game.renderer.render_ship(ship, self.game.destroyed_this_phase)
         
-        # Render aircraft (B-24s)
-        for aircraft_idx, aircraft in enumerate(self.game.aircraft):
-            # Get animated state if animating
-            if self.animation_manager.is_animating():
-                render_pos, render_angle = self.animation_manager.get_aircraft_render_state(
-                    aircraft_idx,
-                    aircraft.position,
-                    aircraft.facing
-                )
-                self.game.renderer.render_aircraft(aircraft, self.game.destroyed_this_phase, render_pos, render_angle)  # type: ignore[attr-defined]
-            else:
-                self.game.renderer.render_aircraft(aircraft, self.game.destroyed_this_phase)  # type: ignore[attr-defined]
+        # Render aircraft (B-24s) (hidden in terrain edit mode)
+        if not self.terrain_edit_mode:
+            for aircraft_idx, aircraft in enumerate(self.game.aircraft):
+                # Get animated state if animating
+                if self.animation_manager.is_animating():
+                    render_pos, render_angle = self.animation_manager.get_aircraft_render_state(
+                        aircraft_idx,
+                        aircraft.position,
+                        aircraft.facing
+                    )
+                    self.game.renderer.render_aircraft(aircraft, self.game.destroyed_this_phase, render_pos, render_angle)  # type: ignore[attr-defined]
+                else:
+                    self.game.renderer.render_aircraft(aircraft, self.game.destroyed_this_phase)  # type: ignore[attr-defined]
         
-        # Render U-boat
-        if self.awaiting_initial_setup:
-            # Render preview with selected depth/facing
-            temp_boat = self.game.u_boat
-            temp_boat.depth = self.selected_depth
-            temp_boat.facing = self.selected_facing
-            self.game.renderer.render_u_boat(temp_boat)
-        else:
-            # Get animated state if animating
-            if self.animation_manager.is_animating():
-                render_pos, render_angle = self.animation_manager.get_u_boat_render_state(
-                    self.game.u_boat.position,
-                    self.game.u_boat.facing
-                )
-                self.game.renderer.render_u_boat(self.game.u_boat, render_pos, render_angle)
+        # Render U-boat (hidden in terrain edit mode)
+        if not self.terrain_edit_mode:
+            if self.awaiting_initial_setup:
+                # Render preview with selected depth/facing
+                temp_boat = self.game.u_boat
+                temp_boat.depth = self.selected_depth
+                temp_boat.facing = self.selected_facing
+                self.game.renderer.render_u_boat(temp_boat)
             else:
-                self.game.renderer.render_u_boat(self.game.u_boat)
+                # Get animated state if animating
+                if self.animation_manager.is_animating():
+                    render_pos, render_angle = self.animation_manager.get_u_boat_render_state(
+                        self.game.u_boat.position,
+                        self.game.u_boat.facing
+                    )
+                    self.game.renderer.render_u_boat(self.game.u_boat, render_pos, render_angle)
+                else:
+                    self.game.renderer.render_u_boat(self.game.u_boat)
         
         # Render action preview (outline showing where u-boat will be after queued actions)
         if hasattr(self.game, 'action_queue') and self.game.action_queue.actions:
             self._render_action_preview()
+        
+        # Render terrain edit mode overlay
+        if self.terrain_edit_mode:
+            self._draw_terrain_edit_overlay()
         
         # Render alignment mode highlights
         if self.alignment_mode:
@@ -2947,7 +3268,11 @@ class UnifiedGameScreen(BaseScreen):
         controls_area_y = y + dice_area_height + action_queue_height
         
         # === DICE ROLL SECTION (skip during setup) ===
-        if not self.awaiting_initial_setup:
+        from config.board_config import NEW_UI_DICE
+        if NEW_UI_DICE:
+            if not self.awaiting_initial_setup:
+                self._draw_dice_tray_new(x, y, width, dice_area_height, queue_area_y)
+        elif not self.awaiting_initial_setup:
             self.draw_text(
                 "DICE ROLLS",
                 x + width // 2,
@@ -3136,6 +3461,176 @@ class UnifiedGameScreen(BaseScreen):
                 # Show phase advancement button for AI phases
                 self._draw_phase_advance_button(x, controls_area_y, width, controls_area_height)
     
+    def _draw_dice_tray_new(self, x: int, y: int, width: int, height: int, queue_area_y: int) -> None:
+        """
+        NEW IMPLEMENTATION — Strangler fig replacement for the inline dice section
+        inside _draw_right_panel.  Gated behind NEW_UI_DICE in config.
+
+        Renders large D6 pip-face dice in the top 150 px of the right panel.
+        Context-sensitive per phase:
+          - U-Boat Phase  → remaining AP split into maxed-first D6 faces (steel gray)
+          - Detection / Escort Phase → last escort roll dice (red/orange)
+          - Merchant Phase → empty tray
+        Scramble animation: random pips for ~300 ms after a dice roll, then settle.
+        AP = 0 → shows a single greyed-out die face.
+        """
+        import random
+        from ..models import GamePhase
+        from config.board_config import DIE_COLORS
+
+        # ── Pip layout (positions as fraction of die size) ──────────────────────
+        PIP_POSITIONS: Dict[int, List[Tuple[float, float]]] = {
+            1: [(0.5,  0.5)],
+            2: [(0.25, 0.25), (0.75, 0.75)],
+            3: [(0.25, 0.25), (0.5,  0.5),  (0.75, 0.75)],
+            4: [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)],
+            5: [(0.25, 0.25), (0.75, 0.25), (0.5,  0.5),  (0.25, 0.75), (0.75, 0.75)],
+            6: [(0.25, 0.25), (0.75, 0.25), (0.25, 0.5),  (0.75, 0.5),  (0.25, 0.75), (0.75, 0.75)],
+        }
+
+        def _draw_die(surface: pygame.Surface,
+                      cx: int, cy: int, size: int,
+                      value: int,
+                      face_color: Tuple[int, int, int],
+                      pip_color: Tuple[int, int, int],
+                      border_color: Tuple[int, int, int]) -> None:
+            """Draw a single D6 at centre (cx, cy) with the given size."""
+            half = size // 2
+            rect = pygame.Rect(cx - half, cy - half, size, size)
+            radius = max(3, size // 8)
+            pygame.draw.rect(surface, face_color, rect, border_radius=radius)
+            pygame.draw.rect(surface, border_color, rect, 2, border_radius=radius)
+            pip_r = max(2, size // 10)
+            for fx, fy in PIP_POSITIONS.get(max(1, min(6, value)), []):
+                px = rect.left + int(fx * size)
+                py = rect.top  + int(fy * size)
+                pygame.draw.circle(surface, pip_color, (px, py), pip_r)
+
+        # ── Section header ───────────────────────────────────────────────────────
+        self.draw_text(
+            "DICE TRAY",
+            x + width // 2,
+            y + 12,
+            self.font_medium,
+            color=(255, 220, 100),
+            center=True
+        )
+
+        # ── Determine scramble state ─────────────────────────────────────────────
+        now = pygame.time.get_ticks()
+        scrambling = False
+        if self.dice_scramble_start is not None:
+            elapsed = now - self.dice_scramble_start
+            if elapsed < 300:
+                scrambling = True
+            else:
+                self.dice_scramble_start = None  # Reset once timeout has elapsed
+
+        # ── Determine which dice set to render ───────────────────────────────────
+        current_phase = self.game.turn_manager.current_phase
+        die_values: List[int] = []
+        die_color: Tuple[int, int, int] = DIE_COLORS['uboat']
+        label = ""
+
+        if current_phase == GamePhase.UBOAT_PHASE:
+            die_color = DIE_COLORS['uboat']
+            ap = self.game.u_boat.action_points
+            if ap == 0:
+                # AP exhausted — show single greyed-out die
+                die_values = [0]  # sentinel: will draw empty face
+                die_color = DIE_COLORS['empty']
+                label = "AP: 0"
+            else:
+                # Maxed-first split: e.g. 7 → [6, 1], 9 → [6, 3], 5 → [5]
+                remaining = ap
+                while remaining > 0:
+                    die_values.append(min(6, remaining))
+                    remaining -= 6
+                label = f"AP: {ap}"
+
+        elif current_phase in (GamePhase.DETECTION_PHASE, GamePhase.ESCORT_PHASE):
+            die_color = DIE_COLORS['escort']
+            escort_roll = getattr(self.game, 'last_escort_roll', None)
+            if escort_roll:
+                die_values = list(escort_roll.get('rolls', []))
+                ship_label = escort_roll.get('ship_label', 'Escort')
+                label = f"Escort [{ship_label}]"
+            else:
+                label = "Awaiting escort roll"
+
+        elif current_phase == GamePhase.MERCHANT_PHASE:
+            die_color = DIE_COLORS['merchant']
+            label = "Merchant phase"
+            # No dice to show — empty tray
+
+        else:
+            # Other phases: show last escort roll if available, else empty
+            escort_roll = getattr(self.game, 'last_escort_roll', None)
+            if escort_roll:
+                die_color = DIE_COLORS['escort']
+                die_values = list(escort_roll.get('rolls', []))
+                label = f"Escort [{escort_roll.get('ship_label', '')}]"
+
+        # ── Apply scramble: replace values with randoms during 300ms window ──────
+        if scrambling and die_values:
+            die_values = [random.randint(1, 6) for _ in die_values]
+
+        # ── Render dice ──────────────────────────────────────────────────────────
+        die_size = 44          # px per die face
+        die_padding = 8        # gap between dice
+        tray_y_start = y + 38  # below the label
+        tray_x_start = x + 12
+
+        # Sub-label (phase context)
+        if label:
+            self.draw_text(
+                label,
+                x + width // 2,
+                tray_y_start - 10,
+                self.font_small,
+                color=(180, 180, 200),
+                center=True
+            )
+
+        if not die_values:
+            # Empty tray — draw a single placeholder outline
+            placeholder_rect = pygame.Rect(
+                tray_x_start, tray_y_start, die_size, die_size
+            )
+            pygame.draw.rect(self.screen, (40, 40, 55), placeholder_rect, border_radius=5)
+            pygame.draw.rect(self.screen, (70, 70, 90), placeholder_rect, 1, border_radius=5)
+        else:
+            cx = tray_x_start + die_size // 2
+            cy = tray_y_start + die_size // 2
+            for val in die_values:
+                if val == 0:
+                    # Empty/greyed face (AP=0 sentinel)
+                    _draw_die(
+                        self.screen, cx, cy, die_size,
+                        1,
+                        DIE_COLORS['empty'],
+                        (90, 90, 100),
+                        DIE_COLORS['border']
+                    )
+                else:
+                    _draw_die(
+                        self.screen, cx, cy, die_size,
+                        val,
+                        die_color,
+                        DIE_COLORS['pip'],
+                        DIE_COLORS['border']
+                    )
+                cx += die_size + die_padding
+
+        # ── Separator at bottom of tray area ─────────────────────────────────────
+        pygame.draw.line(
+            self.screen,
+            (50, 70, 100),
+            (x, queue_area_y),
+            (x + width, queue_area_y),
+            2
+        )
+
     def _draw_bottom_panel(self, x: int, y: int, width: int, height: int) -> None:
         """Draw the bottom panel (currently empty - controls moved to right panel)."""
         panel_rect = pygame.Rect(x, y, width, height)
@@ -3400,7 +3895,12 @@ class UnifiedGameScreen(BaseScreen):
             rect = pygame.Rect(button_x, button_y, button_width, button_height)
             
             # Get action cost based on CURRENT depth
-            cost = cost_lookup.get_cost(action_name, current_depth)
+            if action_id == "dive":
+                cost = 2
+            elif action_id == "surface":
+                cost = 1
+            else:
+                cost = cost_lookup.get_cost(action_name, current_depth)
             
             # Build label with cost
             if cost is not None:
