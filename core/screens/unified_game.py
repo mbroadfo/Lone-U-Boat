@@ -3535,18 +3535,19 @@ class UnifiedGameScreen(BaseScreen):
 
         grey_count = 0  # number of rightmost dice to render greyed (AP spent)
         ap_fraction = 1.0  # remaining AP as fraction of total (for color coding)
+        remaining_ap = 0   # live remaining AP from action queue
 
         if current_phase == GamePhase.UBOAT_PHASE:
             die_color = DIE_COLORS['uboat']
-            ap = self.game.u_boat.action_points
             last_roll = self.game.turn_manager.last_ap_roll
             if last_roll:
                 die_values = list(last_roll['rolls'])
                 total_ap = last_roll.get('total_ap', 1) or 1
-                spent = total_ap - ap
-                ap_fraction = ap / total_ap
+                remaining_ap = self.game.action_queue.get_remaining_ap(self.game)
+                spent = total_ap - remaining_ap
+                ap_fraction = remaining_ap / total_ap
                 n = len(die_values)
-                if ap == 0:
+                if remaining_ap <= 0:
                     grey_count = n  # all spent
                 elif spent > 0:
                     # Immediate feedback: grey at least 1 die, keep at least 1 active
@@ -3620,8 +3621,6 @@ class UnifiedGameScreen(BaseScreen):
 
         # ── AP remaining counter (U-boat phase only) ──────────────────────────────
         if current_phase == GamePhase.UBOAT_PHASE and self.game.turn_manager.last_ap_roll:
-            ap = self.game.u_boat.action_points
-            total_ap = (self.game.turn_manager.last_ap_roll.get('total_ap', 1) or 1)
             # Color: green → yellow → red as AP depletes
             if ap_fraction > 0.6:
                 ap_color = (80, 200, 80)
@@ -3629,9 +3628,11 @@ class UnifiedGameScreen(BaseScreen):
                 ap_color = (220, 200, 60)
             else:
                 ap_color = (220, 80, 60)
-            ap_text = f"{ap} AP"
-            counter_y = tray_y_start + die_size + 6
-            self.draw_text(ap_text, x + width // 2, counter_y, self.font_large, color=ap_color, center=True)
+            ap_text = f"{remaining_ap} AP"
+            # Place below dice — center=True means (x,y) is the text center
+            # dice bottom = tray_y_start + die_size; add half font height (18px) + 4px gap
+            counter_y = tray_y_start + die_size + 22
+            self.draw_text(ap_text, x + width // 2, counter_y, self.font_medium, color=ap_color, center=True)
 
         # ── Separator at bottom of tray area ─────────────────────────────────────
         pygame.draw.line(
