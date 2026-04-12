@@ -3534,6 +3534,7 @@ class UnifiedGameScreen(BaseScreen):
         label = ""
 
         grey_count = 0  # number of rightmost dice to render greyed (AP spent)
+        ap_fraction = 1.0  # remaining AP as fraction of total (for color coding)
 
         if current_phase == GamePhase.UBOAT_PHASE:
             die_color = DIE_COLORS['uboat']
@@ -3543,11 +3544,14 @@ class UnifiedGameScreen(BaseScreen):
                 die_values = list(last_roll['rolls'])
                 total_ap = last_roll.get('total_ap', 1) or 1
                 spent = total_ap - ap
-                # Grey out rightmost dice proportionally to AP spent
-                grey_count = int(spent * len(die_values) / total_ap)
+                ap_fraction = ap / total_ap
+                n = len(die_values)
                 if ap == 0:
-                    grey_count = len(die_values)  # all spent
-                label = f"AP: {ap}"
+                    grey_count = n  # all spent
+                elif spent > 0:
+                    # Immediate feedback: grey at least 1 die, keep at least 1 active
+                    grey_count = min(n - 1, max(1, round(spent * n / total_ap)))
+                label = ""  # AP shown by large counter below dice
             else:
                 # No roll yet — empty tray
                 label = "Roll dice"
@@ -3585,7 +3589,7 @@ class UnifiedGameScreen(BaseScreen):
         tray_y_start = y + 38  # below the label
         tray_x_start = x + 12
 
-        # Sub-label (phase context)
+        # Phase context label (small, above dice)
         if label:
             self.draw_text(
                 label,
@@ -3613,6 +3617,21 @@ class UnifiedGameScreen(BaseScreen):
                     DIE_COLORS['border']
                 )
                 cx += die_size + die_padding
+
+        # ── AP remaining counter (U-boat phase only) ──────────────────────────────
+        if current_phase == GamePhase.UBOAT_PHASE and self.game.turn_manager.last_ap_roll:
+            ap = self.game.u_boat.action_points
+            total_ap = (self.game.turn_manager.last_ap_roll.get('total_ap', 1) or 1)
+            # Color: green → yellow → red as AP depletes
+            if ap_fraction > 0.6:
+                ap_color = (80, 200, 80)
+            elif ap_fraction > 0.3:
+                ap_color = (220, 200, 60)
+            else:
+                ap_color = (220, 80, 60)
+            ap_text = f"{ap} AP"
+            counter_y = tray_y_start + die_size + 6
+            self.draw_text(ap_text, x + width // 2, counter_y, self.font_large, color=ap_color, center=True)
 
         # ── Separator at bottom of tray area ─────────────────────────────────────
         pygame.draw.line(
