@@ -138,6 +138,7 @@ class UnifiedGameScreen(BaseScreen):
         self.undo_button_rect: Optional[pygame.Rect] = None  # Phase 2C: Undo button
         self.phase_advance_button_rect: Optional[pygame.Rect] = None  # Phase 2D: Next phase button
         self.execute_ai_action_button_rect: Optional[pygame.Rect] = None  # Phase 7.4: Execute AI Action button
+        self.context_button_rect: Optional[pygame.Rect] = None  # NEW_UI_CONTEXT_BUTTON: Civ VI context button
         
         # Deck gun resolution state (for interactive combat)
         self.deck_gun_resolution_state: Optional[Dict[str, Any]] = None
@@ -477,12 +478,65 @@ class UnifiedGameScreen(BaseScreen):
                                 self.dice_scramble_start = pygame.time.get_ticks()
                                 self.dice_scramble_target = list(roll_info['rolls'])
                     
+                    # NEW_UI_CONTEXT_BUTTON: single context button replaces dice + phase buttons
+                    elif (hasattr(self, 'context_button_rect') and self.context_button_rect and
+                          self.context_button_rect.collidepoint(mouse_pos)):
+                        from config.board_config import NEW_UI_CONTEXT_BUTTON as _ctx_flag
+                        if _ctx_flag:
+                            from ..models import GamePhase as _GP
+                            _phase = self.game.turn_manager.current_phase
+                            _last_ap = self.game.turn_manager.last_ap_roll
+                            _ap_tracker = self.game.turn_manager.ap_tracker
+                            if _phase == _GP.UBOAT_PHASE and _last_ap is None:
+                                # ROLL DICE action
+                                ap = self.game.turn_manager.roll_action_points_only(self.game.u_boat)
+                                self.game.u_boat.action_points = ap
+                                self.game.action_queue.reset_for_new_turn(ap, self.game)
+                                self.game.action_history.clear()
+                                self.game.turn_manager.clear_action_history()
+                                self.dice_roll_button_rect = None
+                                if self.game.turn_manager.last_ap_roll:
+                                    roll_info = self.game.turn_manager.last_ap_roll
+                                    rolls_str = "][".join([str(r) for r in roll_info['rolls']])
+                                    event_msg = f"Turn {self.game.turn_manager.turn_number}: Rolled [{rolls_str}] → {roll_info['highest']}"
+                                    if roll_info['captain_bonus'] > 0:
+                                        event_msg += f" +{roll_info['captain_bonus']} (Captain)"
+                                    event_msg += f" = {roll_info['total_ap']} AP"
+                                    self.add_event(event_msg)
+                                    self.dice_scramble_start = pygame.time.get_ticks()
+                                    self.dice_scramble_target = list(roll_info['rolls'])
+                            elif self.game.has_pending_ai_actions():
+                                # EXECUTE ACTION — same as execute_ai_action_button click
+                                current_action = self.game.current_ai_queue.current_action() if self.game.current_ai_queue else None
+                                needs_dice_roll = current_action and getattr(current_action, 'requires_player_input', False)
+                                if needs_dice_roll:
+                                    action_preview = self.game.get_current_ai_action_preview()
+                                    self.ai_dice_roll_state = {
+                                        'action_name': action_preview.get('action_name', 'AI Action') if action_preview else 'AI Action',
+                                        'details': action_preview.get('details', '') if action_preview else '',
+                                        'waiting_for_roll': True
+                                    }
+                                else:
+                                    _, result_msg = self.game.execute_next_ai_action()
+                                    if result_msg:
+                                        self.add_event(result_msg)
+                                    self._print_game_over_banner()
+                                    if not self.game.running:
+                                        self.render()
+                                        pygame.time.wait(100)
+                            else:
+                                # NEXT PHASE / NEXT STEP / END TURN — same as phase_advance_button click
+                                if _phase != _GP.UBOAT_PHASE or _last_ap is not None:
+                                    self._advance_phase_and_update_ui()
+                                else:
+                                    self.add_event("Must roll dice first (click ROLL DICE)")
+
                     # Check if clicking undo button (Phase 2C: use action_history)
                     elif self.undo_button_rect and self.undo_button_rect.collidepoint(mouse_pos):
                         self._undo_last_action()
-                    
+
                     # Phase 2: Continue button removed - no longer needed with immediate execution
-                    
+
                     # Check if clicking deck gun resolution button
                     elif self.deck_gun_resolution_state and self.deck_gun_roll_button_rect and self.deck_gun_roll_button_rect.collidepoint(mouse_pos):
                         self._handle_deck_gun_roll()
@@ -3455,11 +3509,15 @@ class UnifiedGameScreen(BaseScreen):
         else:
             # Only show action controls during U-Boat phase
             from ..models import GamePhase
+            from config.board_config import NEW_UI_CONTEXT_BUTTON
             if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
                 self._draw_game_controls(x, controls_area_y, width, controls_area_height)
             else:
                 # Show phase advancement button for AI phases
-                self._draw_phase_advance_button(x, controls_area_y, width, controls_area_height)
+                if NEW_UI_CONTEXT_BUTTON:
+                    self._draw_context_button_new(x, controls_area_y + controls_area_height - 70, width, 60)
+                else:
+                    self._draw_phase_advance_button(x, controls_area_y, width, controls_area_height)
     
     def _draw_dice_tray_new(self, x: int, y: int, width: int, height: int, queue_area_y: int) -> None:
         """
@@ -3754,40 +3812,59 @@ class UnifiedGameScreen(BaseScreen):
         
         # Check if we need to roll dice first
         from ..models import GamePhase
-        if (self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE and 
+        from config.board_config import NEW_UI_CONTEXT_BUTTON
+        if (self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE and
             self.game.turn_manager.ap_tracker is None):
             self._draw_dice_roll_button(x, y + 35, width)
-            self._draw_next_phase_button_at_bottom(x, y, width, height)
+            if NEW_UI_CONTEXT_BUTTON:
+                self._draw_context_button_new(x, y + height - 70, width, 60)
+            else:
+                self._draw_next_phase_button_at_bottom(x, y, width, height)
             return
-        
+
         # Check if in deck gun resolution mode
         if self.deck_gun_resolution_state:
             self._draw_deck_gun_resolution(x, y + 35, width)
-            self._draw_next_phase_button_at_bottom(x, y, width, height)
+            if NEW_UI_CONTEXT_BUTTON:
+                self._draw_context_button_new(x, y + height - 70, width, 60)
+            else:
+                self._draw_next_phase_button_at_bottom(x, y, width, height)
             return
-        
+
         # Check if in torpedo resolution mode
         if self.torpedo_resolution_state:
             self._draw_torpedo_resolution(x, y + 35, width)
-            self._draw_next_phase_button_at_bottom(x, y, width, height)
+            if NEW_UI_CONTEXT_BUTTON:
+                self._draw_context_button_new(x, y + height - 70, width, 60)
+            else:
+                self._draw_next_phase_button_at_bottom(x, y, width, height)
             return
-        
+
         # Check if in torpedo loading selection mode
         if self.load_torpedo_selection_state:
             self._draw_torpedo_loading_selection(x, y + 35, width)
-            self._draw_next_phase_button_at_bottom(x, y, width, height)
+            if NEW_UI_CONTEXT_BUTTON:
+                self._draw_context_button_new(x, y + height - 70, width, 60)
+            else:
+                self._draw_next_phase_button_at_bottom(x, y, width, height)
             return
-        
+
         # Check if in torpedo firing selection mode
         if self.fire_torpedo_selection_state:
             self._draw_torpedo_firing_selection(x, y + 35, width)
-            self._draw_next_phase_button_at_bottom(x, y, width, height)
+            if NEW_UI_CONTEXT_BUTTON:
+                self._draw_context_button_new(x, y + height - 70, width, 60)
+            else:
+                self._draw_next_phase_button_at_bottom(x, y, width, height)
             return
-        
+
         # Check if in repair selection mode
         if self.repair_selection_state:
             self._draw_repair_selection(x, y + 35, width)
-            self._draw_next_phase_button_at_bottom(x, y, width, height)
+            if NEW_UI_CONTEXT_BUTTON:
+                self._draw_context_button_new(x, y + height - 70, width, 60)
+            else:
+                self._draw_next_phase_button_at_bottom(x, y, width, height)
             return
         
         # Clear button rects
@@ -4091,48 +4168,55 @@ class UnifiedGameScreen(BaseScreen):
             info_y += 10
         
         # Phase 2D: Add NEXT PHASE button at bottom
-        phase_button_width = button_width
-        phase_button_height = 35
-        phase_rect = pygame.Rect(button_x, info_y, phase_button_width, phase_button_height)
-        
-        # Check if button should be enabled (dice must be rolled during U-Boat phase)
-        from ..models import GamePhase
-        is_enabled = (self.game.turn_manager.current_phase != GamePhase.UBOAT_PHASE 
-                     or self.game.turn_manager.last_ap_roll is not None)
-        
-        # Check hover for phase button
-        mouse_pos = pygame.mouse.get_pos()
-        is_hover = phase_rect.collidepoint(mouse_pos) and is_enabled
-        
-        # Button colors
-        if not is_enabled:
-            color = (30, 30, 30)
-            border_color = (60, 60, 60)
-            text_color = (100, 100, 100)
-        elif is_hover:
-            color = (60, 120, 60)
-            border_color = (100, 200, 100)
-            text_color = (200, 255, 200)
+        from config.board_config import NEW_UI_CONTEXT_BUTTON
+        if NEW_UI_CONTEXT_BUTTON:
+            # Context button is drawn at a fixed position near the panel bottom;
+            # pass the controls-area origin (x, y) and full dimensions so the
+            # method can compute the absolute bottom position itself.
+            self._draw_context_button_new(x, y + height - 70, width, 60)
         else:
-            color = (40, 80, 40)
-            border_color = (80, 160, 80)
-            text_color = (200, 255, 200)
-        
-        # Draw button
-        pygame.draw.rect(self.screen, color, phase_rect)
-        pygame.draw.rect(self.screen, border_color, phase_rect, 2)
-        
-        self.draw_text(
-            "NEXT PHASE ►",
-            phase_rect.centerx,
-            phase_rect.centery,
-            self.font_small,
-            color=text_color,
-            center=True
-        )
-        
-        # Store rect for click detection
-        self.phase_advance_button_rect = phase_rect
+            phase_button_width = button_width
+            phase_button_height = 35
+            phase_rect = pygame.Rect(button_x, info_y, phase_button_width, phase_button_height)
+
+            # Check if button should be enabled (dice must be rolled during U-Boat phase)
+            from ..models import GamePhase
+            is_enabled = (self.game.turn_manager.current_phase != GamePhase.UBOAT_PHASE
+                         or self.game.turn_manager.last_ap_roll is not None)
+
+            # Check hover for phase button
+            mouse_pos = pygame.mouse.get_pos()
+            is_hover = phase_rect.collidepoint(mouse_pos) and is_enabled
+
+            # Button colors
+            if not is_enabled:
+                color = (30, 30, 30)
+                border_color = (60, 60, 60)
+                text_color = (100, 100, 100)
+            elif is_hover:
+                color = (60, 120, 60)
+                border_color = (100, 200, 100)
+                text_color = (200, 255, 200)
+            else:
+                color = (40, 80, 40)
+                border_color = (80, 160, 80)
+                text_color = (200, 255, 200)
+
+            # Draw button
+            pygame.draw.rect(self.screen, color, phase_rect)
+            pygame.draw.rect(self.screen, border_color, phase_rect, 2)
+
+            self.draw_text(
+                "NEXT PHASE ►",
+                phase_rect.centerx,
+                phase_rect.centery,
+                self.font_small,
+                color=text_color,
+                center=True
+            )
+
+            # Store rect for click detection
+            self.phase_advance_button_rect = phase_rect
     
     def _draw_next_phase_button_at_bottom(self, x: int, y: int, width: int, height: int) -> None:
         """Draw NEXT PHASE button at bottom of control panel."""
@@ -4191,7 +4275,84 @@ class UnifiedGameScreen(BaseScreen):
         
         # Store rect for click detection
         self.phase_advance_button_rect = phase_rect
-    
+
+    def _draw_context_button_new(self, x: int, y: int, width: int, height: int) -> None:
+        """
+        NEW IMPLEMENTATION — Strangler fig replacement for the phase/dice buttons.
+        Civ VI-style context button: single large button whose label and color
+        reflect the current game state. Gated behind NEW_UI_CONTEXT_BUTTON in config.
+
+        Parameters
+        ----------
+        x, y      : top-left of the right panel's bottom region
+        width     : right panel width (button uses full width minus 10px padding each side)
+        height    : button height (caller should pass 60)
+        """
+        from ..models import GamePhase
+
+        button_x = x + 10
+        button_width = width - 20
+        button_rect = pygame.Rect(button_x, y, button_width, height)
+
+        # ── Determine state ──────────────────────────────────────────────────
+        phase = self.game.turn_manager.current_phase
+        last_ap_roll = self.game.turn_manager.last_ap_roll
+        ap_tracker = self.game.turn_manager.ap_tracker
+
+        if phase == GamePhase.UBOAT_PHASE:
+            if last_ap_roll is None:
+                # Dice not yet rolled this turn
+                label = "ROLL DICE"
+                bg_color = (50, 90, 50)
+                border_color = (80, 160, 80)
+            elif ap_tracker is not None and ap_tracker.remaining() > 0:
+                # Has AP left to spend
+                label = "END TURN \u25ba"
+                bg_color = (40, 70, 110)
+                border_color = (80, 130, 200)
+            else:
+                # AP exhausted (ap_tracker is None or remaining <= 0)
+                label = "NEXT PHASE \u25ba"
+                bg_color = (60, 110, 60)
+                border_color = (100, 200, 100)
+        else:
+            # AI / escort / detection / merchant phases
+            if self.game.has_pending_ai_actions():
+                label = "EXECUTE ACTION"
+                bg_color = (110, 70, 30)
+                border_color = (200, 130, 60)
+            elif (self.action_execution_state and
+                  self.action_execution_state.get('waiting_for_continue', False)):
+                label = "NEXT STEP \u25ba"
+                bg_color = (40, 70, 110)
+                border_color = (80, 130, 200)
+            else:
+                label = "NEXT PHASE \u25ba"
+                bg_color = (60, 110, 60)
+                border_color = (100, 200, 100)
+
+        # ── Hover highlight ──────────────────────────────────────────────────
+        mouse_pos = pygame.mouse.get_pos()
+        if button_rect.collidepoint(mouse_pos):
+            bg_color = tuple(min(255, c + 30) for c in bg_color)
+            border_color = tuple(min(255, c + 20) for c in border_color)
+
+        # ── Draw ─────────────────────────────────────────────────────────────
+        pygame.draw.rect(self.screen, bg_color, button_rect, border_radius=6)
+        pygame.draw.rect(self.screen, border_color, button_rect, 2, border_radius=6)
+
+        self.draw_text(
+            label,
+            button_rect.centerx,
+            button_rect.centery,
+            self.font_large,
+            color=(255, 255, 255),
+            center=True,
+        )
+
+        # Store rect for click dispatch (mirrors phase_advance_button_rect role)
+        self.context_button_rect = button_rect
+
     def _get_action_description(self, action: Any) -> str:
         """Get descriptive name for an action."""
         action_type = type(action).__name__

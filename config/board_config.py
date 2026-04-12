@@ -324,7 +324,8 @@ UI: UIConfig = {
 # ====================
 # FEATURE FLAGS (Strangler Fig)
 # ====================
-NEW_UI_DICE = False  # Flip to True once validated
+NEW_UI_DICE = True  # Flip to True once validated
+NEW_UI_CONTEXT_BUTTON = False  # Flip to True once validated
 
 
 # ====================
