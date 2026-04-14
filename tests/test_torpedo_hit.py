@@ -5,8 +5,8 @@ from core.combat_resolver import CombatResolver
 from core.actions.fire_torpedo_action import FireTorpedoAction
 from core.torpedo_validator import TorpedoValidator
 from core.los import LOSCalculator
-from core.hex_grid import HexGrid
 from core.action_costs import ActionCostLookup
+from core.models import Facing
 
 if __name__ == "__main__":
     # Load mission rules
@@ -16,13 +16,13 @@ if __name__ == "__main__":
     dice = DiceRoller()
     resolver = CombatResolver(dice, mission_rules)
     validator = TorpedoValidator()
-    los_calc = LOSCalculator(HexGrid(50, 20, 20, 100, 100))
+    los_calc = LOSCalculator(set())
     cost_lookup = ActionCostLookup(mission_rules)
 
     # Create action
     action = FireTorpedoAction(
         tube_indices=[0],
-        fire_direction=None,
+        fire_direction=Facing.NORTH,
         cost_lookup=cost_lookup,
         validator=validator,
         los_calculator=los_calc,
