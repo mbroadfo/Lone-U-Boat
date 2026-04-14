@@ -12,14 +12,7 @@ This test can be extended as torpedo functionality is implemented:
 
 import sys
 from pathlib import Path
-from typing import cast, TextIO
-
-# Set UTF-8 encoding for Windows terminal
-if sys.platform == "win32":
-    import codecs
-    if hasattr(sys.stdout, 'detach'):
-        # Type checkers don't fully understand detach(), but it exists at runtime
-        sys.stdout = cast(TextIO, codecs.getwriter("utf-8")(sys.stdout.detach()))  # type: ignore[attr-defined]
+from typing import cast
 
 # Add project root to path
 project_root = Path(__file__).parent

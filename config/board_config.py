@@ -319,3 +319,24 @@ UI: UIConfig = {
     'font_size_large': 36,
     'u_boat_image_size': 50,  # Target size for U-boat images in hex
 }
+
+
+# ====================
+# FEATURE FLAGS (Strangler Fig)
+# ====================
+NEW_UI_DICE = True  # Flip to True once validated
+NEW_UI_CONTEXT_BUTTON = True  # Flip to True once validated
+
+
+# ====================
+# DICE TRAY COLORS
+# ====================
+DIE_COLORS: dict[str, tuple[int, int, int]] = {
+    'uboat':   (150, 160, 175),  # Steel gray
+    'escort':  (220,  80,  60),  # Red/orange
+    'merchant': (180, 150,  90),  # Tan/brown
+    'combat':  (220, 200,  60),  # Yellow (gun/torpedo resolution)
+    'pip':     (255, 255, 255),  # White pip dots
+    'border':  (200, 200, 210),  # Die border
+    'empty':   ( 60,  60,  75),  # Greyed-out die face (AP=0)
+}
