@@ -140,8 +140,8 @@ class B24BombAction(AIAction):
         # Validate aircraft still exists (may have been removed by earlier action)
         if self._aircraft_index >= len(game_state.aircraft):
             return ActionResult(
-                success=False,
-                message=f"Aircraft no longer exists (removed earlier)",
+                success=True,
+                message="B-24 bomb skipped — aircraft no longer exists",
                 ap_spent=0,
                 state_changes={}
             )
