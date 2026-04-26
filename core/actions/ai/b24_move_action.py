@@ -138,6 +138,20 @@ class B24MoveAction(AIAction):
             aircraft.position = new_pos
             self._moves_made.append(new_pos)
         
+        # Inject Flak+Bomb if aircraft is now at range 0-1 from U-boat
+        u_boat = getattr(game_state, 'u_boat', None)
+        if u_boat and hex_grid:
+            distance = hex_grid.hex_distance(aircraft.position, u_boat.position)
+            if distance <= 1:
+                from core.actions.ai.flak_defense_action import FlakDefenseAction
+                from core.actions.ai.b24_bomb_action import B24BombAction
+                queue = getattr(game_state, 'current_ai_queue', None)
+                if queue is not None:
+                    queue.insert_after_current([
+                        FlakDefenseAction(self._aircraft_index),
+                        B24BombAction(self._aircraft_index),
+                    ])
+
         return ActionResult(
             success=True,
             message=f"B-24 moved to [{aircraft.position.q},{aircraft.position.r}]",

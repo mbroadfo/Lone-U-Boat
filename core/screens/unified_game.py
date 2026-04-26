@@ -563,9 +563,13 @@ class UnifiedGameScreen(BaseScreen):
                                 if move_rect.collidepoint(mouse_pos) and can_exit:
                                     exit_button_clicked = True
                                     if is_clickable and self.game.running:
-                                        # Actually trigger exit
-                                        self.add_event("=== EXITING MAP ===")
-                                        self.game.trigger_victory()
+                                        agent_required = getattr(self.game.mission_config, 'SPECIAL_RULES', {}).get('agent_drop_required', False)
+                                        if agent_required and not self.agent_dropped:
+                                            self.add_event("Cannot exit — agent not yet dropped at X hex!")
+                                        else:
+                                            # Actually trigger exit
+                                            self.add_event("=== EXITING MAP ===")
+                                            self.game.trigger_victory()
                                     # If button not clickable (not enough AP), silently consume click
                                     # User needs to spend more AP first, then button will become clickable
                             
@@ -1320,8 +1324,10 @@ class UnifiedGameScreen(BaseScreen):
         line_height = 35
         
         if is_victory:
+            agent_required = getattr(self.game.mission_config, 'SPECIAL_RULES', {}).get('agent_drop_required', False)
+            primary_stat = "Agent delivered at Scarpa Flow!" if agent_required else "All merchant ships destroyed!"
             stats = [
-                "All merchant ships destroyed!",
+                primary_stat,
                 "",
                 f"Completed in {self.game.turn_manager.turn_number} turns",
                 f"Hull Damage: {self.game.u_boat.hull_damage}/4",

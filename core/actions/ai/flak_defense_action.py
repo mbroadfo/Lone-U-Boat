@@ -173,15 +173,12 @@ class FlakDefenseAction(AIAction):
             if outcome_roll <= 3:
                 self._outcome = 'shot_down'
                 self._b24_destroyed = True
-                
-                # Record destroyed B-24 for overlay
+                aircraft_pos = aircraft.position
+                # Remove immediately so the queued B24BombAction skips
+                if hasattr(game_state, 'aircraft') and self._aircraft_index < len(game_state.aircraft):
+                    game_state.aircraft.pop(self._aircraft_index)
                 if hasattr(game_state, 'record_destroyed_entity'):
-                    game_state.record_destroyed_entity(
-                        entity_type='b24',
-                        position=aircraft.position,
-                        name='B-24'
-                    )
-                
+                    game_state.record_destroyed_entity(entity_type='b24', position=aircraft_pos, name='B-24')
                 return ActionResult(
                     success=True,
                     message=f"Flak rolled [{self._flak_roll}] vs {threshold_text}: B-24 SHOT DOWN!",
@@ -191,15 +188,12 @@ class FlakDefenseAction(AIAction):
             else:
                 self._outcome = 'scared_off'
                 self._b24_destroyed = True
-                
-                # Record destroyed B-24 for overlay (scared off still removed)
+                aircraft_pos = aircraft.position
+                # Remove immediately so the queued B24BombAction skips
+                if hasattr(game_state, 'aircraft') and self._aircraft_index < len(game_state.aircraft):
+                    game_state.aircraft.pop(self._aircraft_index)
                 if hasattr(game_state, 'record_destroyed_entity'):
-                    game_state.record_destroyed_entity(
-                        entity_type='b24',
-                        position=aircraft.position,
-                        name='B-24'
-                    )
-                
+                    game_state.record_destroyed_entity(entity_type='b24', position=aircraft_pos, name='B-24')
                 return ActionResult(
                     success=True,
                     message=f"Flak rolled [{self._flak_roll}] vs {threshold_text}: B-24 SCARED OFF!",

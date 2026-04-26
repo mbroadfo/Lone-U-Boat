@@ -16,8 +16,6 @@ from core.actions.ai import (
     MerchantVisualAction,
     B24MoveAction,
     B24TurnAction,
-    B24BombAction,
-    FlakDefenseAction
 )
 
 
@@ -192,15 +190,6 @@ def generate_b24_actions(game_state: Any) -> AIActionQueue:
                 detection_level=game_state.detection_level
             ))
         
-        # 3. Bombing attack (if over target)
-        if aircraft.position == game_state.u_boat.position:
-            queue.add(B24BombAction(
-                aircraft_index=aircraft_idx
-            ))
-            
-            # 4. Flak defense (if bombing)
-            queue.add(FlakDefenseAction(
-                aircraft_index=aircraft_idx
-            ))
+        # Flak/bomb are injected by B24MoveAction after the aircraft lands in R0-1
     
     return queue
