@@ -168,6 +168,7 @@
       "phase": null,
       "type": "victory_conditions",
       "label": "Victory Conditions",
+      "success_message": "All merchant ships destroyed!",
       "primary": {
         "description": "Destroy the Merchant Ship",
         "condition": "merchant_sunk",

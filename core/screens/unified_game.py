@@ -1324,8 +1324,8 @@ class UnifiedGameScreen(BaseScreen):
         line_height = 35
         
         if is_victory:
-            agent_required = getattr(self.game.mission_config, 'SPECIAL_RULES', {}).get('agent_drop_required', False)
-            primary_stat = "Agent delivered at Scarpa Flow!" if agent_required else "All merchant ships destroyed!"
+            victory_conds = self.game.mission_rules.get_victory_conditions() or {}
+            primary_stat = victory_conds.get('success_message', 'Mission objective complete!')
             stats = [
                 primary_stat,
                 "",

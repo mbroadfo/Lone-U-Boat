@@ -812,7 +812,9 @@ class Game:
         print(f"\n{'='*60}")
         print("MISSION SUCCESS!")
         print(f"{'='*60}")
-        print(f"All merchant ships destroyed!")
+        victory_conds = self.mission_rules.get_victory_conditions() or {}
+        success_msg = victory_conds.get('success_message', 'Mission objective complete!')
+        print(f"{success_msg}")
         print(f"U-boat escaped via exit hex!")
         print(f"Turn: {self.turn_manager.turn_number}")
         print(f"Final Position: {self.u_boat.position}")
