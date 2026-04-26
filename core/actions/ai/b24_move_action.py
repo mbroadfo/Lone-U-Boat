@@ -138,6 +138,24 @@ class B24MoveAction(AIAction):
             aircraft.position = new_pos
             self._moves_made.append(new_pos)
         
+        # Inject Flak/Bomb if aircraft is now at range 0-1 and U-boat is vulnerable
+        # B24 can only attack a Surfaced or Periscope U-boat (rules: ATTACK R0-1)
+        u_boat = getattr(game_state, 'u_boat', None)
+        if u_boat and hex_grid:
+            from core.models import Depth
+            distance = hex_grid.hex_distance(aircraft.position, u_boat.position)
+            if distance <= 1 and u_boat.depth in (Depth.SURFACED, Depth.PERISCOPE):
+                from core.actions.ai.b24_bomb_action import B24BombAction
+                queue = getattr(game_state, 'current_ai_queue', None)
+                if queue is not None:
+                    inject = []
+                    # Flak defense only possible when U-boat is surfaced
+                    if u_boat.depth == Depth.SURFACED:
+                        from core.actions.ai.flak_defense_action import FlakDefenseAction
+                        inject.append(FlakDefenseAction(self._aircraft_index))
+                    inject.append(B24BombAction(self._aircraft_index))
+                    queue.insert_after_current(inject)
+
         return ActionResult(
             success=True,
             message=f"B-24 moved to [{aircraft.position.q},{aircraft.position.r}]",

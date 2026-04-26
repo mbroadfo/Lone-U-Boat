@@ -158,6 +158,7 @@
       "phase": null,
       "type": "victory_conditions",
       "label": "Victory Conditions",
+      "success_message": "Agent delivered at Scarpa Flow!",
       "primary": {
         "description": "Drop the agent — be SURFACED at the X hex at the end of your U-Boat Phase",
         "condition": "agent_dropped",

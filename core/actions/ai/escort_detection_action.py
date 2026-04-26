@@ -312,20 +312,21 @@ class EscortDetectionAction(AIAction):
         # Check success
         self._success = self._roll >= self._threshold
         
-        # Calculate new DL
+        # Calculate new DL — read live state so sequential successes each add +1
         if self._success:
-            self._new_detection_level = min(3, self._current_detection_level + 1)
-            
+            current_live_dl = getattr(game_state, 'detection_level', self._current_detection_level)
+            self._new_detection_level = min(3, current_live_dl + 1)
+
             # Update game state DL
             if hasattr(game_state, 'detection_level'):
                 game_state.detection_level = self._new_detection_level
-            
+
             return ActionResult(
                 success=True,
                 message=(
                     f"{escort.ship_type.capitalize()} at R{self._range_to_uboat} "
                     f"rolled [{self._roll}] vs {self._threshold}+: SUCCESS! "
-                    f"DL {self._current_detection_level} -> {self._new_detection_level}"
+                    f"DL {current_live_dl} -> {self._new_detection_level}"
                 ),
                 ap_spent=0,
                 state_changes={"detection_level": self._new_detection_level}
