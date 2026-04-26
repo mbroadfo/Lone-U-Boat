@@ -198,24 +198,18 @@ class UBoatAI:
             
             if result['hits'] > 0:
                 total_hits += result['hits']
-                
-                # Roll damage for all hits
-                damage_rolls = combat_resolver.roll_torpedo_damage(result['hits'])
-                
-                # Apply each hit's damage
-                for i, (damage_roll, damage_desc) in enumerate(damage_rolls):
-                    systems_damaged, effect = ship_damage.resolve_damage(
-                        ship=ship,
-                        damage_roll=damage_roll
-                    )
-                    
+
+                # Apply damage for each hit
+                for i in range(result['hits']):
+                    damage_result = ship_damage.apply_damage(ship=ship, weapon_type='torpedo')
+
                     messages.append(
                         f"[COMBAT] Torpedo #{i+1} HIT {ship.ship_type} at range {distance} ({aspect}): "
-                        f"Roll {damage_roll} - {effect}"
+                        f"Roll {damage_result.roll} - {damage_result.description}"
                     )
-                    
-                    if ship.damaged or systems_damaged:
-                        messages.append(f"[DAMAGE] {ship.ship_type} damaged: {systems_damaged}")
+
+                    if damage_result.is_now_sunk:
+                        messages.append(f"[DAMAGE] {ship.ship_type} SUNK")
                 
                 # Track DL increase (+1 per hit, max +2)
                 dl_increase = min(dl_increase + result['hits'], 2)
@@ -259,20 +253,15 @@ class UBoatAI:
         hit, roll_result, desc = combat_resolver.resolve_deck_gun_attack(range_to_target)
         
         if hit:
-            # Roll damage
-            damage_roll, damage_desc = combat_resolver.roll_deck_gun_damage()
-            systems_damaged, effect = ship_damage.resolve_damage(
-                ship=target_ship,
-                damage_roll=damage_roll
-            )
-            
+            damage_result = ship_damage.apply_damage(ship=target_ship, weapon_type='deck_gun')
+
             messages.append(
                 f"[COMBAT] Deck Gun HIT {target_ship.ship_type} at range {range_to_target}: "
-                f"2d6={roll_result}, Damage={damage_roll} - {effect}"
+                f"2d6={roll_result}, Damage={damage_result.roll} - {damage_result.description}"
             )
-            
-            if target_ship.damaged or systems_damaged:
-                messages.append(f"[DAMAGE] {target_ship.ship_type} damaged: {systems_damaged}")
+
+            if damage_result.is_now_sunk:
+                messages.append(f"[DAMAGE] {target_ship.ship_type} SUNK")
             
             # DL increases by 1 on hit
             old_dl = self.game.detection_level
