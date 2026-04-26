@@ -185,7 +185,7 @@ class Game:
         # Use provided initial settings or defaults from mission config
         initial_position = HexCoord(*u_boat_start['position'])
         initial_facing_value = initial_facing if initial_facing else Facing[u_boat_start['facing']]
-        initial_depth_value = initial_depth if initial_depth else Depth.SURFACED
+        initial_depth_value = initial_depth if initial_depth else Depth[u_boat_start.get('depth', 'SURFACED')]
         
         self.u_boat = UBoat(
             position=initial_position,

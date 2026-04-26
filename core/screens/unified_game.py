@@ -64,9 +64,11 @@ class UnifiedGameScreen(BaseScreen):
         
         # UI state
         self.awaiting_initial_setup = True  # Player needs to choose depth/facing
-        self.selected_depth = Depth.SURFACED
-        self.selected_facing = Facing.NORTH
+        u_boat_start = self.game.mission_config.U_BOAT_START
+        self.selected_depth = Depth[u_boat_start.get('depth', 'SURFACED')]
+        self.selected_facing = Facing[u_boat_start.get('facing', 'NORTH')]
         self.showing_exit_confirmation = False  # ESC confirmation dialog
+        self.agent_dropped = False  # True once U-boat surfaces at AGENT_DROP_HEX
         
         # Setup UI rects (for clickable buttons)
         self.setup_depth_rects: Dict[Depth, pygame.Rect] = {}
@@ -506,24 +508,13 @@ class UnifiedGameScreen(BaseScreen):
                                     self.dice_scramble_start = pygame.time.get_ticks()
                                     self.dice_scramble_target = list(roll_info['rolls'])
                             elif self.game.has_pending_ai_actions():
-                                # EXECUTE ACTION — same as execute_ai_action_button click
-                                current_action = self.game.current_ai_queue.current_action() if self.game.current_ai_queue else None
-                                needs_dice_roll = current_action and getattr(current_action, 'requires_player_input', False)
-                                if needs_dice_roll:
-                                    action_preview = self.game.get_current_ai_action_preview()
-                                    self.ai_dice_roll_state = {
-                                        'action_name': action_preview.get('action_name', 'AI Action') if action_preview else 'AI Action',
-                                        'details': action_preview.get('details', '') if action_preview else '',
-                                        'waiting_for_roll': True
-                                    }
-                                else:
-                                    _, result_msg = self.game.execute_next_ai_action()
-                                    if result_msg:
-                                        self.add_event(result_msg)
-                                    self._print_game_over_banner()
-                                    if not self.game.running:
-                                        self.render()
-                                        pygame.time.wait(100)
+                                _, result_msg = self.game.execute_next_ai_action()
+                                if result_msg:
+                                    self.add_event(result_msg)
+                                self._print_game_over_banner()
+                                if not self.game.running:
+                                    self.render()
+                                    pygame.time.wait(100)
                             else:
                                 # NEXT PHASE / NEXT STEP / END TURN — same as phase_advance_button click
                                 if _phase != _GP.UBOAT_PHASE or _last_ap is not None:
@@ -676,14 +667,14 @@ class UnifiedGameScreen(BaseScreen):
             self.add_event(f"U-Boat positioned at {self.selected_depth.name}, facing {self.selected_facing.name}")
             self.add_event("Turn 1 - U-Boat Phase")
         
-        # Depth selection
-        elif event.key == pygame.K_1:
+        # Depth selection (blocked when mission locks starting depth)
+        elif not self._starting_depth_locked and event.key == pygame.K_1:
             self.selected_depth = Depth.SURFACED
-        elif event.key == pygame.K_2:
+        elif not self._starting_depth_locked and event.key == pygame.K_2:
             self.selected_depth = Depth.PERISCOPE
-        elif event.key == pygame.K_3:
+        elif not self._starting_depth_locked and event.key == pygame.K_3:
             self.selected_depth = Depth.MEDIUM
-        elif event.key == pygame.K_4:
+        elif not self._starting_depth_locked and event.key == pygame.K_4:
             self.selected_depth = Depth.DEEP
         
         # Facing selection
@@ -700,6 +691,11 @@ class UnifiedGameScreen(BaseScreen):
         elif event.key == pygame.K_d:
             self.selected_facing = Facing.NORTHEAST
     
+    @property
+    def _starting_depth_locked(self) -> bool:
+        """True when the mission forces a specific starting depth."""
+        return bool(self.game.mission_config.SPECIAL_RULES.get('starting_depth'))
+
     def _handle_setup_clicks(self, mouse_pos: tuple[int, int]) -> None:
         """Handle mouse clicks during initial setup phase.
         
@@ -719,7 +715,19 @@ class UnifiedGameScreen(BaseScreen):
         # Don't advance if game is over
         if not self.game.running:
             return
-        
+
+        # Agent drop check — fires at the moment the U-Boat Phase ends
+        from ..models import GamePhase, Depth as DepthEnum
+        if self.game.turn_manager.current_phase == GamePhase.UBOAT_PHASE:
+            agent_drop_hex = getattr(self.game.mission_config, 'AGENT_DROP_HEX', None)
+            pos = self.game.u_boat.position
+            if (agent_drop_hex
+                    and not self.agent_dropped
+                    and self.game.u_boat.depth == DepthEnum.SURFACED
+                    and (pos.q, pos.r) == agent_drop_hex):
+                self.agent_dropped = True
+                self.add_event("★ AGENT DROPPED at X hex — now exit via the red arrow!")
+
         # Forward phase advancement to game.
         # Phase entry logic (e.g. _execute_merchant_phase) runs inside here and
         # adds startup messages to turn_manager.phase_logs for the NEW phase.
@@ -3749,11 +3757,11 @@ class UnifiedGameScreen(BaseScreen):
             center=True
         )
         self.draw_text(
-            "[Keys 1-4]",
+            "LOCKED" if self._starting_depth_locked else "[Keys 1-4]",
             x + width // 2,
             depth_y + 50,
             self.font_small,
-            color=(120, 140, 160),
+            color=(255, 100, 100) if self._starting_depth_locked else (120, 140, 160),
             center=True
         )
         

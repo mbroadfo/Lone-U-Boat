@@ -28,7 +28,12 @@ class MainMenuScreen(BaseScreen):
                 'unlocked': True,
                 'description': 'Two corvettes escort the merchant. Destroy it before it escapes.'
             },
-            {'number': 3, 'name': 'Escort Hunter', 'unlocked': False, 'description': 'Coming soon...'},
+            {
+                'number': 3,
+                'name': 'Special Operation: Agent Transport to Scarpa Flow',
+                'unlocked': True,
+                'description': 'Surface at the X hex to drop the agent, then escape. No merchant — one destroyer, two corvettes, B24s active.'
+            },
             {'number': 4, 'name': 'Wolf Pack', 'unlocked': False, 'description': 'Coming soon...'},
         ]
         

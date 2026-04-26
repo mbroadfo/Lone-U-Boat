@@ -1,7 +1,7 @@
 {
-  "mission_id": 2,
-  "title": "Mission 2: Supply Ship Attack: North East of Scotland",
-  "objective": "Destroy the Merchant Ship before it exits the map, then exit the map in the direction of the red arrow.",
+  "mission_id": 3,
+  "title": "Mission 3: Special Operation: Agent Transport to Scarpa Flow, North Scotland",
+  "objective": "Surface at the X hex at the end of your U-Boat Phase to drop the German agent, then exit the map in the direction of the red arrow. You must start this mission at Medium depth.",
   "phases": [
     {
       "id": 1,
@@ -13,6 +13,11 @@
           "type": "text_block",
           "style": "intro_box",
           "text": "Roll 3 dice (2 dice if Engine is Damaged); AP this turn = highest die rolled + 1 AP if Captain is alive"
+        },
+        {
+          "type": "text_block",
+          "style": "mission_objective_box",
+          "text": "MISSION OBJECTIVE: At the end of your U-Boat Phase, if you are SURFACED on the X hex, the agent is dropped. You may then exit the map via the red arrow on any subsequent turn."
         },
         {
           "type": "table",
@@ -54,49 +59,15 @@
           "type": "table",
           "id": "torpedo_attack",
           "style": "attack_table",
-          "title": "Torpedo Attack",
-          "columns": ["", "Range", "1-2", "3-4", "5-6"],
-          "rows": [
-            { "cells": ["Attack Type", "R1-9", "", "", ""] },
-            { "cells": ["To Hit Side", "", "3+", "4+", "5+"] },
-            { "cells": ["To Hit Front/Rear", "", "4+", "5+", "6+"] }
-          ],
-          "notes": [
-            "Fire 1-3 torpedoes (R1-9). Roll 1d6 per torpedo.",
-            "If Fire 3 torpedoes, DL +1. If any hit, DL +1.",
-            "Target first ship along line of fire. Missed torpedoes continue to other ships beyond."
-          ]
-        },
-        {
-          "type": "table",
-          "id": "allied_ship_damage",
-          "style": "damage_chart",
-          "title": "Allied Ship Damage Chart (for each Torpedo / Deck Gun Hit on a Ship, roll d6)",
-          "columns": ["Ship", "1", "2-3", "4-6"],
-          "rows": [
-            {
-              "cells": ["Merchant", "No damage", "Damaged \u2192 Sunk", "Catastrophic \u2192 Sunk"],
-              "styles": ["", "result_ok", "result_warning", "result_critical"]
-            },
-            {
-              "cells": ["Corvette", "1-2: No damage", "3-4: Damaged \u2192 Sunk", "5-6: Catastrophic \u2192 Sunk"],
-              "styles": ["", "result_ok", "result_warning", "result_critical"]
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "id": "torpedo_attack",
-          "style": "attack_table",
           "title": "FIRE TORPS",
-          "columns": ["", "Range", "1\u20132", "3\u20134", "5\u20136"],
+          "columns": ["", "Range", "1–2", "3–4", "5–6"],
           "rows": [
-            { "cells": ["Attack Type", "R1\u20139", "", "", ""], "style": "header" },
+            { "cells": ["Attack Type", "R1–9", "", "", ""], "style": "header" },
             { "cells": ["To Hit Side", "", "3+", "4+", "5+"], "style": "to_hit_side" },
             { "cells": ["To Hit Front/Rear", "", "4+", "5+", "6+"], "style": "to_hit_front_rear" }
           ],
           "notes": [
-            "Fire 1\u20133 torpedoes (R1\u20139). Roll 1d6 per torpedo.",
+            "Fire 1–3 torpedoes (R1–9). Roll 1d6 per torpedo.",
             "Target first ship along line of fire. Missed torpedoes continue to other ships beyond.",
             "If Fire 3 torpedoes, DL +1. If any hit, DL +1."
           ]
@@ -106,10 +77,10 @@
           "id": "allied_ship_damage",
           "style": "damage_chart",
           "title": "Allied Ship Damage Chart (for each Torpedo / Deck Gun hit on a Ship, roll d6 for damage)",
-          "columns": ["Ship", "1", "2\u20133", "4\u20136"],
+          "columns": ["Ship", "1", "2–3", "4–6"],
           "rows": [
-            { "cells": ["Merchant", "No significant damage", "Damaged \u2192 Sunk", "Catastrophic Hit \u2192 Sunk"], "styles": ["", "result_ok", "result_warning", "result_critical"] },
-            { "cells": ["Corvette", "1\u20132: No significant damage", "3\u20134: Damaged \u2192 Sunk", "5\u20136: Catastrophic Hit \u2192 Sunk"], "styles": ["", "result_ok", "result_warning", "result_critical"] }
+            { "cells": ["Corvette", "1–2: No significant damage", "3–4: Damaged → Sunk", "5–6: Catastrophic Hit → Sunk"], "styles": ["", "result_ok", "result_warning", "result_critical"] },
+            { "cells": ["Destroyer", "No significant damage", "Damaged → Sunk", "Catastrophic Hit → Sunk"], "styles": ["", "result_ok", "result_warning", "result_critical"] }
           ]
         }
       ]
@@ -117,13 +88,13 @@
     {
       "id": 2,
       "name": "Merchant Ships Phase",
-      "header_band_color": "yellow",
-      "header_text": "",
+      "header_band_color": "grey",
+      "header_text": "SKIP — No merchant in this mission",
       "sections": [
         {
           "type": "text_block",
-          "style": "phase_intro",
-          "text": "If Undamaged: MOVE 1 hex. If Damaged: roll 1d6; on 4+ MOVE 1 hex. Always face dotted line direction."
+          "style": "phase_skip",
+          "text": "There is no merchant ship in Mission 3. Skip this phase entirely."
         }
       ]
     },
@@ -143,7 +114,7 @@
           "id": "base_detection_roll",
           "style": "detection_table",
           "title": "Base Detection Roll needed",
-          "columns": ["U-Boat is\u2026", "Surfaced", "Periscope", "Medium", "Deep"],
+          "columns": ["U-Boat is…", "Surfaced", "Periscope", "Medium", "Deep"],
           "rows": [
             { "cells": ["Target number", "1+", "2+", "4+", "5+"], "style": "base_values" }
           ]
@@ -171,30 +142,35 @@
           "type": "table",
           "id": "escort_actions",
           "style": "escort_table",
-          "columns": ["d6", "CORVETTE 1: Dice = 2 + DL (2 if damaged)", "CORVETTE 2: Dice = 2 + DL (2 if damaged)"],
+          "columns": [
+            "d6",
+            "DESTROYER: Dice = 3 + DL (3 if damaged)",
+            "CORVETTE 1: Dice = 2 + DL (2 if damaged)",
+            "CORVETTE 2: Dice = 2 + DL (2 if damaged)"
+          ],
           "rows": [
-            { "cells": ["1", "If DL = 1\u20133: FIRE (Surfaced) or DEPTH CHARGE (Submerged)", "If DL = 1\u20133: FIRE (Surfaced) or DEPTH CHARGE (Submerged)"], "style": "row1" },
-            { "cells": ["2", "MOVE   |   If blocked, TURN   |   If DL = 1\u20133: DEPTH CHARGE", "MOVE   |   If blocked, TURN   |   If DL = 1\u20133: DEPTH CHARGE"], "style": "row2" },
-            { "cells": ["3", "MOVE   |   TURN   |   If DL = 1\u20133: DEPTH CHARGE", "MOVE   |   TURN   |   If DL = 1\u20133: DEPTH CHARGE"], "style": "row3" },
-            { "cells": ["4", "MOVE   |   If blocked, TURN   |   If DL = 1\u20133: DEPTH CHARGE", "MOVE   |   If blocked, TURN   |   If DL = 1\u20133: DEPTH CHARGE"], "style": "row4" },
-            { "cells": ["5", "If DL = 1\u20133: FIRE", "If DL = 1\u20133: FIRE"], "style": "row5" },
-            { "cells": ["6", "MOVE   |   TURN   |   If DL = 1\u20133: DEPTH CHARGE", "MOVE   |   TURN   |   If DL = 1\u20133: DEPTH CHARGE"], "style": "row6" }
+            { "cells": ["1", "If DL = 1–3: FIRE (Surfaced) or DEPTH CHARGE (Submerged)", "If DL = 1–3: FIRE (Surfaced) or DEPTH CHARGE (Submerged)", "If DL = 1–3: FIRE (Surfaced) or DEPTH CHARGE (Submerged)"], "style": "row1" },
+            { "cells": ["2", "MOVE   |   If blocked, TURN   |   If DL = 1–3: DEPTH CHARGE", "MOVE   |   If blocked, TURN   |   If DL = 1–3: DEPTH CHARGE", "MOVE   |   If blocked, TURN   |   If DL = 1–3: DEPTH CHARGE"], "style": "row2" },
+            { "cells": ["3", "MOVE   |   TURN   |   If DL = 1–3: DEPTH CHARGE", "MOVE   |   TURN   |   If DL = 1–3: DEPTH CHARGE", "MOVE   |   TURN   |   If DL = 1–3: DEPTH CHARGE"], "style": "row3" },
+            { "cells": ["4", "MOVE   |   If blocked, TURN   |   If DL = 1–3: DEPTH CHARGE", "MOVE   |   If blocked, TURN   |   If DL = 1–3: DEPTH CHARGE", "MOVE   |   If blocked, TURN   |   If DL = 1–3: DEPTH CHARGE"], "style": "row4" },
+            { "cells": ["5", "If DL = 1–3: FIRE", "If DL = 1–3: FIRE", "If DL = 1–3: FIRE"], "style": "row5" },
+            { "cells": ["6", "MOVE   |   TURN   |   If DL = 1–3: DEPTH CHARGE", "MOVE   |   TURN   |   If DL = 1–3: DEPTH CHARGE", "MOVE   |   TURN   |   If DL = 1–3: DEPTH CHARGE"], "style": "row6" }
           ]
         },
         {
           "type": "text_block",
           "style": "rules_depth_charge",
-          "text": "DEPTH CHARGE: If U-Boat is not Surfaced and is at Range 0\u20131, roll 1d6 on U-Boat Damage Chart."
+          "text": "DEPTH CHARGE: If U-Boat is not Surfaced and is at Range 0–1, roll on U-Boat Damage Chart. DESTROYER rolls 2d6, takes lowest result (more dangerous). CORVETTE rolls 1d6."
         },
         {
           "type": "text_block",
           "style": "rules_turn",
-          "text": "TURN: If DL = 0\u20131, turn 1 hex edge towards Anchor. If DL = 2\u20133, turn 1 hex edge towards U-Boat. If facing U-Boat/Anchor, only turn if blocked (turn randomly). If facing away, turn randomly. If on same hex as U-Boat/Anchor, only turn if blocked (turn randomly)."
+          "text": "TURN: If DL = 0–1, turn 1 hex edge towards Anchor. If DL = 2–3, turn 1 hex edge towards U-Boat. If facing U-Boat/Anchor, only turn if blocked (turn randomly). If facing away, turn randomly. If on same hex as U-Boat/Anchor, only turn if blocked (turn randomly)."
         },
         {
           "type": "text_block",
           "style": "rules_fire",
-          "text": "FIRE: If U-Boat is Surfaced, in LoS and at Range 1\u20133, set DL to 3 and roll as a Critical Hit on U-Boat Damage Chart below."
+          "text": "FIRE: If U-Boat is Surfaced, in LoS and at Range 1–3, set DL to 3 and roll as a Critical Hit on U-Boat Damage Chart below."
         }
       ]
     },
@@ -207,12 +183,12 @@
         {
           "type": "text_block",
           "style": "phase_intro",
-          "text": "MOVE 2 hexes. Remove B24 if it exits the map. If DL = 2\u20133, TURN 1 hex edge in direction of U-Boat. If facing U-Boat, do not turn. If facing away, turn randomly."
+          "text": "MOVE 2 hexes. Remove B24 if it exits the map. If DL = 2–3, TURN 1 hex edge in direction of U-Boat. If facing U-Boat, do not turn. If facing away, turn randomly."
         },
         {
           "type": "text_block",
           "style": "rules_attack",
-          "text": "ATTACK (R0\u20131): If U-Boat Surfaced or Periscope depth and Flak Gun undamaged & U-Boat surfaced, roll 2d6: destroy B24 on 7+ if Lookout is alive. If B24 survives, roll 1d6: 1\u20132 +2 Hull Damage, 3\u20134: roll on U-Boat Damage Chart below, 5\u20136: Miss."
+          "text": "ATTACK (R0–1): If U-Boat Surfaced or Periscope depth and Flak Gun undamaged & U-Boat surfaced, roll 2d6: destroy B24 on 7+ if Lookout is alive. If B24 survives, roll 1d6: 1–2 +2 Hull Damage, 3–4: roll on U-Boat Damage Chart below, 5–6: Miss."
         },
         {
           "type": "table",
@@ -221,10 +197,10 @@
           "title": "U-Boat Damage Chart (Depth Charge, Ship Gun Fire and B24 Aircraft attacks)",
           "columns": ["d6", "Result"],
           "rows": [
-            { "cells": ["1", "Critical Hit: U-Boat Destroyed   (+2 Hull Damage)   3\u20134: Torp tubes 3d6   5\u20136: Damage \u00d7 2 (roll twice at 3\u20134 below)"], "style": "critical" },
+            { "cells": ["1", "Critical Hit: U-Boat Destroyed   (+2 Hull Damage)   3–4: Torp tubes 3d6   5–6: Damage × 2 (roll twice at 3–4 below)"], "style": "critical" },
             { "cells": ["2", "Hull Damage: +1 Hull Damage"], "style": "hull" },
-            { "cells": ["3\u20134", "Damage: Roll 1d6. 1: +1 Hull Damage, 2: Flak gun, 3: Torp tubes 2d6, 4\u20135: Engine, 6: Deck gun (no effect if already damaged)."], "style": "damage" },
-            { "cells": ["5\u20136", "Crew KIA: Roll d6 for Crew member (no effect if already KIA). If Medic is alive, roll d6 to avoid KIA on 5+."], "style": "crew" }
+            { "cells": ["3–4", "Damage: Roll 1d6. 1: +1 Hull Damage, 2: Flak gun, 3: Torp tubes 2d6, 4–5: Engine, 6: Deck gun (no effect if already damaged)."], "style": "damage" },
+            { "cells": ["5–6", "Crew KIA: Roll d6 for Crew member (no effect if already KIA). If Medic is alive, roll d6 to avoid KIA on 5+."], "style": "crew" }
           ]
         }
       ]
@@ -243,38 +219,31 @@
           "rows": [
             {
               "cells": [
-                "2\u20135",
-                "If DL = 2\u20133: place B24 facing U-Boat, on edge hex of map which is furthest from and on same hex-line as U-Boat."
+                "2–7",
+                "If DL = 2–3: place B24 facing U-Boat, on edge hex of map which is furthest from and on same hex-line as U-Boat."
               ],
               "style": "event_b24_spawn"
             },
             {
               "cells": [
-                "6",
+                "8",
                 "Escort Detection: If DL is not already at 3, perform Phase 3 (Detection Phase) again now."
               ],
               "style": "event_escort_detection"
             },
             {
               "cells": [
-                "7",
+                "9",
                 "If U-Boat is Surfaced or at Periscope depth, radio intercepted by Allies: If DL = 0 then set DL to 1."
               ],
               "style": "event_radio"
             },
             {
               "cells": [
-                "8",
+                "10+",
                 "Hull Pressure: If Deep, Hull groans under the pressure: +1 Hull Damage (U-Boat must ascend to Medium depth)."
               ],
               "style": "event_hull_pressure"
-            },
-            {
-              "cells": [
-                "9+",
-                "If U-Boat not Surfaced and Engine is not damaged, U-Boat runs silently for a while: -1 DL."
-              ],
-              "style": "event_silent_running"
             }
           ]
         }
@@ -282,6 +251,24 @@
     }
   ],
   "global_notes": [
+    {
+      "id": "starting_depth",
+      "title": "Starting Depth",
+      "style": "global_note",
+      "text": [
+        "You must start Mission 3 with your U-Boat at Medium depth. You cannot choose a different starting depth."
+      ]
+    },
+    {
+      "id": "agent_drop_rule",
+      "title": "Agent Drop Objective",
+      "style": "global_note",
+      "text": [
+        "To drop the agent, you must be SURFACED on the X hex at the END of your U-Boat Phase (not mid-phase).",
+        "Once the agent is dropped, you may exit the map via the red arrow on any subsequent turn.",
+        "Exiting before the agent is dropped counts as mission failure."
+      ]
+    },
     {
       "id": "ship_movement_forced_dive",
       "title": "Ship Movement and Forced Dive",
