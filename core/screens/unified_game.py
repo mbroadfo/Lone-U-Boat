@@ -364,8 +364,10 @@ class UnifiedGameScreen(BaseScreen):
                 if event.key == pygame.K_SPACE:
                     # SPACE key only advances NON-U-Boat phases (AI phases)
                     # For U-Boat phase, player must use NEXT PHASE button explicitly
+                    # Never advance when pending AI actions exist — player must execute them first
                     from ..models import GamePhase
-                    if self.game.turn_manager.current_phase != GamePhase.UBOAT_PHASE:
+                    if (self.game.turn_manager.current_phase != GamePhase.UBOAT_PHASE
+                            and not self.game.has_pending_ai_actions()):
                         self._advance_phase_and_update_ui()
                 
                 elif event.key == pygame.K_u:

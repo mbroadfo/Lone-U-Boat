@@ -132,10 +132,11 @@ class EscortMoveAction(AIAction):
         
         if hasattr(game_state, 'u_boat') and game_state.u_boat.position == self.target_hex:
             u_boat = game_state.u_boat
-            if u_boat.depth == Depth.SURFACED:
-                shallow_hexes: set[HexCoord] = getattr(game_state, 'shallow_hexes', set())
-                
-                # Check if forced dive destroys U-boat
+            shallow_hexes: set[HexCoord] = getattr(game_state, 'shallow_hexes', set())
+
+            # Forced dive: escort entering hex of Surfaced or Periscope U-boat forces it to Medium.
+            # DL+1 and -2 AP next turn. If Medium is unreachable (shallow), U-boat is Destroyed.
+            if u_boat.depth in (Depth.SURFACED, Depth.PERISCOPE):
                 if self.target_hex in shallow_hexes:
                     self.uboat_destroyed = True
                     u_boat.hull_damage = 4
@@ -152,15 +153,15 @@ class EscortMoveAction(AIAction):
                     u_boat.depth = Depth.MEDIUM
                     state_changes['forced_dive'] = True
                     state_changes['new_depth'] = Depth.MEDIUM
-                    
-                    # Increase DL
+
+                    # DL+1
                     if hasattr(game_state, 'detection_level'):
                         game_state.detection_level = min(3, game_state.detection_level + 1)
                         state_changes['detection_level_change'] = 1
-                    
-                    # Apply forced dive penalty
+
+                    # -2 AP next turn
                     if hasattr(game_state, 'turn_manager') and game_state.turn_manager:
-                        game_state.turn_manager.force_dive_penalty = 1
+                        game_state.turn_manager.force_dive_penalty = 2
                         state_changes['dive_penalty_applied'] = True
         
         distance = 0

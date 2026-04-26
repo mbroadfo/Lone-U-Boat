@@ -29,6 +29,7 @@ from .merchant_ai import MerchantAI
 from .detection_ai import DetectionAI
 from .escort_ai import EscortAI
 from .b24_ai import B24AI
+from .combat_resolver import CombatResolver
 from .event_system import EventSystem
 from missions.mission_rules_loader import load_mission_rules
 
@@ -108,6 +109,9 @@ class Game:
             mission_rules=self.mission_rules  # type: ignore[arg-type]
         )
         
+        # Combat resolver used by UBoatAI for torpedo/deck gun resolution
+        self.combat_resolver = CombatResolver(self.turn_manager.dice, self.mission_rules)
+
         # Initialize Event System
         self.event_system = EventSystem(
             mission_rules=self.mission_rules,  # type: ignore[arg-type]

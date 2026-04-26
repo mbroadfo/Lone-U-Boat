@@ -139,13 +139,31 @@ class FlakDefenseAction(AIAction):
         # Validate aircraft still exists (may have been removed by earlier action)
         if self._aircraft_index >= len(game_state.aircraft):
             return ActionResult(
-                success=False,
-                message=f"Aircraft no longer exists (removed earlier)",
+                success=True,
+                message="Flak skipped — aircraft no longer exists",
                 ap_spent=0,
                 state_changes={}
             )
-        
+
         u_boat: UBoat = game_state.u_boat
+
+        # Runtime guard: flak requires surfaced U-boat with a working gun.
+        # validate() is never called by the queue — these checks must live here.
+        if u_boat.flak_gun_damaged:
+            return ActionResult(
+                success=True,
+                message="Flak skipped — gun damaged",
+                ap_spent=0,
+                state_changes={}
+            )
+        if u_boat.depth != Depth.SURFACED:
+            return ActionResult(
+                success=True,
+                message=f"Flak skipped — U-boat at {u_boat.depth.name} (not surfaced)",
+                ap_spent=0,
+                state_changes={}
+            )
+
         aircraft: Aircraft = game_state.aircraft[self._aircraft_index]
         dice = getattr(game_state, 'dice_roller', None)
         
