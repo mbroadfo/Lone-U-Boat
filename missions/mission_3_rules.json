@@ -1,0 +1,177 @@
+{
+  "_comment": "Mission 3 - Delta-only rules (inherits from baseline layers)",
+  "_version": "2.0",
+  "inherits": [
+    "core_system_rules",
+    "u_boat_ruleset_default",
+    "escort_ai_baseline"
+  ],
+  "mission_meta": {
+    "number": 3,
+    "title": "Special Operation: Agent Transport to Scarpa Flow, North Scotland",
+    "subtitle": null,
+    "objective": "Surface at the X hex at the end of your U-Boat Phase to drop the agent, then exit the map in the direction of the red arrow.",
+    "map_image": "assets/maps/mission_3.png",
+    "difficulty": "advanced",
+    "estimated_turns": null,
+    "starting_depth": "MEDIUM",
+    "has_merchant": false
+  },
+  "sections": [
+    {
+      "id": "starting_conditions",
+      "phase": null,
+      "type": "starting_rules",
+      "label": "Starting Conditions",
+      "rules": [
+        {
+          "condition": "MISSION_START",
+          "action": "SET_DEPTH",
+          "value": "MEDIUM",
+          "notes": "U-Boat must begin this mission at Medium depth — cannot choose starting depth"
+        }
+      ]
+    },
+    {
+      "id": "agent_drop_objective",
+      "phase": null,
+      "type": "special_objective",
+      "label": "Agent Drop Objective",
+      "rules": [
+        {
+          "condition": "END_OF_UBOAT_PHASE",
+          "action": "CHECK_AGENT_DROP",
+          "requires": {
+            "depth": "SURFACED",
+            "position": "AGENT_DROP_HEX"
+          },
+          "effect": "agent_dropped",
+          "notes": "U-Boat must be SURFACED at the X hex at the END of the U-Boat Phase to complete the drop. Being there mid-phase does not count."
+        }
+      ]
+    },
+    {
+      "id": "merchant_phase",
+      "phase": 2,
+      "type": "phase_skip",
+      "label": "Merchant Ships Phase",
+      "enabled": false,
+      "note": "No merchant ship in Mission 3 — skip Phase 2 entirely"
+    },
+    {
+      "id": "b24_phase",
+      "phase": 5,
+      "type": "air_phase_rules",
+      "label": "Allied B24 Phase",
+      "enabled": true,
+      "note": "B24 Liberators are active in Mission 3"
+    },
+    {
+      "id": "end_of_turn_events",
+      "phase": 6,
+      "type": "event_table",
+      "label": "End-of-Turn Events",
+      "enabled": true,
+      "dice": "2d6",
+      "events": {
+        "2": {
+          "type": "aircraft_spawn",
+          "name": "B24 Arrives",
+          "description": "If DL = 2-3: place B24 facing U-Boat, on edge hex furthest from and on same hex-line as U-Boat",
+          "condition": "detection_level >= 2",
+          "aircraft": [{ "type": "B24", "position": "edge_furthest_from_uboat", "facing": "towards_uboat" }]
+        },
+        "3": {
+          "type": "aircraft_spawn",
+          "name": "B24 Arrives",
+          "description": "If DL = 2-3: place B24 facing U-Boat, on edge hex furthest from and on same hex-line as U-Boat",
+          "condition": "detection_level >= 2",
+          "aircraft": [{ "type": "B24", "position": "edge_furthest_from_uboat", "facing": "towards_uboat" }]
+        },
+        "4": {
+          "type": "aircraft_spawn",
+          "name": "B24 Arrives",
+          "description": "If DL = 2-3: place B24 facing U-Boat, on edge hex furthest from and on same hex-line as U-Boat",
+          "condition": "detection_level >= 2",
+          "aircraft": [{ "type": "B24", "position": "edge_furthest_from_uboat", "facing": "towards_uboat" }]
+        },
+        "5": {
+          "type": "aircraft_spawn",
+          "name": "B24 Arrives",
+          "description": "If DL = 2-3: place B24 facing U-Boat, on edge hex furthest from and on same hex-line as U-Boat",
+          "condition": "detection_level >= 2",
+          "aircraft": [{ "type": "B24", "position": "edge_furthest_from_uboat", "facing": "towards_uboat" }]
+        },
+        "6": {
+          "type": "aircraft_spawn",
+          "name": "B24 Arrives",
+          "description": "If DL = 2-3: place B24 facing U-Boat, on edge hex furthest from and on same hex-line as U-Boat",
+          "condition": "detection_level >= 2",
+          "aircraft": [{ "type": "B24", "position": "edge_furthest_from_uboat", "facing": "towards_uboat" }]
+        },
+        "7": {
+          "type": "aircraft_spawn",
+          "name": "B24 Arrives",
+          "description": "If DL = 2-3: place B24 facing U-Boat, on edge hex furthest from and on same hex-line as U-Boat",
+          "condition": "detection_level >= 2",
+          "aircraft": [{ "type": "B24", "position": "edge_furthest_from_uboat", "facing": "towards_uboat" }]
+        },
+        "8": {
+          "type": "special",
+          "name": "Escort Detection",
+          "description": "If DL is not already at 3, perform Phase 3 (Detection Phase) again now",
+          "condition": "detection_level < 3",
+          "effect": "rerun_detection_phase"
+        },
+        "9": {
+          "type": "special",
+          "name": "Radio Intercepted",
+          "description": "If U-Boat is Surfaced or at Periscope depth, radio intercepted by Allies: If DL = 0 then set DL to 1",
+          "condition": "depth <= 1 and detection_level == 0",
+          "effect": "set_detection_level_1"
+        },
+        "10": {
+          "type": "special",
+          "name": "Hull Pressure",
+          "description": "If Deep, Hull groans under the pressure: +1 Hull Damage (U-Boat must ascend to Medium depth)",
+          "condition": "depth == 3",
+          "effect": "hull_damage_1_force_medium"
+        },
+        "11": {
+          "type": "special",
+          "name": "Hull Pressure",
+          "description": "If Deep, Hull groans under the pressure: +1 Hull Damage (U-Boat must ascend to Medium depth)",
+          "condition": "depth == 3",
+          "effect": "hull_damage_1_force_medium"
+        },
+        "12": {
+          "type": "special",
+          "name": "Hull Pressure",
+          "description": "If Deep, Hull groans under the pressure: +1 Hull Damage (U-Boat must ascend to Medium depth)",
+          "condition": "depth == 3",
+          "effect": "hull_damage_1_force_medium"
+        }
+      }
+    },
+    {
+      "id": "victory_conditions",
+      "phase": null,
+      "type": "victory_conditions",
+      "label": "Victory Conditions",
+      "primary": {
+        "description": "Drop the agent — be SURFACED at the X hex at the end of your U-Boat Phase",
+        "condition": "agent_dropped",
+        "points": 100
+      },
+      "secondary": {
+        "description": "Exit the map in the direction of the red arrow (requires agent already dropped)",
+        "condition": "u_boat_exits and agent_dropped",
+        "points": 50
+      },
+      "failure": {
+        "description": "U-Boat is destroyed",
+        "condition": "u_boat_destroyed"
+      }
+    }
+  ]
+}

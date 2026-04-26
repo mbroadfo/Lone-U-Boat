@@ -172,18 +172,14 @@
         "roll": 5,
         "sequence": [
           {
-            "action": "MOVE",
-            "always": true
-          },
-          {
-            "action": "DEPTH_CHARGE",
+            "action": "FIRE",
             "condition": {
-              "check": "u_boat_in_range_and_dl_1_to_3",
-              "logic": "range_to_u_boat <= 1 AND u_boat.depth != SURFACED AND dl >= 1 AND dl <= 3"
+              "check": "u_boat_surfaced_and_dl_1_to_3",
+              "logic": "u_boat.depth == SURFACED AND dl >= 1 AND dl <= 3"
             }
           }
         ],
-        "description": "MOVE — If DL 1–3: DEPTH CHARGE"
+        "description": "If DL 1–3: FIRE"
       },
       {
         "roll": 6,
